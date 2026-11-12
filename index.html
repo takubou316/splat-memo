@@ -6,7 +6,8 @@
 <title>ステージメモ</title>
 <meta name="theme-color" content="#16141f">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- black-translucent（ステータスバーの裏まで描く）は iOS 26.1 以降でステータスバー下にぼかしが掛かり、上部の文字が薄く見えるため使わない -->
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -22,16 +23,18 @@
 html,body{margin:0;background:var(--bg);color:var(--text);
   font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
   font-size:16px;line-height:1.5}
-body{padding-bottom:calc(76px + env(safe-area-inset-bottom))}
 button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
-header{position:sticky;top:0;z-index:5;background:rgba(22,20,31,.94);backdrop-filter:blur(8px);
+/* 画面全体を「上: ヘッダー / 中: スクロール領域 / 下: メニュー」の固定レイアウトにする。
+   メニューを position:fixed で下に貼る方式は、ホーム画面アプリでメニューの下に謎の空きが出たため（WAVE画面と同じ方式に統一） */
+#app{position:fixed;inset:0;display:flex;flex-direction:column}
+header{flex:none;z-index:5;background:var(--bg);
   padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;border-bottom:1px solid var(--line)}
 .hrow{display:flex;align-items:center;gap:10px}
 .hrow h1{font-size:18px;margin:0;flex:1}
 .reload{background:var(--card2);border-radius:999px;padding:6px 12px;font-size:13px}
 .status{font-size:12px;color:var(--sub);margin-top:2px}
 .status.err{color:#ff8a8a}
-main{padding:12px 16px;max-width:640px;margin:0 auto}
+main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px max(16px, calc((100% - 640px) / 2)) 24px}
 .seg{display:flex;background:var(--card);border-radius:12px;padding:4px;margin-bottom:14px}
 .seg button{flex:1;padding:10px 4px;border-radius:9px;font-weight:700;color:var(--sub)}
 .seg button.on{background:var(--card2);color:var(--text);box-shadow:0 1px 0 rgba(255,255,255,.06) inset}
@@ -69,7 +72,7 @@ main{padding:12px 16px;max-width:640px;margin:0 auto}
 .backup{background:var(--card);border-radius:12px;padding:12px;font-size:14px;color:var(--sub)}
 .backup .btns{display:flex;gap:8px;margin-top:10px}
 .backup button,.backup label{flex:1;text-align:center;background:var(--card2);border-radius:10px;padding:10px;color:var(--text);font-weight:700;font-size:14px;cursor:pointer}
-nav{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;background:rgba(22,20,31,.96);border-top:1px solid var(--line);
+nav{flex:none;z-index:6;display:flex;background:#100e18;border-top:1px solid var(--line);
   padding-bottom:env(safe-area-inset-bottom)}
 nav button{flex:1;padding:10px 0 12px;font-size:12px;color:var(--faint);display:flex;flex-direction:column;align-items:center;gap:2px}
 nav button .ic{font-size:22px;line-height:1}
@@ -81,7 +84,7 @@ nav button.on{color:var(--text)}
 .back{padding:8px 10px;font-weight:700;color:var(--accent)}
 .etitle{flex:1;font-weight:800;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .saved{font-size:12px;color:var(--sub);min-width:84px;text-align:right}
-.chips{display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px 4px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px 4px;max-height:30vh;overflow-y:auto;flex:none}
 .chip{flex:none;padding:7px 12px;border-radius:999px;background:var(--card);color:var(--sub);font-weight:700;font-size:14px;position:relative}
 .chip.on{background:var(--accent);color:#1a1020}
 .chip.has::after{content:"";position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%;background:var(--salmon)}
@@ -139,6 +142,22 @@ nav button.on{color:var(--text)}
 .tr .det{font-size:13px;color:var(--sub);margin-right:6px}
 .tr .note{font-size:12px;color:var(--sub);margin-top:2px}
 .nodata{font-size:14px;color:var(--faint);padding:6px 0}
+.tl2{width:100%;text-align:left;min-height:52px}
+.tl2:active{background:var(--card2)}
+.mynote{font-size:17px;font-weight:800;white-space:pre-wrap;word-break:break-word;color:#ffd7b8;padding:2px 0}
+.addnote{font-size:13px;color:var(--faint);padding-top:10px}
+.tl2.late .addnote{display:none}
+.tr.wk{font-size:14px;color:var(--sub)}
+.tr.wk .who{color:var(--text);font-weight:700}
+.tr .src{font-size:10px;color:var(--faint);border:1px solid var(--line);border-radius:4px;padding:0 4px;margin-left:4px}
+.wspb{border:2px solid transparent;text-align:left;color:var(--text)}
+.wspb.on{border-color:var(--salmon)}
+.wspb em{font-style:normal;font-size:10px;color:var(--salmon)}
+.sppick{background:var(--card2);border:1px solid var(--salmon);border-radius:12px;padding:10px;margin-top:10px}
+.spgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.spgrid button{display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;border-radius:10px;background:var(--card);font-size:11px;line-height:1.2;color:var(--sub);min-height:44px}
+.spgrid button img{width:44px;height:44px;background:#0b0a12;border-radius:10px;padding:4px}
+.spgrid button.on{background:var(--salmon);color:#1a1020}
 .fact{font-size:14px;padding:3px 0}
 .fact span{display:inline-block;min-width:9em;color:var(--sub);font-size:12px}
 .plinks{display:flex;gap:8px;margin-bottom:12px}
@@ -156,6 +175,7 @@ nav button.on{color:var(--text)}
 </style>
 </head>
 <body>
+<div id="app">
 <header>
   <div class="hrow"><h1>ステージメモ</h1><button class="reload" id="reload">↻ 更新</button></div>
   <div class="status" id="status">読み込み中…</div>
@@ -166,6 +186,7 @@ nav button.on{color:var(--text)}
   <button id="navContest"><span class="ic">🐟</span>ばちこん</button>
   <button id="navList"><span class="ic">📝</span>メモ一覧</button>
 </nav>
+</div>
 <div id="play">
   <div class="ehead">
     <button class="back" id="playBack">‹ 一覧</button>
@@ -209,7 +230,7 @@ function load(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.par
 function save(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); return true; }catch(e){ return false; } }
 
 let memos = load('sm_memos', {});           // { key: text }
-if (!memos || typeof memos !== 'object') memos = {};
+if (!memos || typeof memos !== 'object' || Array.isArray(memos)) memos = {};
 let sched = load('sm_sched', null);         // { data, fetchedAt }
 let loc = load('sm_locale', null);          // ja-JP locale
 // サモラン会場は全ステージ一覧がAPIに無いので、画像URLを持っておく。
@@ -490,11 +511,15 @@ const SPECIALS = [
   ['Castle','テイオウイカ','8a7ee88a06407f4be1595ef8af4d2d2ac22bbf213a622cd19bbfaf4d0f36bcd7'],
 ];
 const SP = Object.fromEntries(SPECIALS.map(([k, n, h]) => [k, { name:n, img:'https://assets.splatoon3.ink/splatnet/v3/special_img/blue/' + h + '_0.png' }]));
+// スプラ3のオオモノ11種（スプラ2から: バクダン〜カタパッド、スプラ3で追加: ダイバー・テッキュウ・ナベブタ・ハシラ）＋キンシャケ
+const QUICK_BOSSES = ['バクダン','カタパッド','テッパン','ヘビ','タワー','モグラ','コウモリ','ハシラ','ダイバー','テッキュウ','ナベブタ','キンシャケ'];
 const scenById = id => CD.scenarios.find(s => s.id === id);
 const instsOf = id => CD.instances.filter(x => x.scenario === id);
 const latestInst = id => instsOf(id).sort((a, b) => b.no - a.no)[0];
 const scenTitle = id => instsOf(id).map(x => '第' + x.no + '回').join('・');
 const cmKey = (sid, wave) => 'cm:' + sid + ':' + wave;
+const spKey = (sid, idx) => 'sp:' + sid + ':' + idx;
+let spPick = null; // スペシャルを選んでいるブキの番号
 
 // 全角・半角の違い（wikiの「R-PEN／5H」とAPIの「R-PEN/5H」など）を吸収して比べる
 const nfkc = s => String(s || '').normalize('NFKC');
@@ -584,7 +609,7 @@ function closePlay(fromPop){
   if (!fromPop && history.state && history.state.play) history.back();
   render();
 }
-function setWave(i){ play.wave = i; save('sm_play', play); drawPlay(true); }
+function setWave(i){ play.wave = i; spPick = null; save('sm_play', play); drawPlay(true); }
 
 const firstNum = t => { const m = String(t).match(/\d+(\.\d+)?/); return m ? parseFloat(m[0]) : NaN; };
 const COND_RE = /キケン度[^、。/()（）]*?\d+%[^、。/()（）]*/g;
@@ -593,32 +618,39 @@ function condBadges(text){
   return m ? m.map(c => '<span class="cond">' + esc(c) + '</span>').join('') : '';
 }
 function colIdx(head, re){ return head.findIndex(x => re.test(x)); }
-// 時系列の表を「残り秒ごと」のまとまりにして描く
-function timeTable(b){
-  const H = b.head, it = colIdx(H, /^タイム$/), idir = colIdx(H, /^方角$/), idir2 = colIdx(H, /^方角\(詳細\)$/),
-    iwho = colIdx(H, /オオモノ|ブキ名/), idet = colIdx(H, /^詳細/), inote = colIdx(H, /備考/);
-  const used = new Set([it, idir, idir2, iwho, idet, inote].filter(x => x >= 0));
-  const rows = b.rows.map((r, k) => ({ r, k, t: firstNum(r[it]) })).sort((a, b) => (isNaN(b.t) ? -1 : b.t) - (isNaN(a.t) ? -1 : a.t) || a.k - b.k);
-  let h = '', lastT = null;
-  rows.forEach(({ r, t }) => {
-    const tLabel = r[it] || '?';
-    if (tLabel !== lastT){
-      if (lastT !== null) h += '</div></div>';
-      const late = !isNaN(t) && t < 28;
-      h += '<div class="tg' + (late ? ' late' : '') + '"><div class="tgt"><small>残り</small><b>' + esc(tLabel) + '</b><small>' + (t === 28 ? '最後' : late ? 'ザコのみ' : '秒') + '</small></div><div class="tgb">';
-      lastT = tLabel;
-    }
-    const dir = [idir >= 0 ? r[idir] : '', idir2 >= 0 ? r[idir2] : ''].filter(Boolean).join(' ');
-    const who = iwho >= 0 ? r[iwho] : '';
-    const det = idet >= 0 ? r[idet] : '';
-    const note = inote >= 0 ? r[inote] : '';
-    const extra = r.map((v, k) => used.has(k) || !v ? '' : (H[k] || '') + ': ' + v).filter(Boolean).join(' / ');
-    h += '<div class="tr">' + (dir ? '<span class="dir">' + esc(dir) + '</span>' : '') +
-      '<span class="who">' + esc(who || (dir ? '湧き方向' : '')) + '</span>' + (det ? '<span class="det">' + esc(det) + '</span>' : '') +
-      condBadges(who + ' ' + note) +
-      (note || extra ? '<div class="note">' + esc([note, extra].filter(Boolean).join(' / ')) + '</div>' : '') + '</div>';
+// オオモノの湧き時刻（＝湧く方向が変わる時刻）。間隔は 72/n 秒で、キケン度の帯で決まる（wiki「サーモンラン NEXT WAVE」）
+// [キケン度の下限, n]。丸めた間隔を足し続けると誤差で28秒が27.9秒になるので、毎回 100 - i*72/n で計算する
+const SPAWN_BANDS = [[333, 9], [266.6, 8], [200, 7], [150, 6], [100, 5], [60, 4], [20, 3], [0, 2]];
+function spawnN(danger){ const d = parseFloat(danger); return (SPAWN_BANDS.find(([min]) => d >= min) || [0, 4])[1]; }
+function spawnInterval(danger){ return Math.round(72 / spawnN(danger) * 10) / 10; }
+function spawnTimes(danger){
+  const n = spawnN(danger), out = [];
+  for (let i = 0; 100 - i * 72 / n > 0.5; i++) out.push(Math.round((100 - i * 72 / n) * 10) / 10);
+  return out;
+}
+const fmtT = t => String(Math.round(t * 10) / 10);
+const ctKey = (sid, wave, t) => 'ct:' + sid + ':' + wave + ':' + fmtT(t);
+// 湧き時刻の行に、wikiの表の行（±1秒以内なら同じ行）と、自分で足した時刻のメモを集める
+function buildTimeline(sid, n, danger, timeTables){
+  const times = spawnTimes(danger), rows = new Map();
+  // exact=true（自分のメモの時刻）は寄せずにその秒の行を作る。メモのキーと行の秒を一致させるため
+  const slot = (t, exact) => { const near = exact ? null : times.find(x => Math.abs(x - t) <= 1); const k = fmtT(near != null ? near : t);
+    if (!rows.has(k)) rows.set(k, { t: parseFloat(k), wiki: [] }); return rows.get(k); };
+  times.forEach(t => slot(t, true));
+  timeTables.forEach(b => {
+    const H = b.head, it = colIdx(H, /^タイム$/), idir = colIdx(H, /^方角$/), idir2 = colIdx(H, /^方角\(詳細\)$/),
+      iwho = colIdx(H, /オオモノ|ブキ名/), idet = colIdx(H, /^詳細/), inote = colIdx(H, /備考/);
+    const used = new Set([it, idir, idir2, iwho, idet, inote].filter(x => x >= 0));
+    b.rows.forEach(r => {
+      const t = firstNum(r[it]); if (isNaN(t)) return;
+      const extra = r.map((v, k) => used.has(k) || !v ? '' : (H[k] || '') + ': ' + v).filter(Boolean).join(' / ');
+      slot(t).wiki.push({ dir: [idir >= 0 ? r[idir] : '', idir2 >= 0 ? r[idir2] : ''].filter(Boolean).join(' '),
+        who: iwho >= 0 ? r[iwho] : '', det: idet >= 0 ? r[idet] : '', note: [inote >= 0 ? r[inote] : '', extra].filter(Boolean).join(' / ') });
+    });
   });
-  return h + (lastT !== null ? '</div></div>' : '');
+  const p = 'ct:' + sid + ':' + n + ':';
+  Object.keys(memos).forEach(k => { if (k.startsWith(p) && memoOf(k)) { const t = parseFloat(k.slice(p.length)); if (!isNaN(t)) slot(t, true); } });
+  return [...rows.values()].sort((a, b) => b.t - a.t);
 }
 // 時刻の無い表（ドロシャケのカンケツセン順など）
 function plainTable(b){
@@ -656,16 +688,24 @@ function drawPlay(toTop){
     h += '<div class="psec"><div class="psh">' + esc(listTitle(w)) + '</div>' + capNote(b.caption) + '<ol class="olist big">' + b.items.map(x => '<li>' + esc(x) + '</li>').join('') + '</ol></div>';
   });
   otherTables.forEach(b => { h += '<div class="psec"><div class="psh">' + esc(b.head.filter(Boolean).join('・')) + '</div>' + capNote(b.caption) + plainTable(b) + '</div>'; });
-  // 開始直後の要点
-  if (timeTables.length){
-    // gフラグ付きの COND_RE を test() に使うと lastIndex が残って判定が飛ぶので、件数は match で数える
-    const condCount = timeTables.reduce((a, b) => a + b.rows.filter(r => !!String(r.join(' ')).match(COND_RE)).length, 0);
-    h += '<div class="psec"><div class="psh">湧きの時系列（残り秒の順）</div>' +
-      (condCount ? '<div class="capn"><span class="cond">キケン度で変わる湧き ' + condCount + '件</span> 赤い印のある行</div>' : '') +
-      timeTables.map(b => capNote(b.caption) + timeTable(b)).join('') + '</div>';
-  } else if (!lists.length && !otherTables.length){
-    h += '<div class="psec"><div class="psh">湧きの時系列</div><div class="nodata">' + (s.detail ? 'このWAVEの湧き詳細はwikiにまだ載っていません' : 'このシナリオの湧き詳細は未収録です（潮位とイベントのみ判明）') + '</div></div>';
-  }
+  // 湧きの時系列: キケン度から出した湧き時刻の行に、wikiの情報と自分のメモを重ねる。行をタップでメモを編集
+  const iv = spawnInterval(w.danger);
+  const tl = buildTimeline(s.id, n, w.danger, timeTables);
+  const caps = timeTables.map(b => b.caption).filter(c => /キケン度/.test(c || ''));
+  h += '<div class="psec"><div class="psh">湧きの時系列（残り秒）</div>' +
+    '<div class="capn">キケン度' + esc(w.danger) + 'のときの湧き時刻（' + iv + '秒ごとに湧く方向が変わる）。<b>行をタップするとメモできます</b></div>' +
+    caps.map(capNote).join('') +
+    tl.map(row => {
+      const late = row.t < 28, last = row.t === 28;
+      const mine = memoOf(ctKey(s.id, n, row.t));
+      return '<button class="tg tl2' + (late ? ' late' : '') + '" data-ct="' + row.t + '"><div class="tgt"><small>残り</small><b>' + esc(fmtT(row.t)) + '</b><small>' + (last ? '最後' : late ? 'ザコのみ' : '秒') + '</small></div><div class="tgb">' +
+        (mine ? '<div class="mynote">' + esc(mine) + '</div>' : '') +
+        row.wiki.map(x => '<div class="tr wk">' + (x.dir ? '<span class="dir">' + esc(x.dir) + '</span>' : '') + '<span class="who">' + esc(x.who || (x.dir ? '湧き方向' : '')) + '</span>' +
+          (x.det ? '<span class="det">' + esc(x.det) + '</span>' : '') + condBadges(x.who + ' ' + x.note) + (x.note ? '<div class="note">' + esc(x.note) + '</div>' : '') + '<span class="src">wiki</span></div>').join('') +
+        (mine || row.wiki.length ? '' : '<div class="addnote">＋ タップしてメモ</div>') + '</div></button>';
+    }).join('') +
+    '<button class="addrow" data-ct-add="1">＋ 秒数を指定してメモを追加</button>' +
+    (s.detail ? '' : '<div class="capn">このシナリオはwikiに湧きの詳細がありません（潮位とイベントのみ判明）</div>') + '</div>';
   // 補足の項目（タマヒロイ方向など）
   if (w.facts.length) h += '<div class="psec"><div class="psh">そのほか</div>' + w.facts.map(([k, v]) => '<div class="fact"><span>' + esc(k) + '</span>' + esc(v) + '</div>').join('') + '</div>';
   // マップ・出典
@@ -673,8 +713,16 @@ function drawPlay(toTop){
   h += '<div class="plinks">' + (internal && tk ? '<a href="https://salmon-learn-nw.gungee.jp/map/?stage=' + internal + '&tide=' + tk + '" target="_blank" rel="noopener">🗺 マップ（' + esc(w.tide) + '）</a>' : '') +
     (s.detail ? '<a href="' + esc(CD.source.wiki + '#c' + s.id) + '" target="_blank" rel="noopener">📖 wikiで解説を読む</a>' : '') + '</div>';
   // ブキとスペシャル
-  h += '<div class="psec"><div class="psh">ブキとスペシャル（第' + inst.no + '回の時点。復刻で変わることあり）</div><div class="wsp">' +
-    inst.weapons.map(x => { const sp = SP[x.sp]; return '<div class="wspb"><span class="wname">' + esc(x.name) + '</span>' + (sp ? '<img class="spi" src="' + esc(sp.img) + '" alt=""><span class="spn">' + esc(sp.name) + '</span>' : '') + '</div>'; }).join('') + '</div></div>';
+  // スペシャルは復刻で変わることがあるので、タップして自分で変えられる（memos['sp:シナリオ:ブキ番号']）
+  h += '<div class="psec"><div class="psh">ブキとスペシャル（タップで変更。最初は第' + inst.no + '回の時点）</div><div class="wsp">' +
+    inst.weapons.map((x, k) => {
+      const mine = memoOf(spKey(s.id, k)), sp = SP[mine || x.sp];
+      return '<button class="wspb' + (spPick === k ? ' on' : '') + '" data-spw="' + k + '"><span class="wname">' + esc(x.name) + '</span>' +
+        (sp ? '<img class="spi" src="' + esc(sp.img) + '" alt=""><span class="spn">' + esc(sp.name) + (mine && mine !== x.sp ? '<br><em>自分で変更</em>' : '') + '</span>' : '<span class="spn">未設定</span>') + '</button>';
+    }).join('') + '</div>' +
+    (spPick != null && inst.weapons[spPick] ? '<div class="sppick"><div class="psh">' + esc(inst.weapons[spPick].name) + ' のスペシャルを選ぶ</div><div class="spgrid">' +
+      SPECIALS.map(([k, nm]) => '<button data-sppick="' + k + '" class="' + ((memoOf(spKey(s.id, spPick)) || inst.weapons[spPick].sp) === k ? 'on' : '') + '"><img src="' + esc(SP[k].img) + '" alt=""><span>' + esc(nm) + '</span></button>').join('') +
+      '</div><button class="restart" style="margin:8px 0 0" data-sppick="">第' + inst.no + '回の時点に戻す</button></div>' : '') + '</div>';
   h += '<button class="restart" data-restart="1">↺ 最初から（WAVE 1へ）</button>';
   const body = document.getElementById('playBody');
   body.innerHTML = h;
@@ -687,6 +735,22 @@ document.getElementById('play').addEventListener('click', e => {
   if (t.dataset.wave != null) setWave(+t.dataset.wave);
   else if (t.dataset.restart) setWave(0);
   else if (t.dataset.cmEdit) openEditor('cm', String(play.sid), String(play.wave + 1));
+  else if (t.dataset.ct != null) openEditor('ct', String(play.sid), (play.wave + 1) + ':' + fmtT(parseFloat(t.dataset.ct)));
+  else if (t.dataset.ctAdd){
+    const raw = nfkc(prompt('残り何秒のメモを追加しますか？（1〜100、例: 55）') || '').trim().replace(/秒$/, '');
+    if (!raw) return;
+    const v = /^\d{1,3}(\.\d)?$/.test(raw) ? Number(raw) : NaN;
+    if (!(v >= 1 && v <= 100)) { alert('1〜100の数字で入力してください（小数は1桁まで）'); return; }
+    openEditor('ct', String(play.sid), (play.wave + 1) + ':' + fmtT(v));
+  }
+  else if (t.dataset.spw != null){ spPick = spPick === +t.dataset.spw ? null : +t.dataset.spw; drawPlay(false); }
+  else if (t.dataset.sppick != null){
+    const k = spKey(play.sid, spPick);
+    const before = memos[k];
+    if (t.dataset.sppick) memos[k] = t.dataset.sppick; else delete memos[k];
+    if (!save('sm_memos', memos)){ if (before === undefined) delete memos[k]; else memos[k] = before; toast('保存できませんでした'); }
+    spPick = null; drawPlay(false);
+  }
 });
 // 開催中のばちこんがあれば、ばちこんタブを開いたときに直接シナリオを出す
 function liveContest(){
@@ -727,13 +791,15 @@ function setUI(p){ Object.assign(ui, p); save('sm_ui', { view:ui.view, nowSub:ui
 // ---------- エディタ ----------
 let ed = null; // { kind, id, rule }
 function openEditor(kind, id, rule){
-  ed = { kind, id, rule: kind === 'vs' ? (rule || 'all') : kind === 'cm' ? rule : null };
-  document.getElementById('edTitle').textContent = kind === 'cm' ? 'WAVE ' + rule + ' の作戦（' + nameById(scenById(+id).stage) + '）' : nameById(id);
+  ed = { kind, id, rule: kind === 'vs' ? (rule || 'all') : (kind === 'cm' || kind === 'ct') ? rule : null };
+  document.getElementById('edTitle').textContent =
+    kind === 'cm' ? 'WAVE ' + rule + ' の作戦（' + nameById(scenById(+id).stage) + '）' :
+    kind === 'ct' ? 'WAVE ' + rule.split(':')[0] + '・残り' + rule.split(':')[1] + '秒' : nameById(id);
   document.getElementById('editor').classList.add('open');
   history.pushState({ editor:true }, '');
   drawEditor();
 }
-function edKey(){ return ed.kind === 'cm' ? cmKey(ed.id, ed.rule) : ed.kind === 'coop' ? kCoop(ed.id) : kVs(ed.id, ed.rule === 'all' ? null : ed.rule); }
+function edKey(){ return ed.kind === 'ct' ? 'ct:' + ed.id + ':' + ed.rule : ed.kind === 'cm' ? cmKey(ed.id, ed.rule) : ed.kind === 'coop' ? kCoop(ed.id) : kVs(ed.id, ed.rule === 'all' ? null : ed.rule); }
 function drawEditor(){
   const chips = document.getElementById('edChips'), hint = document.getElementById('edHint');
   if (ed.kind === 'vs'){
@@ -744,6 +810,11 @@ function drawEditor(){
     }).join('');
     chips.style.display = '';
     hint.textContent = ed.rule === 'all' ? '「共通」はどのルールのときでも表示されます' : RULE_NAME[ed.rule] + 'のときだけ表示されます';
+  } else if (ed.kind === 'ct'){
+    // 方角とオオモノ名はタップで追記できる（方角はステージのブイ名で書きたい時は直接入力）
+    chips.innerHTML = ['左', '正面', '右', '奥', '手前'].concat(QUICK_BOSSES).map(b => '<button class="chip" data-addtext="' + b + '">' + b + '</button>').join('');
+    chips.style.display = '';
+    hint.textContent = 'この時刻に湧くもの・方角・動き方をメモ。上のボタンで追記できます（例: 右 テッパン、カタパは自分）';
   } else { chips.innerHTML = ''; chips.style.display = 'none';
     hint.textContent = ed.kind === 'cm' ? 'ばちこんでこのWAVEを開いたとき、一番上に表示されます。短く書くのがおすすめ（例: 右奥タワーは自分 / 残り64秒でSP）' : 'サーモンランでこのステージが来たときに表示されます'; }
   const ta = document.getElementById('memoText');
@@ -791,11 +862,18 @@ function importMemos(file){
     try{
       const j = JSON.parse(r.result);
       const m = j && j.memos;
-      if (!m || typeof m !== 'object') throw 0;
+      if (!m || typeof m !== 'object' || Array.isArray(m)) throw 0;
       const cs = (j.contests && typeof j.contests === 'object') ? j.contests : {};
       const n = Object.keys(m).length, nc = Object.keys(cs).length;
       if (!confirm(n + '件のメモ' + (nc ? 'と' + nc + '件のばちこんシナリオ' : '') + 'を読み込みます。同じものは上書きされます（それ以外は残ります）。よろしいですか？')) return;
-      for (const [k, v] of Object.entries(m)) if (typeof v === 'string' && /^(coop|vs|cm):/.test(k)) memos[k] = v;
+      for (const [k0, v] of Object.entries(m)){
+        if (typeof v !== 'string' || !/^(coop|vs|cm|ct|sp):/.test(k0)) continue;
+        let k = k0;
+        // 秒のメモは「64.0」などの書き方を揃える（表示側のキーと一致させるため）
+        const mt = k0.match(/^(ct:\d+:\d+:)([\d.]+)$/);
+        if (mt){ if (isNaN(parseFloat(mt[2]))) continue; k = mt[1] + fmtT(parseFloat(mt[2])); }
+        memos[k] = memos[k] && memos[k] !== v && k !== k0 ? memos[k] + '\n' + v : v;
+      }
       for (const [k, v] of Object.entries(cs)) if (v && Array.isArray(v.waves) && v.stageId) contests[k] = v;
       save('sm_memos', memos); save('sm_contests', contests);
       if (nc) migrateOldContests(true);
@@ -812,6 +890,12 @@ document.addEventListener('click', e => {
   if (t.closest('#play')) return;
   if (t.dataset.edit){ openEditor(t.dataset.edit, t.dataset.id, t.dataset.rule); return; }
   if (t.dataset.play){ openPlay(+t.dataset.play, +t.dataset.no, t.dataset.start); return; }
+  if (t.dataset.addtext && ed){
+    const ta = document.getElementById('memoText');
+    ta.value = ta.value + (ta.value && !/[\s\n]$/.test(ta.value) ? ' ' : '') + t.dataset.addtext;
+    ta.dispatchEvent(new Event('input'));
+    return;
+  }
   if (t.dataset.chip){ clearTimeout(saveTimer); saveMemo(); ed.rule = t.dataset.chip; drawEditor(); return; }
   if (t.dataset.sub){ setUI({ nowSub:t.dataset.sub }); return; }
   if (t.dataset.lsub){ setUI({ listSub:t.dataset.lsub }); return; }
@@ -819,9 +903,9 @@ document.addEventListener('click', e => {
   if (t.id === 'exportBtn'){ exportMemos(); return; }
 });
 document.addEventListener('change', e => { if (e.target.id === 'importFile' && e.target.files[0]){ importMemos(e.target.files[0]); e.target.value = ''; } });
-document.getElementById('navNow').onclick = () => { setUI({ view:'now' }); window.scrollTo(0,0); };
-document.getElementById('navList').onclick = () => { setUI({ view:'list' }); window.scrollTo(0,0); };
-document.getElementById('navContest').onclick = () => { autoOpened = false; setUI({ view:'contest' }); window.scrollTo(0,0); };
+document.getElementById('navNow').onclick = () => { setUI({ view:'now' }); document.getElementById('main').scrollTop = 0; };
+document.getElementById('navList').onclick = () => { setUI({ view:'list' }); document.getElementById('main').scrollTop = 0; };
+document.getElementById('navContest').onclick = () => { autoOpened = false; setUI({ view:'contest' }); document.getElementById('main').scrollTop = 0; };
 document.getElementById('reload').onclick = () => refresh(true);
 // 画面の「戻る」ボタンは履歴を1つ戻すだけにして、閉じる処理は popstate にまとめる（二重に閉じないため）
 document.getElementById('edBack').onclick = () => { if (history.state && history.state.editor) history.back(); else closeEditor(false); };
