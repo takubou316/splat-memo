@@ -36,7 +36,9 @@
 
 ## iPhone（ホーム画面アプリ）の表示の注意
 - 画面は `#app`（position:fixed; inset:0 の縦flex）＝ヘッダー/スクロール領域main/下メニュー。**下メニューを position:fixed; bottom:0 で貼ると、ホーム画面アプリでメニューの下に大きな空きが出た**（2026-11-12実機）。WAVE画面 `#play` と同じ方式に揃えた
-- `apple-mobile-web-app-status-bar-style` は `black`。**black-translucent だと iOS 26.1以降ステータスバー下のぼかしに上部の文字が掛かって薄く見えた**。meta変更はホーム画面に追加し直さないと反映されないことがある
+- `apple-mobile-web-app-status-bar-style` は `black`。**black-translucent + viewport-fit=cover だと iOS 26 で表示領域がステータスバー1本分だけ下で足りなくなる（WebKit bug 301108、メニュー下の空き）、上部の文字もぼかしで薄く見える**。この設定は**ホーム画面に追加した時にしか読まれない**ので、変えたらアイコン削除→追加し直しが必須（2026-11-12、push後も実機で直らず判明）。他の開発者で検証済みなのは `default`。`black` で直らなければ `default` を試す
+- `html` の背景は下メニューと同じ色（iOSが外側に塗る帯がメニューの続きに見えるように）
+- メモ一覧の一番下に「版・画面の高さ / 表示の高さ」を出している（実機の不具合調査用。差が大きいと下に空きが出ている）
 - スクロール位置のリセットは `window.scrollTo` ではなく `#main.scrollTop`
 
 ## 方針（決定済み）

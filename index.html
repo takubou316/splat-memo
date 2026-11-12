@@ -6,7 +6,10 @@
 <title>ステージメモ</title>
 <meta name="theme-color" content="#16141f">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<!-- black-translucent（ステータスバーの裏まで描く）は iOS 26.1 以降でステータスバー下にぼかしが掛かり、上部の文字が薄く見えるため使わない -->
+<!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
+     下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
+     この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
+<script>window.APP_VERSION = '2026-11-12d';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -20,13 +23,15 @@
   --accent:#ff6a1f;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;background:var(--bg);color:var(--text);
+/* html は下メニューと同じ色。iOSがアプリの外側に塗る帯が出てもメニューの続きに見えるように */
+html{background:#100e18}
+html,body{margin:0;color:var(--text);
   font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
   font-size:16px;line-height:1.5}
 button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 /* 画面全体を「上: ヘッダー / 中: スクロール領域 / 下: メニュー」の固定レイアウトにする。
    メニューを position:fixed で下に貼る方式は、ホーム画面アプリでメニューの下に謎の空きが出たため（WAVE画面と同じ方式に統一） */
-#app{position:fixed;inset:0;display:flex;flex-direction:column}
+#app{position:fixed;inset:0;display:flex;flex-direction:column;background:var(--bg)}
 header{flex:none;z-index:5;background:var(--bg);
   padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;border-bottom:1px solid var(--line)}
 .hrow{display:flex;align-items:center;gap:10px}
@@ -476,7 +481,10 @@ function renderList(){
       (kind === 'vs' && cnt ? '<span class="count">' + cnt + '件</span>' : '') + '</button>';
   }
   h += '</div><div class="sec">バックアップ</div><div class="backup">メモとばちこんのシナリオ記録は、このスマホの中だけに保存されています。機種変更やデータ消去に備えて、ときどき書き出しておくと安心です。' +
-    '<div class="btns"><button id="exportBtn">書き出す</button><label>読み込む<input type="file" id="importFile" accept=".json,application/json" hidden></label></div></div>';
+    '<div class="btns"><button id="exportBtn">書き出す</button><label>読み込む<input type="file" id="importFile" accept=".json,application/json" hidden></label></div></div>' +
+    // 表示の不具合を調べるための情報（画面の高さと、アプリが使えている高さの差＝下の空き）
+    '<div class="srcnote">版 ' + esc(window.APP_VERSION || '?') + '・画面 ' + screen.height + ' / 表示 ' + innerHeight +
+    (navigator.standalone ? '・ホーム画面アプリ' : '') + '</div>';
   return h;
 }
 
