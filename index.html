@@ -123,6 +123,28 @@ textarea.tin{resize:vertical;min-height:64px}
 .tlr{margin-bottom:6px}
 .tlr .tin{padding:7px 8px;background:var(--card2)}
 .tlr .del{color:var(--faint);font-size:18px;height:36px}
+.tfix{font-weight:800;font-size:16px;text-align:center;line-height:1.1}
+.tfix small{display:block;font-size:10px;color:var(--faint);font-weight:400}
+.tlr.late{opacity:.55}
+.wh{display:flex;gap:2px}
+.wh button{flex:1;height:36px;border-radius:8px;background:var(--card2);color:var(--sub);font-size:13px;font-weight:700}
+.wh button.on{background:var(--accent);color:#1a1020}
+.tlr .tin.cur{border-color:var(--accent)}
+.bossbar{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0 8px}
+.bossbar span{width:100%;font-size:11px;color:var(--faint)}
+.bossbar button{padding:6px 9px;border-radius:999px;background:var(--card2);font-size:13px;color:var(--text)}
+.wsp{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.wspb{display:grid;grid-template-columns:40px 1fr;grid-template-rows:auto auto;gap:2px 8px;align-items:center;text-align:left;background:var(--card);border-radius:12px;padding:8px}
+.wspb img{width:40px;height:40px;background:var(--card2);border-radius:10px;padding:3px}
+.wspb .wname{font-size:12px;color:var(--sub);line-height:1.2}
+.wspb .spi{grid-row:2;width:40px;height:40px;background:#0b0a12;padding:4px}
+.wspb .spn,.wspb .spnone{grid-row:2;font-size:13px;font-weight:700}
+.wspb .spnone{grid-column:1 / span 2;color:var(--salmon);text-align:center;padding:8px 0;border:1px dashed var(--line);border-radius:8px}
+.sppick{background:var(--card);border:1px solid var(--accent);border-radius:14px;padding:10px;margin-top:10px}
+.spgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.spgrid button{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;border-radius:10px;background:var(--card2);font-size:10px;line-height:1.2;color:var(--sub)}
+.spgrid button img{width:44px;height:44px;background:#0b0a12;border-radius:10px;padding:4px}
+.spgrid button.on{background:var(--accent);color:#1a1020}
 .addrow{width:100%;padding:9px;border:1px dashed var(--line);border-radius:10px;color:var(--sub);font-size:14px;margin-top:2px}
 .wbtns{display:flex;gap:8px;margin-top:14px}
 .wbtns button{flex:1;padding:10px;border-radius:10px;background:var(--card);color:var(--sub);font-size:14px}
@@ -445,9 +467,49 @@ let contests = load('sm_contests', {});
 const COOP_INTERNAL = { 'Q29vcFN0YWdlLTE=':'Shakeup', 'Q29vcFN0YWdlLTI=':'Shakespiral', 'Q29vcFN0YWdlLTQ=':'Shakelift',
   'Q29vcFN0YWdlLTY=':'Shakeship', 'Q29vcFN0YWdlLTc=':'Shakedent', 'Q29vcFN0YWdlLTg=':'Shakehighway', 'Q29vcFN0YWdlLTk=':'Shakerail' };
 const TIDES = [['Low','干潮'],['Mid','普通'],['High','満潮']];
-const EVENTS = ['昼（イベントなし）','ラッシュ','霧','キンシャケ探し','グリル発進','ハコビヤ襲来','ドロシャケ噴出','巨大タツマキ'];
+const EVENTS = ['昼（イベントなし）','ラッシュ','霧','キンシャケ探し','グリル発進','ハコビヤ襲来','ドロシャケ噴出','巨大タツマキ','ドスコイ大量発生'];
 const DEFAULT_WAVES = 5;
-const blankWave = () => ({ tide:'', event:'', rows:[{ t:'', where:'', what:'' }], note:'' });
+// オオモノの湧き（湧き方向が変わる）時刻＝残り秒。間隔は 72/n 秒でキケン度の帯で決まる。
+// 残り28秒が最後のオオモノ、それより後はザコのみ（wikiwiki「サーモンラン NEXT WAVE」・macarongamemo の表より）
+const BANDS = [
+  ['0',   '0〜19%',    [100, 64, 28]],
+  ['20',  '20〜59%',   [100, 76, 52, 28]],
+  ['60',  '60〜99%',   [100, 82, 64, 46, 28, 10]],
+  ['100', '100〜149%', [100, 85.6, 71.2, 56.8, 42.4, 28, 13.6]],
+  ['150', '150〜199%', [100, 88, 76, 64, 52, 40, 28, 16, 4]],
+  ['200', '200〜266%', [100, 89.7, 79.4, 69.1, 58.9, 48.6, 38.3, 28, 17.7, 7.4]],
+  ['266', '266〜329%', [100, 91, 82, 73, 64, 55, 46, 37, 28, 19, 10, 1]],
+  ['333', '333%',      [100, 92, 84, 76, 68, 60, 52, 44, 36, 28, 20, 12, 4]],
+];
+const WHERE = ['左', '正面', '右'];
+const BOSSES = ['バクダン','カタパッド','テッパン','ヘビ','タワー','モグラ','コウモリ','ハシラ','ダイバー','テッキュウ','ナベブタ','キンシャケ'];
+// サモラン用スペシャル（画像名は内部名のSHA256。Leanny/splat3 の WeaponInfoSpecial.json の Type=Coop）
+const SPECIALS = [
+  ['NiceBall','ナイスダマ','bd327d1b64372dedefd32adb28bea62a5b6152d93aada5d9fc4f669a1955d6d4'],
+  ['ShockSonar','ホップソナー','463eedc60013608666b260c79ac8c352f9795c3d0cce074d3fbbdbd2c054a56d'],
+  ['MicroLaser','メガホンレーザー5.1ch','fa8d49e8c850ee69f0231976208a913384e73dc0a39e6fb00806f6aa3da8a1ee'],
+  ['Jetpack','ジェットパック','252059408283fbcb69ca9c18b98effd3b8653ab73b7349c42472281e5a1c38f9'],
+  ['Chariot','カニタンク','680379f8b83e5f9e033b828360827bc2f0e08c34df1abcc23de3d059fe2ac435'],
+  ['Skewer','サメライド','0785cb4979024a83aaa2196e287e232d5d7e4ac959895a650c30ed00fedbc714'],
+  ['TripleTornado','トリプルトルネード','380e541b5bc5e49d77ff1a616f1343aeba01d500fee36aaddf8f09d74bd3d3bc'],
+  ['UltraShot','ウルトラショット','7269f1fa71d746d7b86ca2a71fc24c6ea4c764077ee50d692f80eddeaff90f1d'],
+  ['Pogo','ウルトラチャクチ','a75eac34675bc0d4bd9ca9977cf22472848f89e28e08ee986b4461a3f2af28fc'],
+  ['Castle','テイオウイカ','8a7ee88a06407f4be1595ef8af4d2d2ac22bbf213a622cd19bbfaf4d0f36bcd7'],
+];
+const spImg = h => 'https://assets.splatoon3.ink/splatnet/v3/special_img/blue/' + h + '_0.png';
+const SP = Object.fromEntries(SPECIALS.map(([k, n, h]) => [k, { name:n, img:spImg(h) }]));
+const blankWave = (i) => syncRows({ tide:'', event:'', band: i === 0 ? '60' : '', rows:[], note:'' });
+const fmtSec = t => String(t);
+// 帯の秒数の行を用意する（空の固定行は帯を変えたら消し、書き込みのある行は残す）
+function syncRows(w){
+  const band = BANDS.find(b => b[0] === w.band);
+  const times = band ? band[2].map(fmtSec) : [];
+  w.rows = w.rows.filter(r => !r.fixed || times.includes(r.t) || r.where || r.what);
+  times.forEach(t => { if (!w.rows.some(r => r.t === t)) w.rows.push({ t, where:'', what:'', fixed:true }); });
+  if (!w.rows.length) w.rows.push({ t:'', where:'', what:'' });
+  w.rows.sort((a, b) => (parseFloat(b.t) || -1) - (parseFloat(a.t) || -1));
+  return w;
+}
 function contestKey(node){
   const st = node.setting || {};
   return (st.coopStage && st.coopStage.id) + '|' + (st.weapons || []).map(w => w.__splatoon3ink_id).join(',');
@@ -457,7 +519,7 @@ function upsertContest(node){
   let c = contests[key];
   if (!c){
     c = contests[key] = { stageId: st.coopStage.id, weapons: [], seen: [], special:'', memo:'',
-      waves: Array.from({ length: DEFAULT_WAVES }, blankWave) };
+      sp: {}, waves: Array.from({ length: DEFAULT_WAVES }, (_, i) => blankWave(i)) };
   }
   // ブキ名・画像は毎回最新に（日本語名は取得後に変わりうるため）
   c.weapons = (st.weapons || []).map(w => ({ id: w.__splatoon3ink_id, name: weaponName(w), img: w.image && w.image.url || '' }));
@@ -506,12 +568,16 @@ function renderContest(){
 }
 
 let sc = null; // 開いているシナリオのキー
+let spPick = null;   // スペシャルを選んでいるブキの番号
+let lastWhat = null; // 最後に選んだ「何が」欄 {w, r}（オオモノボタンの入れ先）
 function openScenario(key){
   sc = key;
   document.getElementById('scTitle').textContent = nameById(contests[key].stageId);
   document.getElementById('scSaved').textContent = '';
   // 秒数の大きい順（残り時間の順）に並べてから開く
-  contests[key].waves.forEach(w => w.rows.sort((a, b) => (parseInt(b.t) || -1) - (parseInt(a.t) || -1)));
+  if (!contests[key].sp) contests[key].sp = {};
+  contests[key].waves.forEach(w => { if (w.band == null) w.band = ''; syncRows(w); });
+  spPick = null; lastWhat = null;
   document.getElementById('scenario').classList.add('open');
   document.getElementById('scBody').scrollTop = 0;
   history.pushState({ scenario:true }, '');
@@ -520,25 +586,43 @@ function openScenario(key){
 function drawScenario(){
   const c = contests[sc], body = document.getElementById('scBody'), top = body.scrollTop;
   const internal = COOP_INTERNAL[c.stageId];
-  let h = '<div class="sinfo">' + weaponIcons(c.weapons) + '</div>' +
-    '<div class="seen">' + esc(c.weapons.map(w => w.name).join('・')) + '<br>登場日: ' + esc(c.seen.map(fmtDay).join('・')) + '</div>' +
-    '<div class="flabel">スペシャル（回によって変わることあり）</div>' +
-    '<input class="tin" data-f="special" value="' + esc(c.special) + '" placeholder="例: ナイスダマ, ジェットパック, …">';
+  let h = '<div class="flabel" style="margin-top:0">ブキとスペシャル（タップで選ぶ・回によって変わることあり）</div><div class="wsp">' +
+    c.weapons.map((wp, k) => {
+      const s = SP[c.sp[k]];
+      return '<button class="wspb" data-sp="' + k + '"><img src="' + esc(wp.img) + '" alt=""><span class="wname">' + esc(wp.name) + '</span>' +
+        (s ? '<img class="spi" src="' + esc(s.img) + '" alt=""><span class="spn">' + esc(s.name) + '</span>' : '<span class="spnone">＋ スペシャル</span>') + '</button>';
+    }).join('') + '</div>' +
+    (spPick != null ? '<div class="sppick"><div class="flabel" style="margin-top:0">' + esc(c.weapons[spPick].name) + ' のスペシャル</div><div class="spgrid">' +
+      SPECIALS.map(([k, n]) => '<button data-pick="' + k + '" class="' + (c.sp[spPick] === k ? 'on' : '') + '"><img src="' + esc(SP[k].img) + '" alt=""><span>' + esc(n) + '</span></button>').join('') +
+      '</div><div class="wbtns" style="margin-top:8px"><button data-pick="">未選択にする</button><button data-pick-close="1">とじる</button></div></div>' : '') +
+    (c.special ? '<div class="flabel">スペシャルのメモ</div><input class="tin" data-f="special" value="' + esc(c.special) + '">' : '') +
+    '<div class="seen" style="margin-top:8px">登場日: ' + esc(c.seen.map(fmtDay).join('・')) + '</div>';
   c.waves.forEach((w, i) => {
     const tideName = (TIDES.find(t => t[0] === w.tide) || [,''])[1];
     const url = internal && w.tide ? 'https://salmon-learn-nw.gungee.jp/map/?stage=' + internal + '&tide=' + w.tide : '';
-    h += '<div class="wave"><h3>WAVE ' + (i + 1) + '<span class="wsum">' + esc([tideName, w.event].filter(Boolean).join(' / ')) + '</span></h3>' +
+    const bandName = (BANDS.find(b => b[0] === w.band) || [,''])[1];
+    h += '<div class="wave"><h3>WAVE ' + (i + 1) + '<span class="wsum">' + esc([tideName, w.event, bandName && 'キケン度' + bandName].filter(Boolean).join(' / ')) + '</span></h3>' +
       '<div class="tides">' + TIDES.map(([v, n]) => '<button data-w="' + i + '" data-tide="' + v + '" class="' + (w.tide === v ? 'on' : '') + '">' + n + '</button>').join('') + '</div>' +
       '<div class="wrow2"><select class="tsel" data-w="' + i + '" data-f="event"><option value="">昼夜・イベント</option>' +
       EVENTS.map(e => '<option' + (w.event === e ? ' selected' : '') + '>' + e + '</option>').join('') + '</select>' +
       '<a class="maplink' + (url ? '' : ' off') + '" href="' + (url || '#') + '" target="_blank" rel="noopener">🗺 マップ</a></div>' +
+      '<div class="wrow2"><select class="tsel" data-w="' + i + '" data-f="band"><option value="">キケン度（WAVE開始時の表示）</option>' +
+      BANDS.map(b => '<option value="' + b[0] + '"' + (w.band === b[0] ? ' selected' : '') + '>キケン度 ' + b[1] + '</option>').join('') + '</select></div>' +
+      (w.band ? '' : '<div class="ehint" style="padding:6px 2px 0">キケン度を選ぶと、オオモノが湧く秒数の行が自動で並びます</div>') +
       '<div class="tl"><div class="tlh"><span>残り秒</span><span>どこに</span><span>何が</span><span></span></div>' +
-      w.rows.map((r, j) => '<div class="tlr">' +
-        '<input class="tin" inputmode="numeric" data-w="' + i + '" data-r="' + j + '" data-f="t" value="' + esc(r.t) + '" placeholder="95">' +
-        '<input class="tin" list="dlWhere" data-w="' + i + '" data-r="' + j + '" data-f="where" value="' + esc(r.where) + '" placeholder="右">' +
-        '<input class="tin" list="dlWhat" data-w="' + i + '" data-r="' + j + '" data-f="what" value="' + esc(r.what) + '" placeholder="テッパン">' +
-        '<button class="del" data-w="' + i + '" data-delrow="' + j + '" aria-label="この行を消す">×</button></div>').join('') +
-      '<button class="addrow" data-w="' + i + '" data-addrow="1">＋ 行を追加</button></div>' +
+      w.rows.map((r, j) => {
+        const late = r.fixed && parseFloat(r.t) < 28;
+        const focus = lastWhat && lastWhat.w === i && lastWhat.r === j;
+        return '<div class="tlr' + (late ? ' late' : '') + '">' +
+          (r.fixed ? '<span class="tfix">' + esc(r.t) + '<small>' + (late ? 'ザコのみ' : (r.t === '28' ? '最後' : '秒')) + '</small></span>'
+            : '<input class="tin" inputmode="decimal" data-w="' + i + '" data-r="' + j + '" data-f="t" value="' + esc(r.t) + '" placeholder="秒">') +
+          '<span class="wh">' + WHERE.map(d => '<button data-w="' + i + '" data-r="' + j + '" data-where="' + d + '" class="' + (r.where === d ? 'on' : '') + '">' + (d === '正面' ? '正' : d) + '</button>').join('') + '</span>' +
+          '<input class="tin' + (focus ? ' cur' : '') + '" list="dlWhat" data-w="' + i + '" data-r="' + j + '" data-f="what" value="' + esc(r.what) + '">' +
+          (r.fixed ? '<span></span>' : '<button class="del" data-w="' + i + '" data-delrow="' + j + '" aria-label="この行を消す">×</button>') + '</div>';
+      }).join('') +
+      '<div class="bossbar"><span>タップで選んでいる行の「何が」に追加：</span>' +
+      BOSSES.map(b => '<button data-w="' + i + '" data-boss="' + b + '">' + b + '</button>').join('') + '</div>' +
+      '<button class="addrow" data-w="' + i + '" data-addrow="1">＋ 秒数を自分で入れる行を追加</button></div>' +
       '<div class="flabel">メモ</div><textarea class="tin" data-w="' + i + '" data-f="note" placeholder="立ち回り・注意点など">' + esc(w.note) + '</textarea></div>';
   });
   h += '<div class="wbtns"><button data-addwave="1">＋ WAVEを追加</button>' + (c.waves.length > 1 ? '<button data-delwave="1">最後のWAVEを消す</button>' : '') + '</div>' +
@@ -568,15 +652,34 @@ document.getElementById('scBody').addEventListener('input', e => {
   else c[f] = t.value;
   document.getElementById('scSaved').textContent = '入力中…';
   clearTimeout(scTimer); scTimer = setTimeout(saveContests, 500);
-  if (f === 'event') { saveContests(); drawScenario(); }
+  if (f === 'band') syncRows(c.waves[+t.dataset.w]);
+  if (f === 'event' || f === 'band') { clearTimeout(scTimer); saveContests(); drawScenario(); }
+});
+document.getElementById('scBody').addEventListener('focusin', e => {
+  const t = e.target; if (t.dataset.f !== 'what') return;
+  lastWhat = { w: +t.dataset.w, r: +t.dataset.r };
+  document.querySelectorAll('#scBody input.cur').forEach(x => x.classList.remove('cur'));
+  t.classList.add('cur');
 });
 document.getElementById('scBody').addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t || !sc) return;
   const c = contests[sc], w = t.dataset.w != null ? c.waves[+t.dataset.w] : null;
-  if (t.dataset.tide){ w.tide = w.tide === t.dataset.tide ? '' : t.dataset.tide; }
+  if (t.dataset.sp != null){ spPick = spPick === +t.dataset.sp ? null : +t.dataset.sp; drawScenario(); return; }
+  else if (t.dataset.pickClose){ spPick = null; drawScenario(); return; }
+  else if (t.dataset.pick != null){ if (t.dataset.pick) c.sp[spPick] = t.dataset.pick; else delete c.sp[spPick]; spPick = null; }
+  else if (t.dataset.where){ const r = w.rows[+t.dataset.r]; r.where = r.where === t.dataset.where ? '' : t.dataset.where; }
+  else if (t.dataset.boss){
+    // 選んでいる行が無ければ、このWAVEで「何が」が空の最初の行に入れる
+    let j = lastWhat && lastWhat.w === +t.dataset.w ? lastWhat.r : w.rows.findIndex(r => !r.what && !(r.fixed && parseFloat(r.t) < 28));
+    if (j < 0) j = 0;
+    const r = w.rows[j];
+    r.what = r.what ? r.what + '・' + t.dataset.boss : t.dataset.boss;
+    lastWhat = { w: +t.dataset.w, r: j };
+  }
+  else if (t.dataset.tide){ w.tide = w.tide === t.dataset.tide ? '' : t.dataset.tide; }
   else if (t.dataset.addrow){ w.rows.push({ t:'', where:'', what:'' }); }
   else if (t.dataset.delrow != null){ w.rows.splice(+t.dataset.delrow, 1); if (!w.rows.length) w.rows.push({ t:'', where:'', what:'' }); }
-  else if (t.dataset.addwave){ c.waves.push(blankWave()); }
+  else if (t.dataset.addwave){ c.waves.push(blankWave(c.waves.length)); }
   else if (t.dataset.delwave){
     if (waveFilled(c.waves[c.waves.length - 1]) && !confirm('WAVE ' + c.waves.length + 'の記録も消えます。よろしいですか？')) return;
     c.waves.pop();

@@ -24,6 +24,9 @@
   - 中身（潮位・イベント・「残り秒/どこ/何」の行・スペシャル・メモ）は公開データに無いのでユーザーが手入力（2026-11-12ユーザー選択）。WAVE数は既定5、追加・削除可
   - 「🗺 マップ」はサーモンラーンNW `https://salmon-learn-nw.gungee.jp/map/?stage=<Shake内部名>&tide=Low|Mid|High` を開く（ビッグラン会場は非対応）
   - バックアップJSONは version 2 で `memos` と `contests` を含む
+  - ブキごとのスペシャル: `sp: {ブキ番号0-3: 'Chariot' 等}`。画像は `special_img/blue/<sha256(Sp内部名)>_0.png`（`SPECIALS` 定数。サモラン用はLeanny/splat3 `WeaponInfoSpecial.json` のType=Coop、スーパーチャクチは画像なしで除外）
+  - 秒数: WAVEごとに `band`（キケン度帯）を選ぶと、オオモノ湧き時刻（＝湧き方向の切替、間隔72/n秒）の固定行（`fixed:true`）が並ぶ。残り28秒が最後のオオモノ、それ以降はザコのみ。表の出典はwikiwiki「サーモンラン NEXT WAVE」・macarongamemo。帯を変えると空の固定行だけ消える
+  - 調べた仕様: ばちこんはWAVE5まで・同じシナリオを繰り返す・キケン度60%から納品数で上昇（攻略サイト情報、公式未確認）
 - IDはsplatoon3.inkのbase64 ID（例 `VnNTdGFnZS00` = `VsStage-4`）
 
 ## 方針（決定済み）
