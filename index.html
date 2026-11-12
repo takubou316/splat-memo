@@ -205,8 +205,13 @@ async function refresh(force){
 function rememberStageImages(){
   if (!sched) return;
   const d = sched.data;
+  // 全バトルステージの一覧（vsStages）は高解像度の originalImage だけを持つので、同じ画像の小さい版のURLに置き換える
+  const small = u => u.replace('/high_resolution/', '/low_resolution/').replace(/_0\.png$/, '_1.png');
+  (d.vsStages && d.vsStages.nodes || []).forEach(s => { if (s && s.id && s.originalImage && s.originalImage.url) stageImg[s.id] = small(s.originalImage.url); });
   const put = s => { if (s && s.id && s.image && s.image.url) stageImg[s.id] = s.image.url; };
-  (d.vsStages && d.vsStages.nodes || []).forEach(put);
+  ['regularSchedules','bankaraSchedules','xSchedules','festSchedules'].forEach(k => ((d[k]||{}).nodes||[]).forEach(n => {
+    Object.values(n).forEach(v => [].concat(v || []).forEach(st => st && st.vsStages && st.vsStages.forEach(put)));
+  }));
   const coop = d.coopGroupingSchedule || {};
   ['regularSchedules','bigRunSchedules','teamContestSchedules'].forEach(k => ((coop[k]||{}).nodes||[]).forEach(n => {
     const st = n.setting && n.setting.coopStage;
