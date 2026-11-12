@@ -21,9 +21,11 @@ const css = `
 .tl-acts button.del{color:#ff8a8a}
 #tier{position:fixed;inset:0;z-index:20;background:var(--bg);display:none;flex-direction:column}
 #tier.open{display:flex}
-#tier .ehead button.hb{padding:8px 10px;border-radius:10px;background:var(--card);font-size:14px;font-weight:700;min-width:40px;min-height:40px}
+#tier .ehead{gap:5px}
+#tier .ehead .back{padding:8px 4px}
+#tier .ehead button.hb{padding:6px 7px;border-radius:10px;background:var(--card);font-size:13px;font-weight:700;min-width:38px;min-height:40px;flex:none}
 #tier .ehead button.hb:disabled{opacity:.35}
-#tierTitle{flex:1;text-align:left;font-weight:800;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:6px 4px}
+#tierTitle{flex:1;min-width:0;text-align:left;font-weight:800;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:6px 4px}
 #tierBoard{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:8px 8px 16px}
 .trow{display:flex;margin-bottom:4px;min-height:80px;background:#1b1826;border-radius:10px;overflow:hidden}
 .tlab{flex:none;width:58px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;color:#1a1020;text-align:center;word-break:break-all;padding:4px;line-height:1.1}
@@ -213,7 +215,7 @@ document.getElementById('main').addEventListener('change', e => {
 const ov = document.createElement('div');
 ov.id = 'tier';
 ov.innerHTML = '<div class="ehead"><button class="back" id="tierBack">‹ 一覧</button><button id="tierTitle"></button>' +
-  '<button class="hb" id="tierUndo" aria-label="取り消し">↶</button><button class="hb" id="tierRedo" aria-label="やり直し">↷</button><button class="hb" id="tierEditRows">段</button></div>' +
+  '<button class="hb" id="tierUndo" aria-label="取り消し">↶</button><button class="hb" id="tierRedo" aria-label="やり直し">↷</button><button class="hb" id="tierEditRows">段</button><button class="hb" id="tierShot">画像</button></div>' +
   '<div id="tierBoard"></div>' +
   '<div id="tierTray"><div class="trayh"><span class="cnt" id="trayCnt"></span><button id="trayToggle"></button></div>' +
   '<input class="traysearch" id="traySearch" placeholder="名前で探す" style="display:none"><div id="trayItems"></div></div>';
@@ -264,6 +266,7 @@ function itemHTML(x){
   return '<div class="ti" data-item="' + esc(x.id) + '"><img src="' + esc(x.img) + '" alt="" draggable="false" loading="lazy"><span>' + esc(shortName(x.name)) + '</span></div>';
 }
 function drawTier(toTop){
+  if (dg) endDrag(true); // 書き換えで触っている要素が消える前に、ドラッグを必ず終わらせる
   $('tierTitle').textContent = cur.title;
   $('tierUndo').disabled = hi <= 0; $('tierRedo').disabled = hi >= hist.length - 1;
   const b = $('tierBoard'), top = b.scrollTop;
@@ -287,6 +290,118 @@ $('tierRedo').onclick = () => { if (hi < hist.length - 1) goHist(hi + 1); };
 $('trayToggle').onclick = () => { trayBig = !trayBig; if (!trayBig) { query = ''; $('traySearch').value = ''; } drawTier(); };
 $('traySearch').addEventListener('input', e => { query = e.target.value; drawTier(); });
 $('tierEditRows').onclick = () => openRowSheet();
+$('tierShot').onclick = () => exportImage();
+
+// ---------- ティア表を1枚の画像にする ----------
+// 画像の配信元（splatoon3.ink / raw.githubusercontent.com）は CORS を許可しているので canvas に描ける。
+// 画面に表示中の画像はCORSなしで読み込んでいるため、キャッシュを分けるために cors=1 を付けて読み直す
+function loadCors(url){
+  return new Promise(res => {
+    const im = new Image(); im.crossOrigin = 'anonymous';
+    let done = false;
+    const fin = v => { if (done) return; done = true; clearTimeout(t); im.onload = im.onerror = null; res(v); };
+    const t = setTimeout(() => { fin(null); im.src = ''; }, 8000);
+    im.onload = () => fin(im); im.onerror = () => fin(null);
+    try { const u = new URL(url); u.searchParams.set('cors', '1'); im.src = u.href; } catch (e) { fin(null); }
+  });
+}
+// 同時に読み込む枚数を絞る（iPhoneのメモリ対策）
+async function loadAll(urls, limit){
+  const out = new Array(urls.length); let next = 0;
+  const worker = async () => { while (next < urls.length){ const i = next++; out[i] = await loadCors(urls[i]); } };
+  await Promise.all(Array.from({ length: Math.min(limit, urls.length) }, worker));
+  return out;
+}
+function fitText(ctx, text, maxW){
+  // 1行に収まらない名前は末尾を「…」で切る
+  if (ctx.measureText(text).width <= maxW) return text;
+  let s = text; while (s.length > 1 && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
+  return s + '…';
+}
+let exporting = false;
+async function exportImage(){
+  if (!cur || exporting) return;
+  exporting = true; $('tierShot').disabled = true;
+  // 作っている途中に編集されてもずれないよう、開始時点の内容を写して使う
+  const snap = { title: cur.title, set: cur.set, setLabel: setOf(cur).label, updated: cur.updated,
+    tiers: cur.tiers.map(t => ({ label: t.label, color: COLOR_RE.test(t.color) ? t.color : PALETTE[0],
+      items: t.items.map(id => itemOf(cur, id)).filter(Boolean).map(x => ({ name: x.name, img: x.img })) })) };
+  const cv = document.createElement('canvas');
+  try {
+    toast('画像を作っています…');
+    const W = 1080, PAD = 28, LAB = 150, GAP = 8, IMG = 104, NAME = 24, CELL_W = IMG, CELL_H = IMG + NAME + 6;
+    const cols = Math.max(1, Math.floor((W - PAD * 2 - LAB - GAP) / (CELL_W + GAP)));
+    const FONT = '"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif';
+    const rowsH = snap.tiers.map(t => Math.max(1, Math.ceil(t.items.length / cols)) * (CELL_H + GAP) + GAP);
+    const HEAD = 110, FOOT = 56;
+    const H = HEAD + rowsH.reduce((a, b) => a + b + 6, 0) + FOOT;
+    // iPhoneのcanvasの大きさの上限に掛からないよう、縦が長すぎる時は全体を縮小して1枚に収める
+    const MAX_H = 8000, scale = Math.min(1, MAX_H / H);
+    cv.width = Math.round(W * scale); cv.height = Math.round(H * scale);
+    const ctx = cv.getContext('2d');
+    if (!ctx) throw new Error('canvas');
+    ctx.scale(scale, scale);
+    const flat = snap.tiers.flatMap(t => t.items);
+    const loaded = await loadAll(flat.map(x => x.img), 6);
+    const missing = loaded.filter(x => !x).length;
+    ctx.fillStyle = '#16141f'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#f2f0f7'; ctx.font = 'bold 46px ' + FONT; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    ctx.fillText(fitText(ctx, snap.title, W - PAD * 2), PAD, 52);
+    ctx.fillStyle = '#a9a3bd'; ctx.font = '24px ' + FONT;
+    ctx.fillText(snap.setLabel, PAD, 92);
+    let y = HEAD, n = 0;
+    snap.tiers.forEach((t, i) => {
+      const h = rowsH[i];
+      ctx.fillStyle = '#1b1826'; ctx.fillRect(PAD, y, W - PAD * 2, h);
+      ctx.fillStyle = t.color; ctx.fillRect(PAD, y, LAB, h);
+      ctx.fillStyle = '#1a1020'; ctx.textAlign = 'center';
+      let fs = 56; ctx.font = 'bold ' + fs + 'px ' + FONT;
+      while (fs > 22 && ctx.measureText(t.label).width > LAB - 16){ fs -= 4; ctx.font = 'bold ' + fs + 'px ' + FONT; }
+      ctx.fillText(t.label, PAD + LAB / 2, y + h / 2);
+      t.items.forEach((x, k) => {
+        const im = loaded[n++];
+        const cx = PAD + LAB + GAP + (k % cols) * (CELL_W + GAP), cy = y + GAP + Math.floor(k / cols) * (CELL_H + GAP);
+        ctx.fillStyle = '#0e0c15'; ctx.fillRect(cx, cy, IMG, IMG);
+        if (im){
+          const s = Math.min(IMG / im.width, IMG / im.height), w = im.width * s, hh = im.height * s;
+          ctx.drawImage(im, cx + (IMG - w) / 2, cy + (IMG - hh) / 2, w, hh);
+        } else {
+          ctx.fillStyle = '#6f6987'; ctx.font = '16px ' + FONT; ctx.fillText('画像なし', cx + IMG / 2, cy + IMG / 2);
+        }
+        ctx.fillStyle = '#c9c3dd'; ctx.font = '17px ' + FONT;
+        ctx.fillText(fitText(ctx, x.name, CELL_W + GAP - 2), cx + IMG / 2, cy + IMG + NAME / 2 + 3);
+      });
+      ctx.textAlign = 'left';
+      y += h + 6;
+    });
+    const d = new Date(snap.updated);
+    ctx.fillStyle = '#6f6987'; ctx.font = '20px ' + FONT; ctx.textAlign = 'right';
+    ctx.fillText('ステージメモ  ' + d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate(), W - PAD, H - FOOT / 2);
+    const blob = await new Promise((res, rej) => cv.toBlob(b => b ? res(b) : rej(new Error('blob')), 'image/png'));
+    const name = (snap.title.replace(/[\\/:*?"<>|]/g, '_') || 'tier') + '.png';
+    const file = new File([blob], name, { type: 'image/png' });
+    const url = URL.createObjectURL(blob);
+    // 共有シートは「ボタンを押した瞬間」でないと開けないことがあるので、できた画像を見せてから共有ボタンで開く
+    const canShare = !!(navigator.share && navigator.canShare && navigator.canShare({ files: [file] }));
+    showSheet('<h3>画像ができました</h3>' + (missing ? '<div class="tl-meta" style="color:#ff8a8a;margin-bottom:6px">' + missing + '個の画像を読み込めませんでした（「画像なし」になっています）</div>' : '') +
+      '<img src="' + url + '" alt="" style="width:100%;border-radius:10px;-webkit-touch-callout:default">' +
+      (canShare ? '<button class="tsbtn memo" data-share="1">共有・写真に保存</button>' : '') +
+      '<div class="tl-meta" style="margin:8px 0">画像を長押ししても保存できます</div><a class="tsbtn" href="' + url + '" download="' + esc(name) + '">ダウンロード</a><button class="tsbtn" data-sclose="1">とじる</button>',
+      () => URL.revokeObjectURL(url));
+    sheetEl.addEventListener('click', async e => {
+      if (e.target.closest('[data-share]')){
+        try { await navigator.share({ files: [file], title: snap.title }); }
+        catch (err){ if (!err || err.name !== 'AbortError') toast('共有できませんでした。画像を長押しして保存してください'); }
+      }
+      else if (e.target.closest('[data-sclose]')) closeSheet();
+    });
+  } catch (e){
+    toast('画像を作れませんでした');
+  } finally {
+    cv.width = cv.height = 0; // メモリを早めに返す
+    exporting = false; $('tierShot').disabled = false;
+  }
+}
 
 function removeEverywhere(id){ cur.tiers.forEach(t => { t.items = t.items.filter(x => x !== id); }); }
 function placeItem(id, tierId, index){
@@ -300,20 +415,38 @@ function placeItem(id, tierId, index){
 }
 
 // ---------- ドラッグ（長押しで掴む。掴む前に指が動いたら通常のスクロール） ----------
-const HOLD_MS = 300, SLOP = 8;
-let dg = null; // { id, el, touchId, x0, y0, x, y, timer, active, ghost, target, raf }
+const HOLD_MS = 350, SLOP = 6;
+let dg = null; // { id, el, touchId, x0, y0, x, y, timer, active, ghost, target, raf, off }
 let suppressClick = false;
-function startPress(el, x, y, touchId){
+// 掴んでいる間は盤面とトレイの指スクロールを止める（iPhoneは一度スクロールが始まると preventDefault が効かないため）。
+// 自動スクロールは scrollTop で行うので overflow:hidden でも動く
+const SCROLLERS = ['tierBoard', 'trayItems'];
+let savedOverflow = null;
+function lockScroll(on){
+  if (on){ if (!savedOverflow) savedOverflow = SCROLLERS.map(id => $(id).style.overflowY); SCROLLERS.forEach(id => { $(id).style.overflowY = 'hidden'; }); }
+  else if (savedOverflow){ SCROLLERS.forEach((id, i) => { $(id).style.overflowY = savedOverflow[i]; }); savedOverflow = null; }
+}
+const scrollPos = () => SCROLLERS.map(id => $(id).scrollTop).join(',');
+function startPress(el, x, y, touchId, target){
   endDrag(true); // 前の操作が残っていたら片付ける
-  dg = { id: el.dataset.item, el, touchId, x0: x, y0: y, x, y, active: false };
+  dg = { id: el.dataset.item, el, touchId, x0: x, y0: y, x, y, active: false, pos0: scrollPos() };
   if (touchId == null) return; // マウスは動かした時に掴む
   el.classList.add('pressing');
+  // 指を離した・動かした合図を、実際に触った要素（画像など）と .ti の両方で受け取る。
+  // 画面の書き換えで要素がDOMから外れると document まで届かず「掴んだまま」になるため
+  const mv = e => onTouchMove(e), en = e => onTouchEnd(e), cc = () => endDrag(true);
+  const targets = [...new Set([el, target].filter(Boolean))];
+  targets.forEach(t => { t.addEventListener('touchmove', mv, { passive: false }); t.addEventListener('touchend', en); t.addEventListener('touchcancel', cc); });
+  dg.off = () => targets.forEach(t => { t.removeEventListener('touchmove', mv); t.removeEventListener('touchend', en); t.removeEventListener('touchcancel', cc); });
   dg.timer = setTimeout(() => activate(), HOLD_MS);
 }
 function activate(){
   if (!dg || !cur || !dg.el.isConnected) { endDrag(true); return; }
+  // 長押しの間に少しでもスクロールしていたら、スクロールしようとしていたと見なして掴まない
+  if (dg.touchId != null && scrollPos() !== dg.pos0) { endDrag(true); return; }
   const x = itemOf(cur, dg.id); if (!x) { endDrag(true); return; }
   dg.active = true;
+  lockScroll(true);
   dg.el.classList.remove('pressing'); dg.el.classList.add('lifting');
   const g = document.createElement('div'); g.className = 'tghost';
   g.innerHTML = '<img src="' + esc(x.img) + '" alt=""><span>' + esc(x.name) + '</span>';
@@ -329,9 +462,11 @@ function clearMarks(){
   $('tierTray').classList.remove('over');
 }
 function moveDrag(x, y){
-  if (!dg || !dg.active || !cur) return;
+  if (!dg || !dg.active) return;
+  const item = cur && itemOf(cur, dg.id);
+  if (!item){ endDrag(true); return; }
   dg.x = x; dg.y = y;
-  const name = itemOf(cur, dg.id).name;
+  const name = item.name;
   // 指で隠れないよう、指より上に浮かせる
   dg.ghost.style.transform = 'translate(' + (x - 40) + 'px,' + (y - 120) + 'px)';
   const hit = document.elementFromPoint(x, y);
@@ -363,18 +498,22 @@ function moveDrag(x, y){
 // 掴んでいる間だけ、盤面の上下の端で自動スクロール。スクロールしたら指の下の置き場所を計算し直す
 function autoScroll(){
   if (!dg || !dg.active) return;
-  const b = $('tierBoard'), r = b.getBoundingClientRect(), before = b.scrollTop;
-  if (dg.y < r.top + 60 && dg.y >= r.top - 40) b.scrollTop -= 10;
-  else if (dg.y > r.bottom - 60 && dg.y <= r.bottom + 10) b.scrollTop += 10;
-  if (b.scrollTop !== before) moveDrag(dg.x, dg.y);
-  dg.raf = requestAnimationFrame(autoScroll);
+  try {
+    const b = $('tierBoard'), r = b.getBoundingClientRect(), before = b.scrollTop;
+    if (dg.y < r.top + 60 && dg.y >= r.top - 40) b.scrollTop -= 10;
+    else if (dg.y > r.bottom - 60 && dg.y <= r.bottom + 10) b.scrollTop += 10;
+    if (b.scrollTop !== before) moveDrag(dg.x, dg.y);
+  } catch (e) { endDrag(true); return; }
+  if (dg && dg.active) dg.raf = requestAnimationFrame(autoScroll);
 }
 function endDrag(cancel){
   if (!dg) return;
   const d = dg; dg = null;
   clearTimeout(d.timer);
   if (d.raf) cancelAnimationFrame(d.raf);
+  if (d.off) d.off();
   d.el.classList.remove('pressing', 'lifting');
+  lockScroll(false); // どの終わり方でもスクロールは必ず戻す
   if (!d.active) return;
   suppressClick = true; setTimeout(() => { suppressClick = false; }, 400);
   if (d.ghost) d.ghost.remove();
@@ -389,20 +528,24 @@ ov.addEventListener('touchstart', e => {
   // 2本目の指が触れたら、掴んでいる操作はやめる（誤配置を防ぐ）
   if (dg && dg.touchId != null){ endDrag(true); return; }
   const el = e.target.closest('.ti'); if (!el || e.touches.length > 1) return;
-  const t = e.changedTouches[0]; startPress(el, t.clientX, t.clientY, t.identifier);
+  const t = e.changedTouches[0]; startPress(el, t.clientX, t.clientY, t.identifier, e.target);
 }, { passive: true });
-document.addEventListener('touchmove', e => {
+function onTouchMove(e){
   if (!dg || dg.touchId == null) return;
   const t = findTouch(e.touches, dg.touchId); if (!t) return;
   if (!dg.active){
     if (Math.hypot(t.clientX - dg.x0, t.clientY - dg.y0) > SLOP) endDrag(true);
     return;
   }
-  e.preventDefault();
+  if (e.cancelable) e.preventDefault();
   moveDrag(t.clientX, t.clientY);
-}, { passive: false });
-document.addEventListener('touchend', e => { if (dg && dg.touchId != null && findTouch(e.changedTouches, dg.touchId)) endDrag(false); });
-document.addEventListener('touchcancel', () => endDrag(true));
+}
+function onTouchEnd(e){ if (dg && dg.touchId != null && findTouch(e.changedTouches, dg.touchId)) endDrag(false); }
+// 通常のバブリングで届く分の補助としてティア画面全体でも受ける（二重処理は dg の有無で防ぐ）
+ov.addEventListener('touchend', onTouchEnd);
+ov.addEventListener('touchcancel', () => endDrag(true));
+// ゆっくりスクロールし始めた時に長押しと判定されないよう、掴む前にスクロールが動いたら長押しを取り消す
+['tierBoard', 'trayItems'].forEach(id => $(id).addEventListener('scroll', () => { if (dg && !dg.active) endDrag(true); }, { passive: true }));
 window.addEventListener('blur', () => endDrag(true));
 document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'visible') endDrag(true); });
 // PCのマウスは押して動かしたらすぐ掴む
@@ -417,10 +560,15 @@ document.addEventListener('mouseup', () => { if (dg && dg.touchId == null) endDr
 ov.addEventListener('contextmenu', e => { if (e.target.closest('.ti')) e.preventDefault(); });
 
 // ---------- タップ: 置き場所を選ぶ・メモ ----------
-let sheetEl = null, sheetItem = null;
-function closeSheet(){ if (sheetEl){ sheetEl.remove(); sheetEl = null; sheetItem = null; } }
-function showSheet(html){
+let sheetEl = null, sheetItem = null, sheetCleanup = null;
+// シートはどの閉じ方（とじる・背景タップ・戻る・別のシートに置き換え）でも後片付けを1回だけ行う
+function closeSheet(){
+  if (sheetEl){ sheetEl.remove(); sheetEl = null; sheetItem = null; }
+  if (sheetCleanup){ const f = sheetCleanup; sheetCleanup = null; try { f(); } catch (e){} }
+}
+function showSheet(html, cleanup){
   closeSheet();
+  sheetCleanup = cleanup || null;
   sheetEl = document.createElement('div'); sheetEl.className = 'tsheet-bg';
   sheetEl.innerHTML = '<div class="tsheet">' + html + '</div>';
   sheetEl.addEventListener('click', e => { if (e.target === sheetEl) closeSheet(); });
