@@ -17,6 +17,8 @@
   - サーモンラン: `coop:<CoopStageId>`（ビッグランのステージはIDが別。100番台）
   - バトル: `vs:<VsStageId>:all`（共通）/ `vs:<VsStageId>:<VsRuleId>`（ルール別）
   - バックアップは「メモ一覧」タブ下部の書き出し/読み込み（JSON）
+- ステージ画像: バトルは `vsStages.nodes[].originalImage`（高解像度）を `low_resolution/..._1.png` に置き換えて使う。サモラン会場は全一覧がAPIに無いため `index.html` の `COOP_IMG_HASH` に固定で持つ
+  - 画像ファイル名＝内部名のSHA256（例 `Cop_Shakeup`）。ビッグランは `Cop_<バトルの内部名>`（`Cop_Temple`=マテガイ等）。内部名一覧は Leanny/splat3 の `data/mush/<ver>/CoopSceneInfo.json`。新ステージ追加時はここから足す（assets.splatoon3.inkはUser-Agentなしだと弾かれるので確認時に注意）
 - IDはsplatoon3.inkのbase64 ID（例 `VnNTdGFnZS00` = `VsStage-4`）
 
 ## 方針（決定済み）

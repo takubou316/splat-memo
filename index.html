@@ -141,7 +141,26 @@ function save(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); return tru
 let memos = load('sm_memos', {});           // { key: text }
 let sched = load('sm_sched', null);         // { data, fetchedAt }
 let loc = load('sm_locale', null);          // ja-JP locale
-let stageImg = load('sm_stageimg', {});     // { stageId: url } 一覧で画像を出すための控え
+// サモラン会場は全ステージ一覧がAPIに無いので、画像URLを持っておく。
+// 画像名は内部名（Cop_xxx）のSHA256。ビッグランは Cop_<バトルステージの内部名>
+const COOP_IMG_HASH = {
+  'Q29vcFN0YWdlLTE=':'be584c7c7f547b8cbac318617f646680541f88071bc71db73cd461eb3ea6326e',      // シェケナダム Cop_Shakeup
+  'Q29vcFN0YWdlLTI=':'3418d2d89ef84288c78915b9acb63b4ad48df7bfcb48c27d6597920787e147ec',      // アラマキ砦 Cop_Shakespiral
+  'Q29vcFN0YWdlLTQ=':'630d89698e3e260ef12cb2a32e1cb2c4c83c0e58fc882762da1fa2cea19a5260',      // トキシラズ Cop_Shakelift
+  'Q29vcFN0YWdlLTY=':'1a29476c1ab5fdbc813e2df99cd290ce56dfe29755b97f671a7250e5f77f4961',      // ドン・ブラコ Cop_Shakeship
+  'Q29vcFN0YWdlLTc=':'f1e4df4cff1dc5e0acc66a9654fecf949224f7e4f6bd36305d4600ac3fa3db7b',      // ムニ・エール Cop_Shakedent
+  'Q29vcFN0YWdlLTg=':'0e05d4caa34089a447535708370286f4ee6068661359b4d7cf6c319863424f84',      // すじこ Cop_Shakehighway
+  'Q29vcFN0YWdlLTk=':'5f09625c9031652ca1edcf8028265b03ecc28475ab3d56910960a68430d7948a',      // どんぴこ Cop_Shakerail
+  'Q29vcFN0YWdlLTEwMA==':'2276a46e42a11637776ebc15cf2d46a589f1dba34a76d5c940c418ed7371d071',  // スメーシー Cop_Carousel
+  'Q29vcFN0YWdlLTEwMg==':'3598b7f54248b84c47cde6b99aa45ff296a41d3d5f38eaccfe2327b2874fff0b',  // 海女美 Cop_Upland
+  'Q29vcFN0YWdlLTEwMw==':'71c7076fc2d23f1833c923747e8582e29eb275bed96d8360aa5d0ed6ae069230',  // マテガイ Cop_Temple
+  'Q29vcFN0YWdlLTEwNA==':'5894ed09915957be54e5b1eb58c4c52a9d5d89a99b1297e6d06eac07d47196d0',  // ナンプラー Cop_Factory
+  'Q29vcFN0YWdlLTEwNQ==':'e7736b82a0a9b5c4b3777676f6d2d63ac3c612f1cd63df403153e77564c98b62',  // タラポート Cop_Section
+  'Q29vcFN0YWdlLTEwNg==':'30ad09621e6e7e525a2b30fc02ad11d33aadb1aae9e8ef5bd6cca6aef3db778c',  // ゴンズイ Cop_District
+};
+const COOP_IMG = Object.fromEntries(Object.entries(COOP_IMG_HASH).map(([id, h]) =>
+  [id, 'https://assets.splatoon3.ink/splatnet/v3/stage_img/icon/low_resolution/' + h + '_1.png']));
+let stageImg = Object.assign({}, COOP_IMG, load('sm_stageimg', {}));     // { stageId: url } 一覧で画像を出すための控え
 const ui = Object.assign({ view:'now', nowSub:'salmon', listSub:'salmon', showNext:false }, load('sm_ui', {}));
 let fetchError = false, loading = false;
 
