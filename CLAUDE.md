@@ -19,6 +19,11 @@
   - バックアップは「メモ一覧」タブ下部の書き出し/読み込み（JSON）
 - ステージ画像: バトルは `vsStages.nodes[].originalImage`（高解像度）を `low_resolution/..._1.png` に置き換えて使う。サモラン会場は全一覧がAPIに無いため `index.html` の `COOP_IMG_HASH` に固定で持つ
   - 画像ファイル名＝内部名のSHA256（例 `Cop_Shakeup`）。ビッグランは `Cop_<バトルの内部名>`（`Cop_Temple`=マテガイ等）。内部名一覧は Leanny/splat3 の `data/mush/<ver>/CoopSceneInfo.json`。新ステージ追加時はここから足す（assets.splatoon3.inkはUser-Agentなしだと弾かれるので確認時に注意）
+- ばちこん（バイトチームコンテスト）のシナリオ: localStorage `sm_contests`
+  - キー＝`<CoopStageId>|<ブキ4種の__splatoon3ink_id>`。ループで同じ組み合わせが再登場したら同じ記録を出す（`seen`に開催開始日時を追記）
+  - 中身（潮位・イベント・「残り秒/どこ/何」の行・スペシャル・メモ）は公開データに無いのでユーザーが手入力（2026-11-12ユーザー選択）。WAVE数は既定5、追加・削除可
+  - 「🗺 マップ」はサーモンラーンNW `https://salmon-learn-nw.gungee.jp/map/?stage=<Shake内部名>&tide=Low|Mid|High` を開く（ビッグラン会場は非対応）
+  - バックアップJSONは version 2 で `memos` と `contests` を含む
 - IDはsplatoon3.inkのbase64 ID（例 `VnNTdGFnZS00` = `VsStage-4`）
 
 ## 方針（決定済み）

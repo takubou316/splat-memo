@@ -90,6 +90,43 @@ nav button.on{color:var(--text)}
 #memoText{flex:1;margin:8px 12px calc(12px + env(safe-area-inset-bottom));padding:12px;border-radius:12px;border:1px solid var(--line);
   background:var(--card);color:var(--text);font:inherit;font-size:16px;resize:none;outline:none}
 #memoText:focus{border-color:var(--accent)}
+/* ばちこん */
+.ccard{background:var(--card);border-radius:16px;margin-bottom:14px;overflow:hidden;border-left:5px solid var(--salmon)}
+.ccard .shead{padding:10px 14px}
+.badge{display:inline-block;font-size:12px;font-weight:700;border-radius:999px;padding:2px 10px;margin:0 14px 8px}
+.badge.has{background:var(--salmon);color:#1a1020}
+.badge.new{background:var(--card2);color:var(--sub)}
+.openbtn{display:block;width:calc(100% - 28px);margin:0 14px 14px;padding:12px;border-radius:12px;background:var(--salmon);color:#1a1020;font-weight:800;text-align:center}
+#scenario{position:fixed;inset:0;z-index:20;background:var(--bg);display:none;flex-direction:column}
+#scenario.open{display:flex}
+#scBody{flex:1;overflow-y:auto;padding:12px 12px calc(24px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
+.sinfo{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px}
+.sinfo img{width:40px;height:40px;background:var(--card2);border-radius:10px;padding:3px}
+.seen{font-size:12px;color:var(--sub);margin-bottom:10px}
+.flabel{font-size:12px;font-weight:700;color:var(--sub);margin:10px 2px 4px}
+.tin,.tsel{width:100%;background:var(--card);border:1px solid var(--line);border-radius:10px;color:var(--text);font:inherit;font-size:16px;padding:8px 10px;outline:none}
+.tin:focus,.tsel:focus{border-color:var(--accent)}
+textarea.tin{resize:vertical;min-height:64px}
+.wave{background:var(--card);border-radius:14px;padding:12px;margin-top:14px}
+.wave h3{margin:0 0 8px;font-size:16px;display:flex;align-items:center;gap:8px}
+.wave h3 .wsum{font-size:12px;color:var(--sub);font-weight:400}
+.tides{display:flex;gap:6px}
+.tides button{flex:1;padding:8px 0;border-radius:10px;background:var(--card2);color:var(--sub);font-weight:700}
+.tides button.on{background:var(--accent);color:#1a1020}
+.wrow2{display:flex;gap:8px;margin-top:8px}
+.wrow2 .tsel{flex:1}
+.maplink{flex:none;display:flex;align-items:center;padding:0 12px;border-radius:10px;background:var(--card2);color:var(--text);font-weight:700;font-size:14px;text-decoration:none;border:1px solid var(--line)}
+.maplink.off{opacity:.4;pointer-events:none}
+.tl{margin-top:10px}
+.tlh,.tlr{display:grid;grid-template-columns:54px 76px 1fr 28px;gap:6px;align-items:center}
+.tlh{font-size:11px;color:var(--faint);padding:0 2px 2px}
+.tlr{margin-bottom:6px}
+.tlr .tin{padding:7px 8px;background:var(--card2)}
+.tlr .del{color:var(--faint);font-size:18px;height:36px}
+.addrow{width:100%;padding:9px;border:1px dashed var(--line);border-radius:10px;color:var(--sub);font-size:14px;margin-top:2px}
+.wbtns{display:flex;gap:8px;margin-top:14px}
+.wbtns button{flex:1;padding:10px;border-radius:10px;background:var(--card);color:var(--sub);font-size:14px}
+.danger{width:100%;margin-top:24px;padding:10px;border-radius:10px;color:#ff8a8a;border:1px solid #5a2a35;font-size:14px}
 .toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#000c;color:#fff;
   padding:8px 14px;border-radius:999px;font-size:13px;z-index:30;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
@@ -103,8 +140,19 @@ nav button.on{color:var(--text)}
 <main id="main"></main>
 <nav>
   <button id="navNow" class="on"><span class="ic">⏱</span>いまのステージ</button>
+  <button id="navContest"><span class="ic">🐟</span>ばちこん</button>
   <button id="navList"><span class="ic">📝</span>メモ一覧</button>
 </nav>
+<div id="scenario">
+  <div class="ehead">
+    <button class="back" id="scBack">‹ 戻る</button>
+    <div class="etitle" id="scTitle"></div>
+    <div class="saved" id="scSaved"></div>
+  </div>
+  <div id="scBody"></div>
+</div>
+<datalist id="dlWhere"><option>左</option><option>正面</option><option>右</option><option>左奥</option><option>右奥</option><option>中央</option><option>全方向</option></datalist>
+<datalist id="dlWhat"><option>バクダン</option><option>カタパッド</option><option>テッパン</option><option>ヘビ</option><option>タワー</option><option>モグラ</option><option>コウモリ</option><option>ハシラ</option><option>ダイバー</option><option>テッキュウ</option><option>ナベブタ</option><option>キンシャケ</option><option>オカシラ</option><option>ドスコイ</option></datalist>
 <div id="editor">
   <div class="ehead">
     <button class="back" id="edBack">‹ 戻る</button>
@@ -378,17 +426,170 @@ function renderList(){
       esc(prev ? prev.split('\n')[0] : 'メモなし') + '</div></div>' +
       (kind === 'vs' && cnt ? '<span class="count">' + cnt + '件</span>' : '') + '</button>';
   }
-  h += '</div><div class="sec">バックアップ</div><div class="backup">メモはこのスマホの中だけに保存されています。機種変更やデータ消去に備えて、ときどき書き出しておくと安心です。' +
+  h += '</div><div class="sec">バックアップ</div><div class="backup">メモとばちこんのシナリオ記録は、このスマホの中だけに保存されています。機種変更やデータ消去に備えて、ときどき書き出しておくと安心です。' +
     '<div class="btns"><button id="exportBtn">書き出す</button><label>読み込む<input type="file" id="importFile" accept=".json,application/json" hidden></label></div></div>';
   return h;
 }
 
 function render(){
   statusText();
-  document.getElementById('main').innerHTML = ui.view === 'now' ? renderNow() : renderList();
+  document.getElementById('main').innerHTML = ui.view === 'now' ? renderNow() : ui.view === 'contest' ? renderContest() : renderList();
   document.getElementById('navNow').classList.toggle('on', ui.view === 'now');
+  document.getElementById('navContest').classList.toggle('on', ui.view === 'contest');
   document.getElementById('navList').classList.toggle('on', ui.view === 'list');
 }
+
+// ---------- ばちこん（バイトチームコンテスト）のシナリオ ----------
+// 同じ「ステージ×ブキ4種」の回はループで再登場するので、それを1つのシナリオとして記録する
+let contests = load('sm_contests', {});
+const COOP_INTERNAL = { 'Q29vcFN0YWdlLTE=':'Shakeup', 'Q29vcFN0YWdlLTI=':'Shakespiral', 'Q29vcFN0YWdlLTQ=':'Shakelift',
+  'Q29vcFN0YWdlLTY=':'Shakeship', 'Q29vcFN0YWdlLTc=':'Shakedent', 'Q29vcFN0YWdlLTg=':'Shakehighway', 'Q29vcFN0YWdlLTk=':'Shakerail' };
+const TIDES = [['Low','干潮'],['Mid','普通'],['High','満潮']];
+const EVENTS = ['昼（イベントなし）','ラッシュ','霧','キンシャケ探し','グリル発進','ハコビヤ襲来','ドロシャケ噴出','巨大タツマキ'];
+const DEFAULT_WAVES = 5;
+const blankWave = () => ({ tide:'', event:'', rows:[{ t:'', where:'', what:'' }], note:'' });
+function contestKey(node){
+  const st = node.setting || {};
+  return (st.coopStage && st.coopStage.id) + '|' + (st.weapons || []).map(w => w.__splatoon3ink_id).join(',');
+}
+function upsertContest(node){
+  const key = contestKey(node), st = node.setting;
+  let c = contests[key];
+  if (!c){
+    c = contests[key] = { stageId: st.coopStage.id, weapons: [], seen: [], special:'', memo:'',
+      waves: Array.from({ length: DEFAULT_WAVES }, blankWave) };
+  }
+  // ブキ名・画像は毎回最新に（日本語名は取得後に変わりうるため）
+  c.weapons = (st.weapons || []).map(w => ({ id: w.__splatoon3ink_id, name: weaponName(w), img: w.image && w.image.url || '' }));
+  if (!c.seen.includes(node.startTime)) c.seen.push(node.startTime);
+  c.seen.sort();
+  return key;
+}
+function contestNodes(){
+  const c = sched && sched.data.coopGroupingSchedule || {};
+  return ((c.teamContestSchedules || {}).nodes || []).filter(n => new Date(n.endTime) > new Date());
+}
+function weaponIcons(ws){ return ws.map(w => '<img src="' + esc(w.img) + '" alt="' + esc(w.name) + '" title="' + esc(w.name) + '">').join(''); }
+function fmtDay(iso){ const d = new Date(iso); return (d.getMonth()+1) + '/' + d.getDate() + '(' + WD[d.getDay()] + ')'; }
+function waveFilled(w){ return !!(w.tide || w.event || w.note.trim() || w.rows.some(r => r.t || r.where || r.what)); }
+function renderContest(){
+  const now = new Date();
+  let h = '<div class="sec" style="margin-top:0">開催中・次回のばちこん</div>';
+  const nodes = contestNodes();
+  if (!sched) h += '<div class="empty">' + (fetchError ? 'スケジュールを取得できませんでした。' : '読み込み中…') + '</div>';
+  else if (!nodes.length) h += '<div class="empty">いま発表されているばちこんはありません。<br>下の「記録したシナリオ」から過去の記録を見られます。</div>';
+  nodes.forEach(n => {
+    const st = n.setting, key = contestKey(n), c = contests[key];
+    const live = inRange(n, now);
+    const others = c ? c.seen.filter(s => s !== n.startTime) : [];
+    const ws = (st.weapons || []).map(w => ({ img: w.image && w.image.url || '', name: weaponName(w) }));
+    h += '<div class="ccard"><div class="chead"><span class="mode">' + (live ? '開催中' : '次回') + '</span>' +
+      '<span class="time">' + fmtRange(n.startTime, n.endTime, now) + '</span></div>' +
+      '<div class="shead"><img src="' + esc(stageImg[st.coopStage.id] || '') + '" alt=""><div class="sname">' + esc(stageName(st.coopStage)) + '</div></div>' +
+      '<div class="weapons">' + weaponIcons(ws) + '</div>' +
+      (c && c.waves.some(waveFilled) ? '<span class="badge has">前に記録したシナリオあり' + (others.length ? '（' + others.map(fmtDay).join('・') + '）' : '') + '</span>'
+        : '<span class="badge new">まだ記録なし</span>') +
+      '<button class="openbtn" data-contest-node="' + esc(n.startTime) + '">' + (c && c.waves.some(waveFilled) ? 'シナリオを見る' : 'シナリオを記録する') + '</button></div>';
+  });
+  const keys = Object.keys(contests).sort((a, b) => (contests[b].seen.slice(-1)[0] || '').localeCompare(contests[a].seen.slice(-1)[0] || ''));
+  h += '<div class="sec">記録したシナリオ</div><div class="list">';
+  if (!keys.length) h += '<div class="empty" style="padding:16px">まだありません</div>';
+  keys.forEach(k => {
+    const c = contests[k];
+    const filled = c.waves.filter(waveFilled).length;
+    h += '<button class="row" data-contest="' + esc(k) + '"><img src="' + esc(stageImg[c.stageId] || '') + '" alt="">' +
+      '<div class="rinfo"><div class="rname">' + esc(nameById(c.stageId)) + '</div><div class="rprev">' +
+      esc(c.weapons.map(w => w.name).join('・')) + '</div><div class="rprev">' + esc(c.seen.map(fmtDay).join('・')) + '</div></div>' +
+      '<span class="count">' + filled + '/' + c.waves.length + '</span></button>';
+  });
+  return h + '</div>';
+}
+
+let sc = null; // 開いているシナリオのキー
+function openScenario(key){
+  sc = key;
+  document.getElementById('scTitle').textContent = nameById(contests[key].stageId);
+  document.getElementById('scSaved').textContent = '';
+  // 秒数の大きい順（残り時間の順）に並べてから開く
+  contests[key].waves.forEach(w => w.rows.sort((a, b) => (parseInt(b.t) || -1) - (parseInt(a.t) || -1)));
+  document.getElementById('scenario').classList.add('open');
+  document.getElementById('scBody').scrollTop = 0;
+  history.pushState({ scenario:true }, '');
+  drawScenario();
+}
+function drawScenario(){
+  const c = contests[sc], body = document.getElementById('scBody'), top = body.scrollTop;
+  const internal = COOP_INTERNAL[c.stageId];
+  let h = '<div class="sinfo">' + weaponIcons(c.weapons) + '</div>' +
+    '<div class="seen">' + esc(c.weapons.map(w => w.name).join('・')) + '<br>登場日: ' + esc(c.seen.map(fmtDay).join('・')) + '</div>' +
+    '<div class="flabel">スペシャル（回によって変わることあり）</div>' +
+    '<input class="tin" data-f="special" value="' + esc(c.special) + '" placeholder="例: ナイスダマ, ジェットパック, …">';
+  c.waves.forEach((w, i) => {
+    const tideName = (TIDES.find(t => t[0] === w.tide) || [,''])[1];
+    const url = internal && w.tide ? 'https://salmon-learn-nw.gungee.jp/map/?stage=' + internal + '&tide=' + w.tide : '';
+    h += '<div class="wave"><h3>WAVE ' + (i + 1) + '<span class="wsum">' + esc([tideName, w.event].filter(Boolean).join(' / ')) + '</span></h3>' +
+      '<div class="tides">' + TIDES.map(([v, n]) => '<button data-w="' + i + '" data-tide="' + v + '" class="' + (w.tide === v ? 'on' : '') + '">' + n + '</button>').join('') + '</div>' +
+      '<div class="wrow2"><select class="tsel" data-w="' + i + '" data-f="event"><option value="">昼夜・イベント</option>' +
+      EVENTS.map(e => '<option' + (w.event === e ? ' selected' : '') + '>' + e + '</option>').join('') + '</select>' +
+      '<a class="maplink' + (url ? '' : ' off') + '" href="' + (url || '#') + '" target="_blank" rel="noopener">🗺 マップ</a></div>' +
+      '<div class="tl"><div class="tlh"><span>残り秒</span><span>どこに</span><span>何が</span><span></span></div>' +
+      w.rows.map((r, j) => '<div class="tlr">' +
+        '<input class="tin" inputmode="numeric" data-w="' + i + '" data-r="' + j + '" data-f="t" value="' + esc(r.t) + '" placeholder="95">' +
+        '<input class="tin" list="dlWhere" data-w="' + i + '" data-r="' + j + '" data-f="where" value="' + esc(r.where) + '" placeholder="右">' +
+        '<input class="tin" list="dlWhat" data-w="' + i + '" data-r="' + j + '" data-f="what" value="' + esc(r.what) + '" placeholder="テッパン">' +
+        '<button class="del" data-w="' + i + '" data-delrow="' + j + '" aria-label="この行を消す">×</button></div>').join('') +
+      '<button class="addrow" data-w="' + i + '" data-addrow="1">＋ 行を追加</button></div>' +
+      '<div class="flabel">メモ</div><textarea class="tin" data-w="' + i + '" data-f="note" placeholder="立ち回り・注意点など">' + esc(w.note) + '</textarea></div>';
+  });
+  h += '<div class="wbtns"><button data-addwave="1">＋ WAVEを追加</button>' + (c.waves.length > 1 ? '<button data-delwave="1">最後のWAVEを消す</button>' : '') + '</div>' +
+    '<div class="flabel">全体メモ</div><textarea class="tin" data-f="memo" placeholder="全体の方針など">' + esc(c.memo) + '</textarea>' +
+    '<button class="danger" data-delscenario="1">このシナリオの記録を削除</button>';
+  body.innerHTML = h;
+  body.scrollTop = top;
+}
+let scTimer = null;
+function saveContests(){
+  const ok = save('sm_contests', contests);
+  if (sc) document.getElementById('scSaved').textContent = ok ? '保存しました ✓' : '保存に失敗しました';
+}
+function closeScenario(fromPop){
+  if (!sc) return;
+  clearTimeout(scTimer); saveContests();
+  sc = null;
+  document.getElementById('scenario').classList.remove('open');
+  if (!fromPop && history.state && history.state.scenario) history.back();
+  render();
+}
+document.getElementById('scBody').addEventListener('input', e => {
+  const t = e.target, f = t.dataset.f; if (!f || !sc) return;
+  const c = contests[sc];
+  if (t.dataset.r != null) c.waves[+t.dataset.w].rows[+t.dataset.r][f] = t.value;
+  else if (t.dataset.w != null) c.waves[+t.dataset.w][f] = t.value;
+  else c[f] = t.value;
+  document.getElementById('scSaved').textContent = '入力中…';
+  clearTimeout(scTimer); scTimer = setTimeout(saveContests, 500);
+  if (f === 'event') { saveContests(); drawScenario(); }
+});
+document.getElementById('scBody').addEventListener('click', e => {
+  const t = e.target.closest('button'); if (!t || !sc) return;
+  const c = contests[sc], w = t.dataset.w != null ? c.waves[+t.dataset.w] : null;
+  if (t.dataset.tide){ w.tide = w.tide === t.dataset.tide ? '' : t.dataset.tide; }
+  else if (t.dataset.addrow){ w.rows.push({ t:'', where:'', what:'' }); }
+  else if (t.dataset.delrow != null){ w.rows.splice(+t.dataset.delrow, 1); if (!w.rows.length) w.rows.push({ t:'', where:'', what:'' }); }
+  else if (t.dataset.addwave){ c.waves.push(blankWave()); }
+  else if (t.dataset.delwave){
+    if (waveFilled(c.waves[c.waves.length - 1]) && !confirm('WAVE ' + c.waves.length + 'の記録も消えます。よろしいですか？')) return;
+    c.waves.pop();
+  }
+  else if (t.dataset.delscenario){
+    if (!confirm('このシナリオの記録をすべて削除します。元に戻せません。よろしいですか？')) return;
+    delete contests[sc]; save('sm_contests', contests); closeScenario(false); return;
+  }
+  else return;
+  clearTimeout(scTimer); saveContests(); drawScenario();
+  if (t.dataset.addrow){ const ins = document.querySelectorAll('.tlr input[data-w="' + t.dataset.w + '"][data-f="t"]'); ins[ins.length - 1].focus(); }
+});
+document.getElementById('scBack').onclick = () => closeScenario(false);
 function setUI(p){ Object.assign(ui, p); save('sm_ui', { view:ui.view, nowSub:ui.nowSub, listSub:ui.listSub }); render(); }
 
 // ---------- エディタ ----------
@@ -441,7 +642,7 @@ function closeEditor(fromPop){
 function toast(t){ const el = document.getElementById('toast'); el.textContent = t; el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 2200); }
 async function exportMemos(){
   const d = new Date(), stamp = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
-  const blob = new Blob([JSON.stringify({ app:'splat-stage-memo', version:1, exportedAt:d.toISOString(), memos }, null, 2)], { type:'application/json' });
+  const blob = new Blob([JSON.stringify({ app:'splat-stage-memo', version:2, exportedAt:d.toISOString(), memos, contests }, null, 2)], { type:'application/json' });
   const name = 'stage-memo-' + stamp + '.json';
   try{
     const file = new File([blob], name, { type:'application/json' });
@@ -457,10 +658,12 @@ function importMemos(file){
       const j = JSON.parse(r.result);
       const m = j && j.memos;
       if (!m || typeof m !== 'object') throw 0;
-      const n = Object.keys(m).length;
-      if (!confirm(n + '件のメモを読み込みます。同じステージの今のメモは上書きされます（それ以外は残ります）。よろしいですか？')) return;
+      const cs = (j.contests && typeof j.contests === 'object') ? j.contests : {};
+      const n = Object.keys(m).length, nc = Object.keys(cs).length;
+      if (!confirm(n + '件のメモ' + (nc ? 'と' + nc + '件のばちこんシナリオ' : '') + 'を読み込みます。同じものは上書きされます（それ以外は残ります）。よろしいですか？')) return;
       for (const [k, v] of Object.entries(m)) if (typeof v === 'string' && /^(coop|vs):/.test(k)) memos[k] = v;
-      save('sm_memos', memos); render(); toast('読み込みました');
+      for (const [k, v] of Object.entries(cs)) if (v && Array.isArray(v.waves) && v.stageId) contests[k] = v;
+      save('sm_memos', memos); save('sm_contests', contests); render(); toast('読み込みました');
     }catch(e){ alert('このファイルは読み込めませんでした。「書き出す」で作ったファイルを選んでください。'); }
   };
   r.readAsText(file);
@@ -470,7 +673,14 @@ function importMemos(file){
 document.addEventListener('click', e => {
   const t = e.target.closest('button, [data-chip]');
   if (!t) return;
+  if (t.closest('#scenario')) return;
   if (t.dataset.edit){ openEditor(t.dataset.edit, t.dataset.id, t.dataset.rule); return; }
+  if (t.dataset.contestNode){
+    const n = contestNodes().find(x => x.startTime === t.dataset.contestNode);
+    if (n){ const k = upsertContest(n); save('sm_contests', contests); openScenario(k); }
+    return;
+  }
+  if (t.dataset.contest){ openScenario(t.dataset.contest); return; }
   if (t.dataset.chip){ clearTimeout(saveTimer); saveMemo(); ed.rule = t.dataset.chip; drawEditor(); return; }
   if (t.dataset.sub){ setUI({ nowSub:t.dataset.sub }); return; }
   if (t.dataset.lsub){ setUI({ listSub:t.dataset.lsub }); return; }
@@ -480,9 +690,10 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => { if (e.target.id === 'importFile' && e.target.files[0]){ importMemos(e.target.files[0]); e.target.value = ''; } });
 document.getElementById('navNow').onclick = () => { setUI({ view:'now' }); window.scrollTo(0,0); };
 document.getElementById('navList').onclick = () => { setUI({ view:'list' }); window.scrollTo(0,0); };
+document.getElementById('navContest').onclick = () => { setUI({ view:'contest' }); window.scrollTo(0,0); };
 document.getElementById('reload').onclick = () => refresh(true);
 document.getElementById('edBack').onclick = () => closeEditor(false);
-window.addEventListener('popstate', () => { if (ed) closeEditor(true); });
+window.addEventListener('popstate', () => { if (ed) closeEditor(true); if (sc) closeScenario(true); });
 document.getElementById('memoText').addEventListener('input', () => {
   document.getElementById('edSaved').textContent = '入力中…';
   clearTimeout(saveTimer); saveTimer = setTimeout(saveMemo, 500);
@@ -490,7 +701,7 @@ document.getElementById('memoText').addEventListener('input', () => {
 // アプリに戻ってきたとき：時間帯が変わっていれば取り直し、そうでなくても表示時刻を更新
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible'){ if (stale()) refresh(); else render(); }
-  else if (ed){ clearTimeout(saveTimer); saveMemo(); }
+  else { if (ed){ clearTimeout(saveTimer); saveMemo(); } if (sc){ clearTimeout(scTimer); saveContests(); } }
 });
 // 開きっぱなしでも時間帯の切り替わりに追従
 setInterval(() => { if (document.visibilityState === 'visible' && !ed && stale()) refresh(); }, 60e3);
