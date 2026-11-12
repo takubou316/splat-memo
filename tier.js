@@ -4,20 +4,20 @@
 'use strict';
 (function(){
 const css = `
-.tlist-new{display:block;width:100%;padding:14px;border-radius:14px;background:var(--salmon);color:#1a1020;font-weight:800;font-size:16px;margin-bottom:12px}
+.tlist-new{display:block;width:100%;padding:11px;border-radius:10px;background:var(--salmon);color:#1a1020;font-weight:600;font-size:14px;margin-bottom:12px}
 .tsetpick{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
-.tsetpick button{display:flex;align-items:center;gap:10px;padding:12px;border-radius:12px;background:var(--card);text-align:left;font-weight:700;font-size:16px;color:var(--text)}
-.tsetpick button img{width:44px;height:44px;object-fit:contain;background:var(--card2);border-radius:10px;padding:3px}
-.tfilter{width:100%;margin-bottom:10px;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px 10px;font:inherit;font-size:15px}
-.tl-item{background:var(--card);border-radius:14px;margin-bottom:10px;overflow:hidden}
+.tsetpick button{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:var(--card);border:1px solid var(--line);text-align:left;font-weight:600;font-size:14px;color:var(--text)}
+.tsetpick button img{width:40px;height:40px;object-fit:contain;background:var(--card2);border-radius:10px;padding:3px}
+.tfilter{width:100%;margin-bottom:10px;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit;font-size:16px}
+.tl-item{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:10px;overflow:hidden}
 .tl-open{display:block;width:100%;text-align:left;padding:10px 12px;color:var(--text)}
-.tl-title{font-weight:800;font-size:16px}
-.tl-meta{font-size:12px;color:var(--sub)}
+.tl-title{font-weight:600;font-size:15px}
+.tl-meta{font-size:11px;color:var(--faint)}
 .tl-prev{display:flex;gap:4px;margin-top:6px;align-items:center;min-height:34px}
 .tl-prev .pl{width:22px;height:30px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#1a1020;flex:none}
 .tl-prev img{width:30px;height:30px;object-fit:contain;background:var(--card2);border-radius:6px}
 .tl-acts{display:flex;border-top:1px solid var(--line)}
-.tl-acts button{flex:1;padding:10px 4px;font-size:13px;color:var(--sub)}
+.tl-acts button{flex:1;padding:9px 4px;font-size:12px;color:var(--sub)}
 .tl-acts button.del{color:#ff8a8a}
 #tier{position:fixed;inset:0;z-index:20;background:var(--bg);display:none;flex-direction:column}
 #tier.open{display:flex}
@@ -25,15 +25,15 @@ const css = `
 #tier .ehead .back{padding:8px 4px}
 #tier .ehead button.hb{padding:6px 7px;border-radius:10px;background:var(--card);font-size:13px;font-weight:700;min-width:38px;min-height:40px;flex:none}
 #tier .ehead button.hb:disabled{opacity:.35}
-#tierTitle{flex:1;min-width:0;text-align:left;font-weight:800;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:6px 4px}
+#tierTitle{flex:1;min-width:0;text-align:left;font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:6px 4px}
 #tierBoard{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:8px 8px 16px}
-.trow{display:flex;margin-bottom:4px;min-height:80px;background:#1b1826;border-radius:10px;overflow:hidden}
-.tlab{flex:none;width:58px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;color:#1a1020;text-align:center;word-break:break-all;padding:4px;line-height:1.1}
-.titems{flex:1;display:flex;flex-wrap:wrap;align-content:flex-start;gap:4px;padding:4px;min-height:80px}
+.trow{display:flex;margin-bottom:4px;min-height:70px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.tlab{flex:none;width:48px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;color:#1a1020;text-align:center;word-break:break-all;padding:4px;line-height:1.1}
+.titems{flex:1;display:flex;flex-wrap:wrap;align-content:flex-start;gap:4px;padding:4px;min-height:70px}
 .trow.over{outline:3px solid #fff;outline-offset:-3px}
-.ti{width:60px;display:flex;flex-direction:column;align-items:center;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;cursor:grab;border-radius:8px;padding:2px 0}
-.ti img{width:56px;height:56px;object-fit:contain;background:#0e0c15;border-radius:8px;pointer-events:none;-webkit-user-drag:none}
-.ti span{font-size:9px;line-height:1.15;color:var(--sub);width:58px;text-align:center;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;height:2.3em}
+.ti{width:56px;display:flex;flex-direction:column;align-items:center;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;cursor:grab;border-radius:8px;padding:2px 0}
+.ti img{width:52px;height:52px;object-fit:contain;background:#0e0c15;border-radius:8px;pointer-events:none;-webkit-user-drag:none}
+.ti span{font-size:9px;line-height:1.15;color:var(--faint);width:54px;text-align:center;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;height:2.3em}
 .ti.lifting{opacity:.25}
 .ti.pressing{transform:scale(.94);transition:transform .25s}
 .ti.ins-before{box-shadow:-4px 0 0 0 #fff}
@@ -42,28 +42,28 @@ const css = `
 #tierTray.big{max-height:58vh}
 #tierTray.over{outline:3px solid #fff;outline-offset:-3px}
 .trayh{display:flex;align-items:center;gap:8px;padding:8px 10px}
-.trayh button{padding:8px 12px;border-radius:10px;background:var(--card);font-size:14px;font-weight:700;color:var(--text)}
-.trayh .cnt{flex:1;font-size:13px;color:var(--sub);font-weight:700}
+.trayh button{padding:6px 12px;border-radius:999px;background:var(--card);border:1px solid var(--line);font-size:12px;font-weight:600;color:var(--text)}
+.trayh .cnt{flex:1;font-size:11px;color:var(--faint);font-weight:600;letter-spacing:.06em}
 .traysearch{margin:0 10px 6px;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit;font-size:16px}
 #trayItems{overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-wrap:wrap;gap:4px;padding:0 8px 8px;align-content:flex-start}
 .tghost{position:fixed;left:0;top:0;z-index:50;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:2px}
 .tghost img{width:76px;height:76px;object-fit:contain;background:#0e0c15;border:2px solid #fff;border-radius:12px;box-shadow:0 8px 24px #000a}
-.tghost span{background:#000d;color:#fff;font-size:12px;font-weight:700;border-radius:999px;padding:2px 10px;white-space:nowrap}
+.tghost span{background:#000d;color:#fff;font-size:11px;font-weight:600;border-radius:999px;padding:2px 10px;white-space:nowrap}
 .tsheet-bg{position:fixed;inset:0;z-index:25;background:#0008;display:flex;align-items:flex-end}
 .tsheet{width:100%;max-height:85vh;overflow-y:auto;background:var(--bg);border-radius:18px 18px 0 0;padding:14px 14px calc(16px + env(safe-area-inset-bottom));border-top:1px solid var(--line)}
-.tsheet h3{margin:0 0 10px;font-size:17px}
+.tsheet h3{margin:0 0 10px;font-size:15px;font-weight:600}
 .tsi-head{display:flex;gap:12px;align-items:center;margin-bottom:12px}
 .tsi-head img{width:84px;height:84px;object-fit:contain;background:#0e0c15;border-radius:12px}
-.tsi-head b{font-size:18px}
+.tsi-head b{font-size:16px;font-weight:600}
 .tsi-tiers{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
-.tsi-tiers button{min-width:52px;min-height:46px;padding:6px 10px;border-radius:10px;font-weight:900;font-size:18px;color:#1a1020}
+.tsi-tiers button{min-width:48px;min-height:44px;padding:6px 10px;border-radius:10px;font-weight:700;font-size:15px;color:#1a1020}
 .tsi-tiers button.cur{outline:3px solid #fff}
-.tsi-tiers button.pool{background:var(--card);color:var(--text);font-size:14px;font-weight:700}
-.tsbtn{display:block;width:100%;padding:12px;border-radius:12px;background:var(--card);font-weight:700;font-size:15px;margin-top:8px;color:var(--text);text-align:center}
-.tsbtn.memo{background:#2d2316;border:1px solid #6b4a1f}
-.tsbtn.memo .mp{display:block;font-weight:400;font-size:13px;color:var(--sub);white-space:pre-wrap;text-align:left;margin-top:4px}
+.tsi-tiers button.pool{background:var(--card);border:1px solid var(--line);color:var(--text);font-size:13px;font-weight:600}
+.tsbtn{display:block;width:100%;padding:11px;border-radius:10px;background:var(--card);border:1px solid var(--line);font-weight:600;font-size:14px;margin-top:8px;color:var(--text);text-align:center;text-decoration:none}
+.tsbtn.memo{background:rgba(255,122,61,.08);border:1px solid rgba(255,122,61,.3)}
+.tsbtn.memo .mp{display:block;font-weight:400;font-size:12px;color:var(--sub);white-space:pre-wrap;text-align:left;margin-top:4px}
 .te-row{display:flex;align-items:center;gap:6px;margin-bottom:8px}
-.te-row input{flex:1;min-width:0;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;font-size:16px;font-weight:800}
+.te-row input{flex:1;min-width:0;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;font-size:16px;font-weight:600}
 .te-row .sw{width:40px;height:40px;border-radius:10px;flex:none;border:2px solid #fff3}
 .te-row button.ic{width:40px;height:40px;border-radius:10px;background:var(--card);flex:none;font-size:16px;color:var(--text)}
 .te-row button.ic.del{color:#ff8a8a}
@@ -329,12 +329,14 @@ async function exportImage(){
   const cv = document.createElement('canvas');
   try {
     toast('画像を作っています…');
-    const W = 1080, PAD = 28, LAB = 150, GAP = 8, IMG = 104, NAME = 24, CELL_W = IMG, CELL_H = IMG + NAME + 6;
-    const cols = Math.max(1, Math.floor((W - PAD * 2 - LAB - GAP) / (CELL_W + GAP)));
+    // デザイン: 文字は小さめ・細め（タイトル34/600、段の文字は最大40/700、名前13）、角丸の段、余白を広めに
+    const W = 1080, PAD = 44, LAB = 112, GAP = 10, IMG = 96, NAME = 22, CELL_W = IMG, CELL_H = IMG + NAME + 4, ROWGAP = 10, R = 14;
+    const cols = Math.max(1, Math.floor((W - PAD * 2 - LAB - GAP * 2 + GAP) / (CELL_W + GAP)));
     const FONT = '"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif';
     const rowsH = snap.tiers.map(t => Math.max(1, Math.ceil(t.items.length / cols)) * (CELL_H + GAP) + GAP);
-    const HEAD = 110, FOOT = 56;
-    const H = HEAD + rowsH.reduce((a, b) => a + b + 6, 0) + FOOT;
+    const HEAD = 150, FOOT = 70;
+    const H = HEAD + rowsH.reduce((a, b) => a + b + ROWGAP, 0) + FOOT;
+    const rr = (c, x, y, w, h, r) => { c.beginPath(); if (c.roundRect) c.roundRect(x, y, w, h, r); else c.rect(x, y, w, h); };
     // iPhoneのcanvasの大きさの上限に掛からないよう、縦が長すぎる時は全体を縮小して1枚に収める
     const MAX_H = 8000, scale = Math.min(1, MAX_H / H);
     cv.width = Math.round(W * scale); cv.height = Math.round(H * scale);
@@ -344,39 +346,46 @@ async function exportImage(){
     const flat = snap.tiers.flatMap(t => t.items);
     const loaded = await loadAll(flat.map(x => x.img), 6);
     const missing = loaded.filter(x => !x).length;
-    ctx.fillStyle = '#16141f'; ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = '#f2f0f7'; ctx.font = 'bold 46px ' + FONT; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-    ctx.fillText(fitText(ctx, snap.title, W - PAD * 2), PAD, 52);
-    ctx.fillStyle = '#a9a3bd'; ctx.font = '24px ' + FONT;
-    ctx.fillText(snap.setLabel, PAD, 92);
+    ctx.fillStyle = '#121019'; ctx.fillRect(0, 0, W, H);
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    // 題材名（小さく、オレンジの点つき）→ タイトル
+    ctx.fillStyle = '#ff7a3d'; ctx.beginPath(); ctx.arc(PAD + 5, 62, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#9b96ad'; ctx.font = '600 18px ' + FONT;
+    ctx.fillText(snap.setLabel, PAD + 18, 62);
+    ctx.fillStyle = '#ecebf3'; ctx.font = '600 34px ' + FONT;
+    ctx.fillText(fitText(ctx, snap.title, W - PAD * 2), PAD, 106);
     let y = HEAD, n = 0;
     snap.tiers.forEach((t, i) => {
       const h = rowsH[i];
-      ctx.fillStyle = '#1b1826'; ctx.fillRect(PAD, y, W - PAD * 2, h);
+      ctx.save();
+      rr(ctx, PAD, y, W - PAD * 2, h, R); ctx.fillStyle = '#1b1825'; ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.clip();
       ctx.fillStyle = t.color; ctx.fillRect(PAD, y, LAB, h);
+      ctx.restore();
       ctx.fillStyle = '#1a1020'; ctx.textAlign = 'center';
-      let fs = 56; ctx.font = 'bold ' + fs + 'px ' + FONT;
-      while (fs > 22 && ctx.measureText(t.label).width > LAB - 16){ fs -= 4; ctx.font = 'bold ' + fs + 'px ' + FONT; }
+      let fs = 40; ctx.font = '700 ' + fs + 'px ' + FONT;
+      while (fs > 18 && ctx.measureText(t.label).width > LAB - 18){ fs -= 2; ctx.font = '700 ' + fs + 'px ' + FONT; }
       ctx.fillText(t.label, PAD + LAB / 2, y + h / 2);
       t.items.forEach((x, k) => {
         const im = loaded[n++];
         const cx = PAD + LAB + GAP + (k % cols) * (CELL_W + GAP), cy = y + GAP + Math.floor(k / cols) * (CELL_H + GAP);
-        ctx.fillStyle = '#0e0c15'; ctx.fillRect(cx, cy, IMG, IMG);
+        rr(ctx, cx, cy, IMG, IMG, 12); ctx.fillStyle = '#0e0c15'; ctx.fill();
         if (im){
-          const s = Math.min(IMG / im.width, IMG / im.height), w = im.width * s, hh = im.height * s;
+          const s = Math.min((IMG - 8) / im.width, (IMG - 8) / im.height), w = im.width * s, hh = im.height * s;
           ctx.drawImage(im, cx + (IMG - w) / 2, cy + (IMG - hh) / 2, w, hh);
         } else {
-          ctx.fillStyle = '#6f6987'; ctx.font = '16px ' + FONT; ctx.fillText('画像なし', cx + IMG / 2, cy + IMG / 2);
+          ctx.fillStyle = '#686379'; ctx.font = '13px ' + FONT; ctx.fillText('画像なし', cx + IMG / 2, cy + IMG / 2);
         }
-        ctx.fillStyle = '#c9c3dd'; ctx.font = '17px ' + FONT;
-        ctx.fillText(fitText(ctx, x.name, CELL_W + GAP - 2), cx + IMG / 2, cy + IMG + NAME / 2 + 3);
+        ctx.fillStyle = '#9b96ad'; ctx.font = '13px ' + FONT;
+        ctx.fillText(fitText(ctx, x.name, CELL_W + GAP - 4), cx + IMG / 2, cy + IMG + NAME / 2 + 2);
       });
       ctx.textAlign = 'left';
-      y += h + 6;
+      y += h + ROWGAP;
     });
     const d = new Date(snap.updated);
-    ctx.fillStyle = '#6f6987'; ctx.font = '20px ' + FONT; ctx.textAlign = 'right';
-    ctx.fillText('ステージメモ  ' + d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate(), W - PAD, H - FOOT / 2);
+    ctx.fillStyle = '#686379'; ctx.font = '15px ' + FONT; ctx.textAlign = 'right';
+    ctx.fillText('ステージメモ · ' + d.getFullYear() + '.' + (d.getMonth() + 1) + '.' + d.getDate(), W - PAD, H - FOOT / 2);
     const blob = await new Promise((res, rej) => cv.toBlob(b => b ? res(b) : rej(new Error('blob')), 'image/png'));
     const name = (snap.title.replace(/[\\/:*?"<>|]/g, '_') || 'tier') + '.png';
     const file = new File([blob], name, { type: 'image/png' });

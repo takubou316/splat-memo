@@ -1,6 +1,6 @@
 // アプリ本体はネットワーク優先（更新がすぐ届くように）、通信できないときだけキャッシュを使う。
 // スケジュールAPIはページ側でlocalStorageに控えているので、ここでは扱わない。
-const CACHE = 'stage-memo-v3';
+const CACHE = 'stage-memo-v4';
 const SHELL = ['./', './index.html', './contest-data.js', './tier-data.js', './tier.js', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
