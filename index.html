@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ステージメモ</title>
+<meta name="theme-color" content="#16141f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ステージメモ">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#16141f; --card:#221f2e; --card2:#2b2739; --line:#3a3550;
+  --text:#f2f0f7; --sub:#a9a3bd; --faint:#6f6987;
+  --salmon:#ff6a1f; --regular:#3ddc3d; --bankara:#ff5a2b; --x:#14d6a0; --event:#ff4f9a; --fest:#e7d43a;
+  --accent:#ff6a1f;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+  font-size:16px;line-height:1.5}
+body{padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+header{position:sticky;top:0;z-index:5;background:rgba(22,20,31,.94);backdrop-filter:blur(8px);
+  padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;border-bottom:1px solid var(--line)}
+.hrow{display:flex;align-items:center;gap:10px}
+.hrow h1{font-size:18px;margin:0;flex:1}
+.reload{background:var(--card2);border-radius:999px;padding:6px 12px;font-size:13px}
+.status{font-size:12px;color:var(--sub);margin-top:2px}
+.status.err{color:#ff8a8a}
+main{padding:12px 16px;max-width:640px;margin:0 auto}
+.seg{display:flex;background:var(--card);border-radius:12px;padding:4px;margin-bottom:14px}
+.seg button{flex:1;padding:10px 4px;border-radius:9px;font-weight:700;color:var(--sub)}
+.seg button.on{background:var(--card2);color:var(--text);box-shadow:0 1px 0 rgba(255,255,255,.06) inset}
+.seg button.on.salmon{color:var(--salmon)}
+.card{background:var(--card);border-radius:16px;margin-bottom:14px;overflow:hidden;border-left:5px solid var(--c,var(--accent))}
+.chead{display:flex;align-items:baseline;gap:8px;padding:12px 14px 4px;flex-wrap:wrap}
+.mode{font-weight:800;color:var(--c,var(--accent));font-size:15px}
+.rule{font-weight:800;font-size:17px}
+.time{margin-left:auto;font-size:12px;color:var(--sub)}
+.extra{padding:0 14px 6px;font-size:13px;color:var(--sub)}
+.weapons{display:flex;gap:6px;padding:2px 14px 8px}
+.weapons img{width:40px;height:40px;background:var(--card2);border-radius:10px;padding:3px}
+.stage{display:block;width:100%;text-align:left;padding:10px 14px 12px;border-top:1px solid var(--line)}
+.stage:active{background:var(--card2)}
+.shead{display:flex;align-items:center;gap:10px}
+.shead img{width:72px;height:40px;object-fit:cover;border-radius:8px;background:var(--card2);flex:none}
+.sname{font-weight:700;font-size:16px;flex:1}
+.editbtn{font-size:12px;color:var(--sub);border:1px solid var(--line);border-radius:999px;padding:3px 10px;flex:none}
+.memo{margin-top:8px;background:var(--card2);border-radius:10px;padding:8px 10px;white-space:pre-wrap;word-break:break-word;font-size:15px}
+.memo .lbl{display:inline-block;font-size:11px;font-weight:700;color:var(--bg);background:var(--sub);border-radius:5px;padding:0 6px;margin-bottom:3px}
+.memo .lbl.rule{background:var(--c,var(--accent))}
+.memo + .memo{margin-top:6px}
+.nomemo{margin-top:6px;font-size:13px;color:var(--faint)}
+.nextbtn{width:100%;padding:12px;border:1px dashed var(--line);border-radius:12px;color:var(--sub);font-size:14px;margin-bottom:14px}
+.nexthead{font-size:13px;color:var(--sub);margin:4px 2px 8px;font-weight:700}
+.empty{color:var(--sub);text-align:center;padding:32px 8px}
+.list .row{display:flex;gap:10px;align-items:center;width:100%;text-align:left;background:var(--card);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+.list .row img{width:64px;height:36px;object-fit:cover;border-radius:7px;background:var(--card2);flex:none}
+.list .rinfo{flex:1;min-width:0}
+.list .rname{font-weight:700}
+.list .rprev{font-size:12px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list .rprev.none{color:var(--faint)}
+.count{font-size:12px;color:var(--salmon);font-weight:700;flex:none}
+.sec{font-size:13px;color:var(--sub);font-weight:700;margin:18px 2px 8px}
+.backup{background:var(--card);border-radius:12px;padding:12px;font-size:14px;color:var(--sub)}
+.backup .btns{display:flex;gap:8px;margin-top:10px}
+.backup button,.backup label{flex:1;text-align:center;background:var(--card2);border-radius:10px;padding:10px;color:var(--text);font-weight:700;font-size:14px;cursor:pointer}
+nav{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;background:rgba(22,20,31,.96);border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;padding:10px 0 12px;font-size:12px;color:var(--faint);display:flex;flex-direction:column;align-items:center;gap:2px}
+nav button .ic{font-size:22px;line-height:1}
+nav button.on{color:var(--text)}
+/* editor */
+#editor{position:fixed;inset:0;z-index:20;background:var(--bg);display:none;flex-direction:column}
+#editor.open{display:flex}
+.ehead{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top) + 8px) 12px 8px;border-bottom:1px solid var(--line)}
+.back{padding:8px 10px;font-weight:700;color:var(--accent)}
+.etitle{flex:1;font-weight:800;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.saved{font-size:12px;color:var(--sub);min-width:84px;text-align:right}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px 4px}
+.chip{flex:none;padding:7px 12px;border-radius:999px;background:var(--card);color:var(--sub);font-weight:700;font-size:14px;position:relative}
+.chip.on{background:var(--accent);color:#1a1020}
+.chip.has::after{content:"";position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%;background:var(--salmon)}
+.chip.on.has::after{background:#fff}
+.ehint{font-size:12px;color:var(--faint);padding:4px 14px 0}
+#memoText{flex:1;margin:8px 12px calc(12px + env(safe-area-inset-bottom));padding:12px;border-radius:12px;border:1px solid var(--line);
+  background:var(--card);color:var(--text);font:inherit;font-size:16px;resize:none;outline:none}
+#memoText:focus{border-color:var(--accent)}
+.toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#000c;color:#fff;
+  padding:8px 14px;border-radius:999px;font-size:13px;z-index:30;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <div class="hrow"><h1>ステージメモ</h1><button class="reload" id="reload">↻ 更新</button></div>
+  <div class="status" id="status">読み込み中…</div>
+</header>
+<main id="main"></main>
+<nav>
+  <button id="navNow" class="on"><span class="ic">⏱</span>いまのステージ</button>
+  <button id="navList"><span class="ic">📝</span>メモ一覧</button>
+</nav>
+<div id="editor">
+  <div class="ehead">
+    <button class="back" id="edBack">‹ 戻る</button>
+    <div class="etitle" id="edTitle"></div>
+    <div class="saved" id="edSaved"></div>
+  </div>
+  <div class="chips" id="edChips"></div>
+  <div class="ehint" id="edHint"></div>
+  <textarea id="memoText" placeholder="ここにメモを書く（自動で保存されます）"></textarea>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+'use strict';
+const API = 'https://splatoon3.ink/data/schedules.json';
+const LOC = 'https://splatoon3.ink/data/locale/ja-JP.json';
+
+// ルールID（splatoon3.inkのID）
+const RULES = [
+  ['VnNSdWxlLTA=', 'ナワバリ'],
+  ['VnNSdWxlLTE=', 'エリア'],
+  ['VnNSdWxlLTI=', 'ヤグラ'],
+  ['VnNSdWxlLTM=', 'ホコ'],
+  ['VnNSdWxlLTQ=', 'アサリ'],
+];
+const RULE_NAME = Object.fromEntries(RULES);
+
+// 通信できない初回でも一覧を出せるよう、ステージ名の控えを持っておく（取得できたら上書き）
+const FALLBACK_STAGES = {"VnNTdGFnZS0x":"ユノハナ大渓谷","VnNTdGFnZS0y":"ゴンズイ地区","VnNTdGFnZS0z":"ヤガラ市場","VnNTdGFnZS00":"マテガイ放水路","VnNTdGFnZS01":"ナンプラー遺跡","VnNTdGFnZS02":"ナメロウ金属","VnNTdGFnZS03":"クサヤ温泉","VnNTdGFnZS04":"タラポートショッピングパーク","VnNTdGFnZS05":"ヒラメが丘団地","VnNTdGFnZS0xMA==":"マサバ海峡大橋","VnNTdGFnZS0xMQ==":"キンメダイ美術館","VnNTdGFnZS0xMg==":"マヒマヒリゾート＆スパ","VnNTdGFnZS0xMw==":"海女美術大学","VnNTdGFnZS0xNA==":"チョウザメ造船","VnNTdGFnZS0xNQ==":"ザトウマーケット","VnNTdGFnZS0xNg==":"スメーシーワールド","VnNTdGFnZS0xNw==":"コンブトラック","VnNTdGFnZS0xOA==":"マンタマリア号","VnNTdGFnZS0xOQ==":"タカアシ経済特区","VnNTdGFnZS0yMA==":"オヒョウ海運","VnNTdGFnZS0yMQ==":"バイガイ亭","VnNTdGFnZS0yMg==":"ネギトロ炭鉱","VnNTdGFnZS0yMw==":"カジキ空港","VnNTdGFnZS0yNA==":"リュウグウターミナル","VnNTdGFnZS0yNg==":"デカライン高架下","Q29vcFN0YWdlLTY=":"難破船ドン・ブラコ","Q29vcFN0YWdlLTE=":"シェケナダム","Q29vcFN0YWdlLTI=":"アラマキ砦","Q29vcFN0YWdlLTc=":"ムニ・エール海洋発電所","Q29vcFN0YWdlLTQ=":"トキシラズいぶし工房","Q29vcFN0YWdlLTg=":"すじこジャンクション跡","Q29vcFN0YWdlLTk=":"どんぴこ闘技場","Q29vcFN0YWdlLTEwMA==":"スメーシーワールド","Q29vcFN0YWdlLTEwMg==":"海女美術大学","Q29vcFN0YWdlLTEwMw==":"マテガイ放水路","Q29vcFN0YWdlLTEwNA==":"ナンプラー遺跡","Q29vcFN0YWdlLTEwNQ==":"タラポートショッピングパーク","Q29vcFN0YWdlLTEwNg==":"ゴンズイ地区"};
+
+// ---------- 保存 ----------
+function load(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } }
+function save(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); return true; }catch(e){ return false; } }
+
+let memos = load('sm_memos', {});           // { key: text }
+let sched = load('sm_sched', null);         // { data, fetchedAt }
+let loc = load('sm_locale', null);          // ja-JP locale
+let stageImg = load('sm_stageimg', {});     // { stageId: url } 一覧で画像を出すための控え
+const ui = Object.assign({ view:'now', nowSub:'salmon', listSub:'salmon', showNext:false }, load('sm_ui', {}));
+let fetchError = false, loading = false;
+
+const kCoop = id => 'coop:' + id;
+const kVs = (id, rule) => 'vs:' + id + ':' + (rule || 'all');
+const memoOf = k => (memos[k] || '').trim();
+
+// ---------- 名前 ----------
+function stageName(s){ return (loc && loc.stages && loc.stages[s.id] && loc.stages[s.id].name) || FALLBACK_STAGES[s.id] || s.name; }
+function nameById(id){ return (loc && loc.stages && loc.stages[id] && loc.stages[id].name) || FALLBACK_STAGES[id] || id; }
+function ruleName(r){ return RULE_NAME[r.id] || (loc && loc.rules && loc.rules[r.id] && loc.rules[r.id].name) || r.name; }
+function ruleFull(r){ return (loc && loc.rules && loc.rules[r.id] && loc.rules[r.id].name) || ruleName(r); }
+function bossName(b){ return b ? ((loc && loc.bosses && loc.bosses[b.id] && loc.bosses[b.id].name) || b.name) : ''; }
+function weaponName(w){ return (loc && loc.weapons && loc.weapons[w.__splatoon3ink_id] && loc.weapons[w.__splatoon3ink_id].name) || w.name; }
+function eventName(e){ return (loc && loc.events && loc.events[e.id] && loc.events[e.id].name) || e.name; }
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// ---------- 時刻 ----------
+const WD = ['日','月','火','水','木','金','土'];
+function hm(d){ return d.getHours() + ':' + String(d.getMinutes()).padStart(2,'0'); }
+function sameDay(a,b){ return a.toDateString() === b.toDateString(); }
+function fmtRange(s, e, now){
+  s = new Date(s); e = new Date(e);
+  if (sameDay(s,e) && sameDay(s,now)) return hm(s) + '〜' + hm(e);
+  const md = d => (d.getMonth()+1) + '/' + d.getDate() + '(' + WD[d.getDay()] + ') ';
+  return md(s) + hm(s) + '〜' + (sameDay(s,e) ? '' : md(e)) + hm(e);
+}
+function inRange(n, now){ return new Date(n.startTime) <= now && now < new Date(n.endTime); }
+function curAndNext(nodes, now){
+  nodes = (nodes || []).filter(n => new Date(n.endTime) > now);
+  const cur = nodes.find(n => inRange(n, now)) || null;
+  const next = nodes.find(n => new Date(n.startTime) >= (cur ? new Date(cur.endTime) : now)) || null;
+  return { cur, next };
+}
+
+// ---------- 取得 ----------
+async function fetchJSON(url){
+  const r = await fetch(url, { cache:'no-store' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+async function refresh(force){
+  if (loading) return;
+  loading = true; setStatus('最新のスケジュールを取得中…');
+  try{
+    const tasks = [fetchJSON(API)];
+    const needLoc = force || !loc || !loc._at || (Date.now() - loc._at > 3*24*3600e3);
+    if (needLoc) tasks.push(fetchJSON(LOC).catch(() => null));
+    const [s, l] = await Promise.all(tasks);
+    sched = { data: s.data, fetchedAt: Date.now() };
+    save('sm_sched', sched);
+    if (l){ l._at = Date.now(); loc = l; save('sm_locale', { _at:l._at, stages:l.stages, rules:l.rules, bosses:l.bosses, weapons:l.weapons, events:l.events }); }
+    rememberStageImages();
+    fetchError = false;
+  }catch(e){
+    fetchError = true;
+  }
+  loading = false;
+  render();
+}
+function rememberStageImages(){
+  if (!sched) return;
+  const d = sched.data;
+  const put = s => { if (s && s.id && s.image && s.image.url) stageImg[s.id] = s.image.url; };
+  (d.vsStages && d.vsStages.nodes || []).forEach(put);
+  const coop = d.coopGroupingSchedule || {};
+  ['regularSchedules','bigRunSchedules','teamContestSchedules'].forEach(k => ((coop[k]||{}).nodes||[]).forEach(n => {
+    const st = n.setting && n.setting.coopStage;
+    if (st) stageImg[st.id] = (st.thumbnailImage && st.thumbnailImage.url) || (st.image && st.image.url);
+  }));
+  save('sm_stageimg', stageImg);
+}
+// 時間帯が切り替わっていたら取り直す（ホーム画面アプリは開きっぱなしで復帰することがあるため）
+function stale(){
+  if (!sched) return true;
+  const now = Date.now();
+  if (now - sched.fetchedAt > 30*60e3) return true;
+  // 取得したあとに新しい時間帯が始まっていたら取り直す
+  const d = sched.data, c = d.coopGroupingSchedule || {};
+  const nodes = [].concat((d.bankaraSchedules||{}).nodes || [], (c.regularSchedules||{}).nodes || []);
+  return nodes.some(n => { const s = new Date(n.startTime).getTime(); return s > sched.fetchedAt && s <= now; });
+}
+
+function setStatus(t, err){
+  const el = document.getElementById('status');
+  el.textContent = t; el.className = 'status' + (err ? ' err' : '');
+}
+function statusText(){
+  if (loading) return;
+  if (!sched){ setStatus(fetchError ? 'スケジュールを取得できませんでした。通信を確認して「更新」を押してください' : '読み込み中…', fetchError); return; }
+  const t = new Date(sched.fetchedAt);
+  const base = (sameDay(t,new Date()) ? '' : (t.getMonth()+1)+'/'+t.getDate()+' ') + hm(t) + ' 時点のスケジュール';
+  if (fetchError) setStatus('通信できなかったので、' + base + 'を表示中', true);
+  else setStatus(base);
+}
+
+// ---------- 描画: いまのステージ ----------
+function memoBlock(stageId, rule){
+  let h = '';
+  if (rule){
+    const r = memoOf(kVs(stageId, rule.id)), c = memoOf(kVs(stageId));
+    if (r) h += '<div class="memo"><span class="lbl rule">' + esc(ruleName(rule)) + 'のメモ</span><br>' + esc(r) + '</div>';
+    if (c) h += '<div class="memo"><span class="lbl">共通メモ</span><br>' + esc(c) + '</div>';
+  } else {
+    const m = memoOf(kCoop(stageId));
+    if (m) h += '<div class="memo">' + esc(m) + '</div>';
+  }
+  return h || '<div class="nomemo">メモなし ― タップして書く</div>';
+}
+function stageButton(s, rule){
+  const img = (s.thumbnailImage && s.thumbnailImage.url) || (s.image && s.image.url) || stageImg[s.id] || '';
+  return '<button class="stage" data-edit="' + (rule ? 'vs' : 'coop') + '" data-id="' + esc(s.id) + '" data-rule="' + (rule ? esc(rule.id) : '') + '">' +
+    '<div class="shead">' + (img ? '<img src="' + esc(img) + '" alt="" loading="lazy">' : '') +
+    '<div class="sname">' + esc(stageName(s)) + '</div><span class="editbtn">✎ 編集</span></div>' +
+    memoBlock(s.id, rule) + '</button>';
+}
+function vsCard(label, color, node, setting, now){
+  if (!setting || !setting.vsStages) return '';
+  const rule = setting.vsRule;
+  return '<div class="card" style="--c:var(' + color + ')"><div class="chead"><span class="mode">' + esc(label) + '</span>' +
+    '<span class="rule">' + esc(ruleFull(rule)) + '</span><span class="time">' + fmtRange(node.startTime, node.endTime, now) + '</span></div>' +
+    setting.vsStages.map(s => stageButton(s, rule)).join('') + '</div>';
+}
+function coopCard(label, node, now){
+  const st = node.setting || {};
+  if (!st.coopStage) return '';
+  const boss = bossName(st.boss);
+  const ws = (st.weapons || []).map(w => '<img src="' + esc(w.image && w.image.url || '') + '" alt="' + esc(weaponName(w)) + '" title="' + esc(weaponName(w)) + '">').join('');
+  return '<div class="card" style="--c:var(--salmon)"><div class="chead"><span class="mode">' + esc(label) + '</span>' +
+    '<span class="time">' + fmtRange(node.startTime, node.endTime, now) + '</span></div>' +
+    (boss ? '<div class="extra">オカシラ: ' + esc(boss) + '</div>' : '') +
+    (ws ? '<div class="weapons">' + ws + '</div>' : '') + stageButton(st.coopStage, null) + '</div>';
+}
+function festSettings(node){
+  const f = node && node.festMatchSettings;
+  return Array.isArray(f) ? f : (f ? [f] : []);
+}
+function battleCards(pick, now){
+  const d = sched.data; let h = '';
+  const g = (key) => pick(curAndNext((d[key]||{}).nodes, now));
+  const bk = g('bankaraSchedules');
+  if (bk) (bk.bankaraMatchSettings || []).forEach(s =>
+    h += vsCard(s.bankaraMode === 'OPEN' ? 'バンカラ(オープン)' : 'バンカラ(チャレンジ)', '--bankara', bk, s, now));
+  const x = g('xSchedules'); if (x) h += vsCard('Xマッチ', '--x', x, x.xMatchSetting, now);
+  const rg = g('regularSchedules'); if (rg) h += vsCard('レギュラー', '--regular', rg, rg.regularMatchSetting, now);
+  const fs = g('festSchedules');
+  if (fs) festSettings(fs).forEach(s => h += vsCard(s.festMode === 'REGULAR' ? 'フェス(オープン)' : 'フェス(チャレンジ)', '--fest', fs, s, now));
+  // イベントマッチは時間帯が飛び飛び
+  (d.eventSchedules && d.eventSchedules.nodes || []).forEach(ev => {
+    const p = pick(curAndNext(ev.timePeriods, now));
+    const s = ev.leagueMatchSetting;
+    if (p && s) h += vsCard('イベント: ' + eventName(s.leagueMatchEvent), '--event', p, s, now);
+  });
+  return h;
+}
+function salmonCards(pick, now){
+  const c = sched.data.coopGroupingSchedule || {}; let h = '';
+  [['bigRunSchedules','ビッグラン'],['teamContestSchedules','バイトチームコンテスト'],['regularSchedules','サーモンラン']].forEach(([k, label]) => {
+    const n = pick(curAndNext((c[k]||{}).nodes, now));
+    if (n) h += coopCard(label, n, now);
+  });
+  return h;
+}
+function renderNow(){
+  const now = new Date();
+  let h = '<div class="seg"><button data-sub="salmon" class="salmon ' + (ui.nowSub==='salmon'?'on':'') + '">サーモンラン</button>' +
+    '<button data-sub="battle" class="' + (ui.nowSub==='battle'?'on':'') + '">バトル</button></div>';
+  if (!sched){ return h + '<div class="empty">' + (fetchError ? 'スケジュールを取得できませんでした。<br>通信を確認して右上の「更新」を押してください。' : '読み込み中…') + '</div>'; }
+  const fn = ui.nowSub === 'salmon' ? salmonCards : battleCards;
+  const cur = fn(p => p.cur, now);
+  h += cur || '<div class="empty">今の時間帯の情報がありません。<br>右上の「更新」を押してください。</div>';
+  const next = fn(p => p.next, now);
+  if (next){
+    if (ui.showNext) h += '<div class="nexthead">次の時間帯</div>' + next + '<button class="nextbtn" id="toggleNext">▲ 次の時間帯をとじる</button>';
+    else h += '<button class="nextbtn" id="toggleNext">▼ 次の時間帯も見る</button>';
+  }
+  return h;
+}
+
+// ---------- 描画: メモ一覧 ----------
+function allStages(kind){
+  const names = Object.assign({}, FALLBACK_STAGES, loc && loc.stages ? Object.fromEntries(Object.entries(loc.stages).map(([k,v]) => [k, v.name])) : {});
+  const pre = kind === 'coop' ? 'CoopStage-' : 'VsStage-';
+  const out = [];
+  for (const id of Object.keys(names)){
+    let dec = ''; try{ dec = atob(id); }catch(e){}
+    if (!dec.startsWith(pre)) continue;
+    const num = parseInt(dec.slice(pre.length), 10);
+    if (!(num > 0)) continue; // 「各地で同時発生」などは除外
+    out.push({ id, num, name: names[id] + (kind === 'coop' && num >= 100 ? '（ビッグラン）' : '') });
+  }
+  return out.sort((a,b) => a.num - b.num);
+}
+function renderList(){
+  const kind = ui.listSub === 'salmon' ? 'coop' : 'vs';
+  let h = '<div class="seg"><button data-lsub="salmon" class="salmon ' + (kind==='coop'?'on':'') + '">サーモンラン</button>' +
+    '<button data-lsub="battle" class="' + (kind==='vs'?'on':'') + '">バトル</button></div><div class="list">';
+  for (const s of allStages(kind)){
+    let prev = '', cnt = 0;
+    if (kind === 'coop'){ prev = memoOf(kCoop(s.id)); cnt = prev ? 1 : 0; }
+    else {
+      const keys = [kVs(s.id)].concat(RULES.map(r => kVs(s.id, r[0])));
+      const filled = keys.filter(k => memoOf(k));
+      cnt = filled.length; prev = filled.length ? memoOf(filled[0]) : '';
+    }
+    const img = stageImg[s.id];
+    h += '<button class="row" data-edit="' + kind + '" data-id="' + esc(s.id) + '" data-rule="">' +
+      (img ? '<img src="' + esc(img) + '" alt="" loading="lazy">' : '<img alt="">') +
+      '<div class="rinfo"><div class="rname">' + esc(s.name) + '</div><div class="rprev' + (prev ? '' : ' none') + '">' +
+      esc(prev ? prev.split('\n')[0] : 'メモなし') + '</div></div>' +
+      (kind === 'vs' && cnt ? '<span class="count">' + cnt + '件</span>' : '') + '</button>';
+  }
+  h += '</div><div class="sec">バックアップ</div><div class="backup">メモはこのスマホの中だけに保存されています。機種変更やデータ消去に備えて、ときどき書き出しておくと安心です。' +
+    '<div class="btns"><button id="exportBtn">書き出す</button><label>読み込む<input type="file" id="importFile" accept=".json,application/json" hidden></label></div></div>';
+  return h;
+}
+
+function render(){
+  statusText();
+  document.getElementById('main').innerHTML = ui.view === 'now' ? renderNow() : renderList();
+  document.getElementById('navNow').classList.toggle('on', ui.view === 'now');
+  document.getElementById('navList').classList.toggle('on', ui.view === 'list');
+}
+function setUI(p){ Object.assign(ui, p); save('sm_ui', { view:ui.view, nowSub:ui.nowSub, listSub:ui.listSub }); render(); }
+
+// ---------- エディタ ----------
+let ed = null; // { kind, id, rule }
+function openEditor(kind, id, rule){
+  ed = { kind, id, rule: kind === 'vs' ? (rule || 'all') : null };
+  document.getElementById('edTitle').textContent = nameById(id);
+  document.getElementById('editor').classList.add('open');
+  history.pushState({ editor:true }, '');
+  drawEditor();
+}
+function edKey(){ return ed.kind === 'coop' ? kCoop(ed.id) : kVs(ed.id, ed.rule === 'all' ? null : ed.rule); }
+function drawEditor(){
+  const chips = document.getElementById('edChips'), hint = document.getElementById('edHint');
+  if (ed.kind === 'vs'){
+    const list = [['all','共通']].concat(RULES);
+    chips.innerHTML = list.map(([rid, nm]) => {
+      const has = memoOf(kVs(ed.id, rid === 'all' ? null : rid));
+      return '<button class="chip' + (ed.rule === rid ? ' on' : '') + (has ? ' has' : '') + '" data-chip="' + rid + '">' + nm + '</button>';
+    }).join('');
+    chips.style.display = '';
+    hint.textContent = ed.rule === 'all' ? '「共通」はどのルールのときでも表示されます' : RULE_NAME[ed.rule] + 'のときだけ表示されます';
+  } else { chips.innerHTML = ''; chips.style.display = 'none'; hint.textContent = 'サーモンランでこのステージが来たときに表示されます'; }
+  const ta = document.getElementById('memoText');
+  ta.value = memos[edKey()] || '';
+  document.getElementById('edSaved').textContent = '';
+}
+let saveTimer = null;
+function saveMemo(){
+  if (!ed) return;
+  const v = document.getElementById('memoText').value;
+  if (v.trim()) memos[edKey()] = v; else delete memos[edKey()];
+  const ok = save('sm_memos', memos);
+  document.getElementById('edSaved').textContent = ok ? '保存しました ✓' : '保存に失敗しました';
+  if (ed.kind === 'vs'){
+    const chip = document.querySelector('.chip.on'); if (chip) chip.classList.toggle('has', !!v.trim());
+  }
+}
+function closeEditor(fromPop){
+  if (!ed) return;
+  clearTimeout(saveTimer); saveMemo();
+  ed = null;
+  document.getElementById('editor').classList.remove('open');
+  document.getElementById('memoText').blur();
+  if (!fromPop && history.state && history.state.editor) history.back();
+  render();
+}
+
+// ---------- バックアップ ----------
+function toast(t){ const el = document.getElementById('toast'); el.textContent = t; el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 2200); }
+async function exportMemos(){
+  const d = new Date(), stamp = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+  const blob = new Blob([JSON.stringify({ app:'splat-stage-memo', version:1, exportedAt:d.toISOString(), memos }, null, 2)], { type:'application/json' });
+  const name = 'stage-memo-' + stamp + '.json';
+  try{
+    const file = new File([blob], name, { type:'application/json' });
+    if (navigator.canShare && navigator.canShare({ files:[file] })){ await navigator.share({ files:[file], title:name }); return; }
+  }catch(e){ if (e && e.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+function importMemos(file){
+  const r = new FileReader();
+  r.onload = () => {
+    try{
+      const j = JSON.parse(r.result);
+      const m = j && j.memos;
+      if (!m || typeof m !== 'object') throw 0;
+      const n = Object.keys(m).length;
+      if (!confirm(n + '件のメモを読み込みます。同じステージの今のメモは上書きされます（それ以外は残ります）。よろしいですか？')) return;
+      for (const [k, v] of Object.entries(m)) if (typeof v === 'string' && /^(coop|vs):/.test(k)) memos[k] = v;
+      save('sm_memos', memos); render(); toast('読み込みました');
+    }catch(e){ alert('このファイルは読み込めませんでした。「書き出す」で作ったファイルを選んでください。'); }
+  };
+  r.readAsText(file);
+}
+
+// ---------- イベント ----------
+document.addEventListener('click', e => {
+  const t = e.target.closest('button, [data-chip]');
+  if (!t) return;
+  if (t.dataset.edit){ openEditor(t.dataset.edit, t.dataset.id, t.dataset.rule); return; }
+  if (t.dataset.chip){ clearTimeout(saveTimer); saveMemo(); ed.rule = t.dataset.chip; drawEditor(); return; }
+  if (t.dataset.sub){ setUI({ nowSub:t.dataset.sub }); return; }
+  if (t.dataset.lsub){ setUI({ listSub:t.dataset.lsub }); return; }
+  if (t.id === 'toggleNext'){ ui.showNext = !ui.showNext; render(); return; }
+  if (t.id === 'exportBtn'){ exportMemos(); return; }
+});
+document.addEventListener('change', e => { if (e.target.id === 'importFile' && e.target.files[0]){ importMemos(e.target.files[0]); e.target.value = ''; } });
+document.getElementById('navNow').onclick = () => { setUI({ view:'now' }); window.scrollTo(0,0); };
+document.getElementById('navList').onclick = () => { setUI({ view:'list' }); window.scrollTo(0,0); };
+document.getElementById('reload').onclick = () => refresh(true);
+document.getElementById('edBack').onclick = () => closeEditor(false);
+window.addEventListener('popstate', () => { if (ed) closeEditor(true); });
+document.getElementById('memoText').addEventListener('input', () => {
+  document.getElementById('edSaved').textContent = '入力中…';
+  clearTimeout(saveTimer); saveTimer = setTimeout(saveMemo, 500);
+});
+// アプリに戻ってきたとき：時間帯が変わっていれば取り直し、そうでなくても表示時刻を更新
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible'){ if (stale()) refresh(); else render(); }
+  else if (ed){ clearTimeout(saveTimer); saveMemo(); }
+});
+// 開きっぱなしでも時間帯の切り替わりに追従
+setInterval(() => { if (document.visibilityState === 'visible' && !ed && stale()) refresh(); }, 60e3);
+
+render();
+refresh();
+if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
