@@ -19,14 +19,17 @@
   - バックアップは「メモ一覧」タブ下部の書き出し/読み込み（JSON）
 - ステージ画像: バトルは `vsStages.nodes[].originalImage`（高解像度）を `low_resolution/..._1.png` に置き換えて使う。サモラン会場は全一覧がAPIに無いため `index.html` の `COOP_IMG_HASH` に固定で持つ
   - 画像ファイル名＝内部名のSHA256（例 `Cop_Shakeup`）。ビッグランは `Cop_<バトルの内部名>`（`Cop_Temple`=マテガイ等）。内部名一覧は Leanny/splat3 の `data/mush/<ver>/CoopSceneInfo.json`。新ステージ追加時はここから足す（assets.splatoon3.inkはUser-Agentなしだと弾かれるので確認時に注意）
-- ばちこん（バイトチームコンテスト）のシナリオ: localStorage `sm_contests`
-  - キー＝`<CoopStageId>|<ブキ4種の__splatoon3ink_id>`。ループで同じ組み合わせが再登場したら同じ記録を出す（`seen`に開催開始日時を追記）
-  - 中身（潮位・イベント・「残り秒/どこ/何」の行・スペシャル・メモ）は公開データに無いのでユーザーが手入力（2026-11-12ユーザー選択）。WAVE数は既定5、追加・削除可
-  - 「🗺 マップ」はサーモンラーンNW `https://salmon-learn-nw.gungee.jp/map/?stage=<Shake内部名>&tide=Low|Mid|High` を開く（ビッグラン会場は非対応）
-  - バックアップJSONは version 2 で `memos` と `contests` を含む
-  - ブキごとのスペシャル: `sp: {ブキ番号0-3: 'Chariot' 等}`。画像は `special_img/blue/<sha256(Sp内部名)>_0.png`（`SPECIALS` 定数。サモラン用はLeanny/splat3 `WeaponInfoSpecial.json` のType=Coop、スーパーチャクチは画像なしで除外）
-  - 秒数: WAVEごとに `band`（キケン度帯）を選ぶと、オオモノ湧き時刻（＝湧き方向の切替、間隔72/n秒）の固定行（`fixed:true`）が並ぶ。残り28秒が最後のオオモノ、それ以降はザコのみ。表の出典はwikiwiki「サーモンラン NEXT WAVE」・macarongamemo。帯を変えると空の固定行だけ消える
-  - 調べた仕様: ばちこんはWAVE5まで・同じシナリオを繰り返す・キケン度60%から納品数で上昇（攻略サイト情報、公式未確認）
+- ばちこん（バイトチームコンテスト）: **全シナリオを `contest-data.js`（`window.CONTEST_DATA`）に内蔵**（2026-11-12〜）
+  - 仕様: 全5WAVE、シナリオ（ステージ・ブキ・スペシャル・潮位・イベント・湧き）は全員共通で固定。**2026-02の第12回で新規シナリオは終了、以降は過去シナリオの復刻のみ**＝全12種。復刻でスペシャルが変わることがある（第14回のバケットスロッシャーはカニタンク→ジェットパック）
+  - データ出典: 有志wiki「サーモンラン/バイトチームコンテスト/攻略」のソース（第1〜10回: 潮位・イベント・キケン度・ノルマ・湧きの時系列表・グリル狙われ順など）と「…/バイトチームコンテスト」の開催履歴（各回のブキ・SP）、第11・12回の潮位/イベントは otsudori.com。**事実データ（表・順番・項目）だけを取り込み、解説文は入れずwikiへリンク**（ユーザー了承済み）
+  - 作り直し: `tools/` のスクリプトを順に実行（wiki_fetch → wiki_src → wiki_parse / wiki_weapons → build_data）。新しい復刻回が来たら build_data.py の `YEAR` と wiki の開催履歴を更新
+  - 開催回の判定 `matchContest`: 公開スケジュールのステージ＋ブキ日本語名が3つ以上一致した開催回。開催中ならばちこんタブを開いた時に自動で閲覧画面を開く（`maybeAutoOpen`）
+  - 閲覧画面 `#play`: 1画面1WAVE、下部にW1〜W5ボタン。上から「WAVE/潮位/イベント → 自分の作戦メモ → イベントの主役（グリル狙われ順・キンシャケ順）→ 湧きの時系列（残り秒の降順、方角はwikiのブイ名、キケン度の条件は赤ラベル）→ そのほか → マップ/wikiリンク → ブキとSP」。同じ開催回なら最後に見たWAVEを復元（`sm_play`）。設計はCodexとの相談で決定
+  - 自分の作戦メモ: `memos['cm:<シナリオ番号>:<WAVE>']`（既存エディタで編集）。旧版の手入力記録 `sm_contests` は `migrateOldContests` で一度だけ作戦メモへ写す（元データは消さない）
+  - 「🗺 マップ」はサーモンラーンNW `https://salmon-learn-nw.gungee.jp/map/?stage=<Shake内部名>&tide=Low|Mid|High`
+  - スペシャル画像は `special_img/blue/<sha256(Sp内部名)>_0.png`。サモランで支給されるのは9種（初期7種＋Ver.6.0.0のテイオウイカ・ウルトラチャクチ）。**ウルトラショット・スーパーチャクチはデータにCoop版があるが支給されない**ので入れない
+  - 湧きの基本（wiki）: 1WAVE本番100秒、オオモノは残り100〜28秒のみ（28秒が最後）、湧き方向の切替間隔は72/n秒（キケン度帯で決まる）
+- **スプラ2の情報を混ぜないこと**: 2と3の違いは `../salmonran/スプラ2とスプラ3のサーモンランの違い（混同防止）.md`。例: ドスコイ大量発生はスプラ2にもある、シャケト場・ポラリスはスプラ3に無い
 - IDはsplatoon3.inkのbase64 ID（例 `VnNTdGFnZS00` = `VsStage-4`）
 
 ## 方針（決定済み）
