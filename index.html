@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-13b';</script>
+<script>window.APP_VERSION = '2026-11-14a';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -130,6 +130,14 @@ nav button.on{color:var(--salmon)}
 .pev{font-size:14px;font-weight:600;color:var(--event)}
 .pday{font-size:13px;color:var(--sub)}
 .pws{font-size:11px;color:var(--faint);margin-top:6px}
+.prec{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:-4px 0 12px}
+.pf{display:flex;flex-direction:column;align-items:flex-start;gap:1px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 9px;text-align:left;min-height:48px;min-width:0;position:relative}
+.pf span{font-size:10px;color:var(--faint);font-weight:600;letter-spacing:.04em}
+.pf b{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.pf b.none{color:var(--faint);font-weight:400}
+.pf b.ok{color:var(--regular)} .pf b.ng{color:var(--salmon)}
+.pf em{position:absolute;top:5px;right:7px;font-style:normal;font-size:9px;color:var(--faint)}
+.pf select{width:100%;background:none;border:0;color:var(--text);font:inherit;font-size:16px;font-weight:600;padding:0;margin:-2px 0;-webkit-appearance:none;appearance:none}
 .pmemo{background:rgba(255,122,61,.08);border:1px solid rgba(255,122,61,.28);border-radius:12px;padding:10px 12px;margin-bottom:12px}
 .pml{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:600;color:var(--salmon);letter-spacing:.06em}
 .pml button{border:1px solid rgba(255,122,61,.35);border-radius:999px;padding:4px 12px;font-size:12px;color:var(--text);min-height:32px;letter-spacing:0}
@@ -593,6 +601,17 @@ const latestInst = id => instsOf(id).sort((a, b) => b.no - a.no)[0];
 const scenTitle = id => instsOf(id).map(x => '第' + x.no + '回').join('・');
 const cmKey = (sid, wave) => 'cm:' + sid + ':' + wave;
 const spKey = (sid, idx) => 'sp:' + sid + ':' + idx;
+const dgKey = (sid, wave) => 'dg:' + sid + ':' + wave; // 選んだキケン度（%の数字）
+const thKey = (sid, wave) => 'th:' + sid + ':' + wave; // タマヒロイの方向
+const nkKey = (sid, wave) => 'nk:' + sid + ':' + wave; // 前回の納品数（金イクラ）
+// キケン度の選択肢: 60%から最大まで10%刻み（WAVE1は60%固定）
+function dangerOptions(max){ const out = []; for (let v = 60; v <= max; v += 10) out.push(v); if (!out.includes(max)) out.push(max); return out; }
+// タマヒロイの方向の入力ボタン: 基本の方向＋このシナリオでwikiに出てくるブイの名前
+function thChips(sid){
+  const s = scenById(+sid), words = new Set();
+  (s ? s.waves : []).forEach(w => (w.facts || []).forEach(([k, v]) => { if (/タマヒロイ/.test(k)) (String(v).match(/[ァ-ヶー]{2,}/g) || []).forEach(x => { if (x !== 'リスポーン') words.add(x); }); }));
+  return ['左', '正面', '右', '奥', '手前', 'コンテナ裏'].concat([...words]);
+}
 let spPick = null; // スペシャルを選んでいるブキの番号
 
 // 全角・半角の違い（wikiの「R-PEN／5H」とAPIの「R-PEN/5H」など）を吸収して比べる
@@ -752,8 +771,20 @@ function drawPlay(toTop){
   const timeTables = tables.filter(b => colIdx(b.head, /^タイム$/) >= 0);
   const otherTables = tables.filter(b => colIdx(b.head, /^タイム$/) < 0);
   const lists = w.blocks.filter(b => b.type === 'list');
+  // このWAVEの記録: キケン度（選択）・タマヒロイの方向・前回の納品数。memos の dg:/th:/nk:<シナリオ>:<WAVE>
+  const maxD = parseInt(w.danger, 10) || 60;
+  const dSel = parseInt(memoOf(dgKey(s.id, n)), 10) || maxD;
+  const dangerUsed = dSel + '%';
+  const wikiTh = (w.facts.find(([k]) => /タマヒロイ/.test(k)) || [, ''])[1];
+  const th = memoOf(thKey(s.id, n)), nk = memoOf(nkKey(s.id, n));
+  const quota = parseInt(w.quota, 10);
   let h = '<div class="pw"><div class="pwn">WAVE ' + n + '</div><div class="pwc">' + tideTag(w.tide) + (w.event ? '<span class="pev">' + esc(w.event) + '</span>' : '<span class="pday">昼</span>') + '</div>' +
-    '<div class="pws">キケン度 最大' + esc(w.danger) + '・ノルマ ' + esc(w.quota) + (w.max ? '・最大納品 ' + esc(w.max) : '') + '</div></div>';
+    '<div class="pws">キケン度 最大' + esc(w.danger) + '・ノルマ ' + esc(w.quota) + (w.max ? '・最大納品 ' + esc(w.max) : '') + '</div></div>' +
+    '<div class="prec">' +
+      '<label class="pf"><span>キケン度</span><select data-dg="1">' + dangerOptions(maxD).map(v => '<option value="' + v + '"' + (v === dSel ? ' selected' : '') + '>' + v + '%' + (v === maxD ? '（最大）' : '') + '</option>').join('') + '</select></label>' +
+      '<button class="pf" data-th="1"><span>タマヒロイ</span><b class="' + (th || wikiTh ? '' : 'none') + '">' + esc(th || wikiTh || '＋ 入力') + '</b>' + (!th && wikiTh ? '<em>wiki</em>' : '') + '</button>' +
+      '<button class="pf" data-nk="1"><span>前回の納品</span><b class="' + (nk ? (quota && +nk >= quota ? 'ok' : 'ng') : 'none') + '">' + (nk ? esc(nk) + '個' : '＋ 入力') + '</b></button>' +
+    '</div>';
   // 自分の作戦（最上部）
   h += '<div class="pmemo"><div class="pml"><span>自分の作戦</span><button data-cm-edit="1">✎ 編集</button></div>' +
     (memo ? '<div class="pmt">' + esc(memo) + '</div>' : '<div class="pmt none">まだありません。「編集」から書けます</div>') + '</div>';
@@ -763,11 +794,11 @@ function drawPlay(toTop){
   });
   otherTables.forEach(b => { h += '<div class="psec"><div class="psh">' + esc(b.head.filter(Boolean).join('・')) + '</div>' + capNote(b.caption) + plainTable(b) + '</div>'; });
   // 湧きの時系列: キケン度から出した湧き時刻の行に、wikiの情報と自分のメモを重ねる。行をタップでメモを編集
-  const iv = spawnInterval(w.danger);
-  const tl = buildTimeline(s.id, n, w.danger, timeTables);
+  const iv = spawnInterval(dangerUsed);
+  const tl = buildTimeline(s.id, n, dangerUsed, timeTables);
   const caps = timeTables.map(b => b.caption).filter(c => /キケン度/.test(c || ''));
   h += '<div class="psec"><div class="psh">湧きの時系列（残り秒）</div>' +
-    '<div class="capn">キケン度' + esc(w.danger) + 'のときの湧き時刻（' + iv + '秒ごとに湧く方向が変わる）。<b>行をタップするとメモできます</b></div>' +
+    '<div class="capn">キケン度' + esc(dangerUsed) + 'のときの湧き時刻（' + iv + '秒ごとに湧く方向が変わる）。<b>行をタップするとメモできます</b></div>' +
     caps.map(capNote).join('') +
     tl.map(row => {
       const late = row.t < 28, last = row.t === 28;
@@ -781,7 +812,8 @@ function drawPlay(toTop){
     '<button class="addrow" data-ct-add="1">＋ 秒数を指定してメモを追加</button>' +
     (s.detail ? '' : '<div class="capn">このシナリオはwikiに湧きの詳細がありません（潮位とイベントのみ判明）</div>') + '</div>';
   // 補足の項目（タマヒロイ方向など）
-  if (w.facts.length) h += '<div class="psec"><div class="psh">そのほか</div>' + w.facts.map(([k, v]) => '<div class="fact"><span>' + esc(k) + '</span>' + esc(v) + '</div>').join('') + '</div>';
+  const facts = w.facts.filter(([k]) => !/タマヒロイ/.test(k)); // タマヒロイは上の記録欄に出す
+  if (facts.length) h += '<div class="psec"><div class="psh">そのほか</div>' + facts.map(([k, v]) => '<div class="fact"><span>' + esc(k) + '</span>' + esc(v) + '</div>').join('') + '</div>';
   // マップ・出典
   const internal = COOP_INTERNAL[s.stage], tk = TIDE_KEY[w.tide];
   h += '<div class="plinks">' + (internal && tk ? '<a href="https://salmon-learn-nw.gungee.jp/map/?stage=' + internal + '&tide=' + tk + '" target="_blank" rel="noopener">🗺 マップ（' + esc(w.tide) + '）</a>' : '') +
@@ -805,11 +837,32 @@ function drawPlay(toTop){
   document.getElementById('waveBar').innerHTML = s.waves.map((x, i) =>
     '<button data-wave="' + i + '" class="' + (i === play.wave ? 'on' : '') + '"><b>W' + (i + 1) + '</b><small>' + esc(waveShort(x)) + '</small></button>').join('');
 }
+// キケン度を選ぶと、そのキケン度の湧き時刻で時系列を並べ直す（最大値を選んだら記録を消して既定に戻す）
+document.getElementById('play').addEventListener('change', e => {
+  if (!e.target.dataset.dg || !play) return;
+  const s = scenById(play.sid), w = s && s.waves[play.wave]; if (!w) return;
+  const k = dgKey(play.sid, play.wave + 1), v = parseInt(e.target.value, 10);
+  if (v === (parseInt(w.danger, 10) || 60)) delete memos[k]; else memos[k] = String(v);
+  if (!save('sm_memos', memos)) toast('保存できませんでした');
+  drawPlay(false);
+});
 document.getElementById('play').addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t || !play) return;
   if (t.dataset.wave != null) setWave(+t.dataset.wave);
   else if (t.dataset.restart) setWave(0);
   else if (t.dataset.cmEdit) openEditor('cm', String(play.sid), String(play.wave + 1));
+  else if (t.dataset.th) openEditor('th', String(play.sid), String(play.wave + 1));
+  else if (t.dataset.nk){
+    const k = nkKey(play.sid, play.wave + 1);
+    const raw = prompt('WAVE ' + (play.wave + 1) + ' で前回納品した金イクラの数（空にすると消えます）', memoOf(k));
+    if (raw === null) return;
+    const v = nfkc(raw).trim().replace(/個$/, '');
+    if (v === '') delete memos[k];
+    else if (/^\d{1,3}$/.test(v)) memos[k] = String(+v);
+    else { alert('0〜999の数字で入力してください'); return; }
+    if (!save('sm_memos', memos)) toast('保存できませんでした');
+    drawPlay(false);
+  }
   else if (t.dataset.ct != null) openEditor('ct', String(play.sid), (play.wave + 1) + ':' + fmtT(parseFloat(t.dataset.ct)));
   else if (t.dataset.ctAdd){
     const raw = nfkc(prompt('残り何秒のメモを追加しますか？（1〜100、例: 55）') || '').trim().replace(/秒$/, '');
@@ -870,10 +923,11 @@ function setUI(p){ Object.assign(ui, p); save('sm_ui', { view:ui.view, nowSub:ui
 // ---------- エディタ ----------
 let ed = null; // { kind, id, rule }
 function openEditor(kind, id, rule){
-  ed = { kind, id, rule: kind === 'vs' ? (rule || 'all') : (kind === 'cm' || kind === 'ct') ? rule : null };
+  ed = { kind, id, rule: kind === 'vs' ? (rule || 'all') : (kind === 'cm' || kind === 'ct' || kind === 'th') ? rule : null };
   document.getElementById('edTitle').textContent =
     kind === 'cm' ? 'WAVE ' + rule + ' の作戦（' + nameById(scenById(+id).stage) + '）' :
     kind === 'ct' ? 'WAVE ' + rule.split(':')[0] + '・残り' + rule.split(':')[1] + '秒' :
+    kind === 'th' ? 'WAVE ' + rule + ' のタマヒロイの方向' :
     kind === 'wc' || kind === 'wv' || kind === 'bs' ? tierItemName(kind, id) + (kind === 'wc' ? '（サモラン）' : kind === 'wv' ? '（バトル）' : '') : nameById(id);
   document.getElementById('editor').classList.add('open');
   history.pushState({ editor:true }, '');
@@ -884,7 +938,7 @@ function tierItemName(kind, id){
   const x = window.TIER_DATA && TIER_DATA.sets[set] && TIER_DATA.sets[set].items.find(i => i.id === id);
   return x ? x.name : id;
 }
-function edKey(){ return (ed.kind === 'wc' || ed.kind === 'wv' || ed.kind === 'bs') ? ed.kind + ':' + ed.id : ed.kind === 'ct' ? 'ct:' + ed.id + ':' + ed.rule : ed.kind === 'cm' ? cmKey(ed.id, ed.rule) : ed.kind === 'coop' ? kCoop(ed.id) : kVs(ed.id, ed.rule === 'all' ? null : ed.rule); }
+function edKey(){ return ed.kind === 'th' ? thKey(ed.id, ed.rule) : (ed.kind === 'wc' || ed.kind === 'wv' || ed.kind === 'bs') ? ed.kind + ':' + ed.id : ed.kind === 'ct' ? 'ct:' + ed.id + ':' + ed.rule : ed.kind === 'cm' ? cmKey(ed.id, ed.rule) : ed.kind === 'coop' ? kCoop(ed.id) : kVs(ed.id, ed.rule === 'all' ? null : ed.rule); }
 function drawEditor(){
   const chips = document.getElementById('edChips'), hint = document.getElementById('edHint');
   if (ed.kind === 'vs'){
@@ -895,6 +949,10 @@ function drawEditor(){
     }).join('');
     chips.style.display = '';
     hint.textContent = ed.rule === 'all' ? '「共通」はどのルールのときでも表示されます' : RULE_NAME[ed.rule] + 'のときだけ表示されます';
+  } else if (ed.kind === 'th'){
+    chips.innerHTML = thChips(ed.id).map(b => '<button class="chip" data-addtext="' + esc(b) + '">' + esc(b) + '</button>').join('');
+    chips.style.display = '';
+    hint.textContent = 'タマヒロイ（金イクラを拾って飛んでいくシャケ）が出てくる方向。上のボタンで入力できます（ブイの名前はwikiに出てくるもの）';
   } else if (ed.kind === 'ct'){
     // 方角とオオモノ名はタップで追記できる（方角はステージのブイ名で書きたい時は直接入力）
     chips.innerHTML = ['左', '正面', '右', '奥', '手前'].concat(QUICK_BOSSES).map(b => '<button class="chip" data-addtext="' + b + '">' + b + '</button>').join('');
@@ -955,7 +1013,7 @@ function importMemos(file){
       const n = Object.keys(m).length, nc = Object.keys(cs).length;
       if (!confirm(n + '件のメモ' + (nc ? 'と' + nc + '件のばちこんシナリオ' : '') + 'を読み込みます。同じものは上書きされます（それ以外は残ります）。よろしいですか？')) return;
       for (const [k0, v] of Object.entries(m)){
-        if (typeof v !== 'string' || !/^(coop|vs|cm|ct|sp|wc|wv|bs):/.test(k0)) continue;
+        if (typeof v !== 'string' || !/^(coop|vs|cm|ct|sp|wc|wv|bs|th|dg|nk):/.test(k0)) continue;
         let k = k0;
         // 秒のメモは「64.0」などの書き方を揃える（表示側のキーと一致させるため）
         const mt = k0.match(/^(ct:\d+:\d+:)([\d.]+)$/);
