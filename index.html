@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-14a';</script>
+<script>window.APP_VERSION = '2026-11-14b';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -135,7 +135,7 @@ nav button.on{color:var(--salmon)}
 .pf span{font-size:10px;color:var(--faint);font-weight:600;letter-spacing:.04em}
 .pf b{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .pf b.none{color:var(--faint);font-weight:400}
-.pf b.ok{color:var(--regular)} .pf b.ng{color:var(--salmon)}
+.pf b small{font-size:10px;color:var(--faint);font-weight:400;margin-left:4px}
 .pf em{position:absolute;top:5px;right:7px;font-style:normal;font-size:9px;color:var(--faint)}
 .pf select{width:100%;background:none;border:0;color:var(--text);font:inherit;font-size:16px;font-weight:600;padding:0;margin:-2px 0;-webkit-appearance:none;appearance:none}
 .pmemo{background:rgba(255,122,61,.08);border:1px solid rgba(255,122,61,.28);border-radius:12px;padding:10px 12px;margin-bottom:12px}
@@ -603,9 +603,18 @@ const cmKey = (sid, wave) => 'cm:' + sid + ':' + wave;
 const spKey = (sid, idx) => 'sp:' + sid + ':' + idx;
 const dgKey = (sid, wave) => 'dg:' + sid + ':' + wave; // 選んだキケン度（%の数字）
 const thKey = (sid, wave) => 'th:' + sid + ':' + wave; // タマヒロイの方向
-const nkKey = (sid, wave) => 'nk:' + sid + ':' + wave; // 前回の納品数（金イクラ）
-// キケン度の選択肢: 60%から最大まで10%刻み（WAVE1は60%固定）
-function dangerOptions(max){ const out = []; for (let v = 60; v <= max; v += 10) out.push(v); if (!out.includes(max)) out.push(max); return out; }
+const nbKey = (sid, wave) => 'nb:' + sid + ':' + wave; // 前回の納品がノルマの何倍だったか（'1' / '1.5' / '2'）
+// ばちこんのキケン度: WAVE1は60%固定。4人の時、ノルマの1.5倍以上納品で次のWAVEが+30%、2倍以上で+60%（wiki「バイトチームコンテスト」）。
+// なので取りうる値は60%から30%刻み
+const NB_UP = { '1': 0, '1.5': 30, '2': 60 };
+const NB_LABEL = [['1', '1〜1.5倍'], ['1.5', '1.5倍以上'], ['2', '2倍以上']];
+function dangerOptions(max){ const out = []; for (let v = 60; v <= max; v += 30) out.push(v); if (!out.includes(max)) out.push(max); return out; }
+// 前のWAVEまでの「何倍」が全部記録されていれば、このWAVEのキケン度を計算する（足りなければ null）
+function autoDanger(sid, wave){
+  let d = 60;
+  for (let i = 1; i < wave; i++){ const m = memoOf(nbKey(sid, i)); if (!(m in NB_UP)) return null; d += NB_UP[m]; }
+  return d;
+}
 // タマヒロイの方向の入力ボタン: 基本の方向＋このシナリオでwikiに出てくるブイの名前
 function thChips(sid){
   const s = scenById(+sid), words = new Set();
@@ -771,20 +780,25 @@ function drawPlay(toTop){
   const timeTables = tables.filter(b => colIdx(b.head, /^タイム$/) >= 0);
   const otherTables = tables.filter(b => colIdx(b.head, /^タイム$/) < 0);
   const lists = w.blocks.filter(b => b.type === 'list');
-  // このWAVEの記録: キケン度（選択）・タマヒロイの方向・前回の納品数。memos の dg:/th:/nk:<シナリオ>:<WAVE>
+  // このWAVEの記録: キケン度・タマヒロイの方向・前回の納品がノルマの何倍だったか。memos の dg:/th:/nb:<シナリオ>:<WAVE>
+  // キケン度は 自分で選んだ値 > 前のWAVEまでの「何倍」から計算した値 > 最大値 の順で使う
   const maxD = parseInt(w.danger, 10) || 60;
-  const dSel = parseInt(memoOf(dgKey(s.id, n)), 10) || maxD;
+  const auto = autoDanger(s.id, n);
+  const dSel = n === 1 ? 60 : (parseInt(memoOf(dgKey(s.id, n)), 10) || auto || maxD);
   const dangerUsed = dSel + '%';
   const wikiTh = (w.facts.find(([k]) => /タマヒロイ/.test(k)) || [, ''])[1];
-  const th = memoOf(thKey(s.id, n)), nk = memoOf(nkKey(s.id, n));
-  const quota = parseInt(w.quota, 10);
+  const th = memoOf(thKey(s.id, n)), nb = memoOf(nbKey(s.id, n));
   let h = '<div class="pw"><div class="pwn">WAVE ' + n + '</div><div class="pwc">' + tideTag(w.tide) + (w.event ? '<span class="pev">' + esc(w.event) + '</span>' : '<span class="pday">昼</span>') + '</div>' +
     '<div class="pws">キケン度 最大' + esc(w.danger) + '・ノルマ ' + esc(w.quota) + (w.max ? '・最大納品 ' + esc(w.max) : '') + '</div></div>' +
     '<div class="prec">' +
-      '<label class="pf"><span>キケン度</span><select data-dg="1">' + dangerOptions(maxD).map(v => '<option value="' + v + '"' + (v === dSel ? ' selected' : '') + '>' + v + '%' + (v === maxD ? '（最大）' : '') + '</option>').join('') + '</select></label>' +
+      (n === 1 ? '<div class="pf"><span>キケン度</span><b>60%<small>固定</small></b></div>'
+        : '<label class="pf"><span>キケン度' + (auto && !memoOf(dgKey(s.id, n)) ? '（計算）' : '') + '</span><select data-dg="1">' +
+          dangerOptions(maxD).map(v => '<option value="' + v + '"' + (v === dSel ? ' selected' : '') + '>' + v + '%' + (v === maxD ? '（最大）' : '') + '</option>').join('') + '</select></label>') +
       '<button class="pf" data-th="1"><span>タマヒロイ</span><b class="' + (th || wikiTh ? '' : 'none') + '">' + esc(th || wikiTh || '＋ 入力') + '</b>' + (!th && wikiTh ? '<em>wiki</em>' : '') + '</button>' +
-      '<button class="pf" data-nk="1"><span>前回の納品</span><b class="' + (nk ? (quota && +nk >= quota ? 'ok' : 'ng') : 'none') + '">' + (nk ? esc(nk) + '個' : '＋ 入力') + '</b></button>' +
-    '</div>';
+      '<label class="pf"><span>前回の納品</span><select data-nb="1"><option value="">＋ 選ぶ</option>' +
+        NB_LABEL.map(([v, l]) => '<option value="' + v + '"' + (nb === v ? ' selected' : '') + '>' + l + '</option>').join('') + '</select></label>' +
+    '</div>' +
+    '<div class="capn" style="margin:-6px 2px 12px">4人の時、ノルマの1.5倍以上で次のWAVEのキケン度+30%、2倍以上で+60%</div>';
   // 自分の作戦（最上部）
   h += '<div class="pmemo"><div class="pml"><span>自分の作戦</span><button data-cm-edit="1">✎ 編集</button></div>' +
     (memo ? '<div class="pmt">' + esc(memo) + '</div>' : '<div class="pmt none">まだありません。「編集」から書けます</div>') + '</div>';
@@ -839,10 +853,16 @@ function drawPlay(toTop){
 }
 // キケン度を選ぶと、そのキケン度の湧き時刻で時系列を並べ直す（最大値を選んだら記録を消して既定に戻す）
 document.getElementById('play').addEventListener('change', e => {
-  if (!e.target.dataset.dg || !play) return;
-  const s = scenById(play.sid), w = s && s.waves[play.wave]; if (!w) return;
-  const k = dgKey(play.sid, play.wave + 1), v = parseInt(e.target.value, 10);
-  if (v === (parseInt(w.danger, 10) || 60)) delete memos[k]; else memos[k] = String(v);
+  if (!play) return;
+  const s = scenById(play.sid), w = s && s.waves[play.wave], n = play.wave + 1; if (!w) return;
+  if (e.target.dataset.dg){
+    // 計算した値（無ければ最大値）と同じなら記録を消して、自動に戻す
+    const k = dgKey(play.sid, n), v = parseInt(e.target.value, 10);
+    if (v === (autoDanger(play.sid, n) || parseInt(w.danger, 10) || 60)) delete memos[k]; else memos[k] = String(v);
+  } else if (e.target.dataset.nb != null){
+    const k = nbKey(play.sid, n);
+    if (e.target.value) memos[k] = e.target.value; else delete memos[k];
+  } else return;
   if (!save('sm_memos', memos)) toast('保存できませんでした');
   drawPlay(false);
 });
@@ -852,17 +872,6 @@ document.getElementById('play').addEventListener('click', e => {
   else if (t.dataset.restart) setWave(0);
   else if (t.dataset.cmEdit) openEditor('cm', String(play.sid), String(play.wave + 1));
   else if (t.dataset.th) openEditor('th', String(play.sid), String(play.wave + 1));
-  else if (t.dataset.nk){
-    const k = nkKey(play.sid, play.wave + 1);
-    const raw = prompt('WAVE ' + (play.wave + 1) + ' で前回納品した金イクラの数（空にすると消えます）', memoOf(k));
-    if (raw === null) return;
-    const v = nfkc(raw).trim().replace(/個$/, '');
-    if (v === '') delete memos[k];
-    else if (/^\d{1,3}$/.test(v)) memos[k] = String(+v);
-    else { alert('0〜999の数字で入力してください'); return; }
-    if (!save('sm_memos', memos)) toast('保存できませんでした');
-    drawPlay(false);
-  }
   else if (t.dataset.ct != null) openEditor('ct', String(play.sid), (play.wave + 1) + ':' + fmtT(parseFloat(t.dataset.ct)));
   else if (t.dataset.ctAdd){
     const raw = nfkc(prompt('残り何秒のメモを追加しますか？（1〜100、例: 55）') || '').trim().replace(/秒$/, '');
@@ -1013,7 +1022,7 @@ function importMemos(file){
       const n = Object.keys(m).length, nc = Object.keys(cs).length;
       if (!confirm(n + '件のメモ' + (nc ? 'と' + nc + '件のばちこんシナリオ' : '') + 'を読み込みます。同じものは上書きされます（それ以外は残ります）。よろしいですか？')) return;
       for (const [k0, v] of Object.entries(m)){
-        if (typeof v !== 'string' || !/^(coop|vs|cm|ct|sp|wc|wv|bs|th|dg|nk):/.test(k0)) continue;
+        if (typeof v !== 'string' || !/^(coop|vs|cm|ct|sp|wc|wv|bs|th|dg|nb):/.test(k0)) continue;
         let k = k0;
         // 秒のメモは「64.0」などの書き方を揃える（表示側のキーと一致させるため）
         const mt = k0.match(/^(ct:\d+:\d+:)([\d.]+)$/);
