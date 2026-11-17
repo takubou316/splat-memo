@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-14b';</script>
+<script>window.APP_VERSION = '2026-11-17a';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -527,12 +527,14 @@ function filterWeapons(){
 }
 function renderList(){
   const kind = ui.listSub === 'salmon' ? 'coop' : 'vs';
-  const lk = ui.listKind === 'weapon' ? 'weapon' : 'stage';
+  const lk = ui.listKind === 'weapon' || ui.listKind === 'board' ? ui.listKind : 'stage';
   let h = '<div class="seg"><button data-lsub="salmon" class="salmon ' + (kind==='coop'?'on':'') + '">サーモンラン</button>' +
     '<button data-lsub="battle" class="' + (kind==='vs'?'on':'') + '">バトル</button></div>' +
     '<div class="seg seg2"><button data-lkind="stage" class="' + (lk === 'stage' ? 'on' : '') + '">ステージ</button>' +
-    '<button data-lkind="weapon" class="' + (lk === 'weapon' ? 'on' : '') + '">ブキ</button></div>';
+    '<button data-lkind="weapon" class="' + (lk === 'weapon' ? 'on' : '') + '">ブキ</button>' +
+    '<button data-lkind="board" class="' + (lk === 'board' ? 'on' : '') + '">作戦図</button></div>';
   if (lk === 'weapon') return h + renderWeaponList(kind) + backupHTML();
+  if (lk === 'board') return h + (typeof renderBoardList === 'function' ? renderBoardList(kind) : '<div class="empty">読み込み中…</div>') + backupHTML();
   h += '<div class="list">';
   for (const s of allStages(kind)){
     let prev = '', cnt = 0;
@@ -802,6 +804,11 @@ function drawPlay(toTop){
   // 自分の作戦（最上部）
   h += '<div class="pmemo"><div class="pml"><span>自分の作戦</span><button data-cm-edit="1">✎ 編集</button></div>' +
     (memo ? '<div class="pmt">' + esc(memo) + '</div>' : '<div class="pmt none">まだありません。「編集」から書けます</div>') + '</div>';
+  // 作戦図（このWAVEに割り当てたもの）。図は位置関係の補助で、要点は上の作戦メモに書く前提
+  const bid = memoOf('bd:' + s.id + ':' + n);
+  h += '<button class="bwave" data-bwave="1"><svg viewBox="0 0 24 24"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></svg>' +
+    '<span class="bw-t"><b>' + (bid ? '作戦図を見る' : '作戦図を割り当てる') + '</b><small id="bwaveSub" data-bid="' + esc(bid) + '">' + (bid ? '読み込み中…' : esc(nameById(s.stage)) + '・' + esc(w.tide) + 'の作戦図を選ぶ・作る') + '</small></span>' +
+    (bid ? '<span class="chg" data-bwchg="1">変更</span>' : '') + '</button>';
   // イベントの主役（グリルの狙われ順・キンシャケの出現順など）
   lists.forEach(b => {
     h += '<div class="psec"><div class="psh">' + esc(listTitle(w)) + '</div>' + capNote(b.caption) + '<ol class="olist big">' + b.items.map(x => '<li>' + esc(x) + '</li>').join('') + '</ol></div>';
@@ -848,6 +855,11 @@ function drawPlay(toTop){
   const body = document.getElementById('playBody');
   body.innerHTML = h;
   if (toTop) body.scrollTop = 0;
+  if (bid && window.boardMeta) boardMeta(bid).then(b => {
+    // 読み込む間にWAVEを切り替えていたら書かない（別の作戦図の名前を出さない）
+    const el = document.getElementById('bwaveSub'); if (!el || el.dataset.bid !== bid) return;
+    el.textContent = b ? b.title + '・手順' + b.steps.length : '見つかりません（「変更」から選び直してください）';
+  });
   document.getElementById('waveBar').innerHTML = s.waves.map((x, i) =>
     '<button data-wave="' + i + '" class="' + (i === play.wave ? 'on' : '') + '"><b>W' + (i + 1) + '</b><small>' + esc(waveShort(x)) + '</small></button>').join('');
 }
@@ -872,6 +884,16 @@ document.getElementById('play').addEventListener('click', e => {
   else if (t.dataset.restart) setWave(0);
   else if (t.dataset.cmEdit) openEditor('cm', String(play.sid), String(play.wave + 1));
   else if (t.dataset.th) openEditor('th', String(play.sid), String(play.wave + 1));
+  else if (t.dataset.bwave && window.openBoardPlace){
+    const s = scenById(play.sid), w = s.waves[play.wave], n = play.wave + 1;
+    const placeKey = 'c:' + s.stage + ':' + (TIDE_KEY[w.tide] || 'Mid'), bid = memoOf('bd:' + s.id + ':' + n);
+    if (e.target.closest('[data-bwchg]') || !bid){ openBoardPlace(placeKey, { sid: s.id, wave: n }); return; }
+    const at = play;
+    boardMeta(bid).then(b => {
+      if (play !== at || !play || play.wave + 1 !== n) return; // 待つ間に閉じた・WAVEを変えた
+      if (b) openBoardById(bid, { edit: false, wave: n }); else openBoardPlace(placeKey, { sid: s.id, wave: n });
+    });
+  }
   else if (t.dataset.ct != null) openEditor('ct', String(play.sid), (play.wave + 1) + ':' + fmtT(parseFloat(t.dataset.ct)));
   else if (t.dataset.ctAdd){
     const raw = nfkc(prompt('残り何秒のメモを追加しますか？（1〜100、例: 55）') || '').trim().replace(/秒$/, '');
@@ -1002,7 +1024,10 @@ function closeEditor(fromPop){
 function toast(t){ const el = document.getElementById('toast'); el.textContent = t; el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 2200); }
 async function exportMemos(){
   const d = new Date(), stamp = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
-  const blob = new Blob([JSON.stringify({ app:'splat-stage-memo', version:3, exportedAt:d.toISOString(), memos, contests, tiers: window.getTierStore ? getTierStore() : undefined }, null, 2)], { type:'application/json' });
+  // 作戦図（土台の画像を含む）はIndexedDBから読んで一緒に書き出す
+  const boards = window.exportBoards ? await exportBoards() : null;
+  if (window.exportBoards && !boards) toast('作戦図を読み出せなかったので、作戦図以外を書き出します');
+  const blob = new Blob([JSON.stringify({ app:'splat-stage-memo', version:4, exportedAt:d.toISOString(), memos, contests, tiers: window.getTierStore ? getTierStore() : undefined, boards: boards || undefined })], { type:'application/json' });
   const name = 'stage-memo-' + stamp + '.json';
   try{
     const file = new File([blob], name, { type:'application/json' });
@@ -1012,6 +1037,8 @@ async function exportMemos(){
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 function importMemos(file){
+  // 画像入りでも普通は数MB。大きすぎるファイルは読まない（メモリを使い切らないように）
+  if (file.size > 80e6){ alert('ファイルが大きすぎます（80MBまで）。「書き出す」で作ったファイルを選んでください。'); return; }
   const r = new FileReader();
   r.onload = () => {
     try{
@@ -1022,7 +1049,7 @@ function importMemos(file){
       const n = Object.keys(m).length, nc = Object.keys(cs).length;
       if (!confirm(n + '件のメモ' + (nc ? 'と' + nc + '件のばちこんシナリオ' : '') + 'を読み込みます。同じものは上書きされます（それ以外は残ります）。よろしいですか？')) return;
       for (const [k0, v] of Object.entries(m)){
-        if (typeof v !== 'string' || !/^(coop|vs|cm|ct|sp|wc|wv|bs|th|dg|nb):/.test(k0)) continue;
+        if (typeof v !== 'string' || !/^(coop|vs|cm|ct|sp|wc|wv|bs|th|dg|nb|bd):/.test(k0)) continue;
         let k = k0;
         // 秒のメモは「64.0」などの書き方を揃える（表示側のキーと一致させるため）
         const mt = k0.match(/^(ct:\d+:\d+:)([\d.]+)$/);
@@ -1034,6 +1061,16 @@ function importMemos(file){
       if (nc) migrateOldContests(true);
       const nt = j.tiers && window.mergeTierStore ? mergeTierStore(j.tiers) : 0;
       render(); toast(nt < 0 ? 'メモは読み込みましたが、ティアリストは保存できませんでした' : '読み込みました' + (nt ? '（ティアリスト' + nt + '件）' : ''));
+      // 作戦図は非同期で読み込む（今ある作戦図は消さずに追加）
+      if (j.boards && window.importBoards) importBoards(j.boards).then(r => {
+        // 作戦図が別のIDで入った場合は、読み込んだWAVEの割り当て（bd:）をその新しいIDに付け替える
+        let fixed = false;
+        for (const [k, v] of Object.entries(m)) if (/^bd:/.test(k) && typeof v === 'string' && r.idMap[v] && r.idMap[v] !== v){ memos[k] = r.idMap[v]; fixed = true; }
+        if (fixed && !save('sm_memos', memos)) toast('WAVEの割り当てを保存できませんでした');
+        if (r.boards || r.bases) toast('作戦図' + r.boards + '件・土台' + r.bases + '枚を読み込みました' + (r.err ? '（一部読めないものがありました）' : ''));
+        else if (r.err) toast('作戦図を読み込めませんでした');
+        render();
+      });
     }catch(e){ alert('このファイルは読み込めませんでした。「書き出す」で作ったファイルを選んでください。'); }
   };
   r.readAsText(file);
@@ -1043,7 +1080,8 @@ function importMemos(file){
 document.addEventListener('click', e => {
   const t = e.target.closest('button, [data-chip]');
   if (!t) return;
-  if (t.closest('#play') || t.closest('#tier') || t.closest('.tsheet-bg')) return;
+  if (t.closest('#play') || t.closest('#tier') || t.closest('.tsheet-bg') || t.closest('#bplace') || t.closest('#board') || t.closest('.bsheet-bg')) return;
+  if (t.dataset.bplace && window.openBoardPlace){ openBoardPlace(t.dataset.bplace, null); return; }
   if (t.dataset.nowmemo){ toast('このブキはメモの対象外です（ランダム枠など）'); return; }
   if (t.dataset.lkind){ setUI({ listKind:t.dataset.lkind }); document.getElementById('main').scrollTop = 0; return; }
   if (t.id === 'wOnly'){ ui.wOnlyMemo = !ui.wOnlyMemo; t.classList.toggle('on', ui.wOnlyMemo); save('sm_ui', Object.assign(load('sm_ui', {}), { wOnlyMemo: ui.wOnlyMemo })); filterWeapons(); return; }
@@ -1072,7 +1110,7 @@ document.getElementById('reload').onclick = () => refresh(true);
 document.getElementById('edBack').onclick = () => { if (history.state && history.state.editor) history.back(); else closeEditor(false); };
 document.getElementById('playBack').onclick = () => { if (history.state && history.state.play) history.back(); else closePlay(false); };
 // 戻る操作は一番上に開いている画面だけを閉じる（作戦メモ編集 → WAVE閲覧 の順）
-window.addEventListener('popstate', () => { if (ed) closeEditor(true); else if (window.tierPop && tierPop()) {} else if (play) closePlay(true); });
+window.addEventListener('popstate', () => { if (ed) closeEditor(true); else if (window.boardPop && boardPop()) {} else if (window.tierPop && tierPop()) {} else if (play) closePlay(true); });
 document.getElementById('memoText').addEventListener('input', () => {
   document.getElementById('edSaved').textContent = '入力中…';
   clearTimeout(saveTimer); saveTimer = setTimeout(saveMemo, 500);
@@ -1090,5 +1128,6 @@ refresh();
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 <script src="tier.js"></script>
+<script src="board.js"></script>
 </body>
 </html>
