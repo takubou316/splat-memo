@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-17b';</script>
+<script>window.APP_VERSION = '2026-11-17c';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -406,7 +406,9 @@ function stageButton(s, rule){
   return '<button class="stage" data-edit="' + (rule ? 'vs' : 'coop') + '" data-id="' + esc(s.id) + '" data-rule="' + (rule ? esc(rule.id) : '') + '">' +
     '<div class="shead">' + (img ? '<img src="' + esc(img) + '" alt="" loading="lazy">' : '') +
     '<div class="sname">' + esc(stageName(s)) + '</div><span class="editbtn">✎ 編集</span></div>' +
-    memoBlock(s.id, rule) + '</button>';
+    memoBlock(s.id, rule) + '</button>' +
+    // このステージの作戦図（描画の後に board.js の fillNowBoards が中身を入れる。button の中に button は置けないので外に）
+    '<div class="nowbd" data-nbd="' + (rule ? 'v:' : 'c:') + esc(s.id) + '"></div>';
 }
 function vsCard(label, color, node, setting, now){
   if (!setting || !setting.vsStages) return '';
@@ -566,6 +568,7 @@ function render(){
   document.getElementById('main').innerHTML = ui.view === 'now' ? renderNow() : ui.view === 'contest' ? renderContest() :
     ui.view === 'tier' ? (typeof renderTierList === 'function' ? renderTierList() : '<div class="empty">読み込み中…</div>') : renderList();
   if (ui.view === 'list' && ui.listKind === 'weapon') filterWeapons();
+  if (ui.view === 'now'){ if (window.fillNowBoards) fillNowBoards(); } else if (window.releaseNowBoards) releaseNowBoards();
   document.getElementById('navNow').classList.toggle('on', ui.view === 'now');
   document.getElementById('navContest').classList.toggle('on', ui.view === 'contest');
   document.getElementById('navList').classList.toggle('on', ui.view === 'list');
@@ -1082,6 +1085,7 @@ document.addEventListener('click', e => {
   if (!t) return;
   if (t.closest('#play') || t.closest('#tier') || t.closest('.tsheet-bg') || t.closest('#bplace') || t.closest('#board') || t.closest('.bsheet-bg')) return;
   if (t.dataset.bplace && window.openBoardPlace){ openBoardPlace(t.dataset.bplace, null); return; }
+  if (t.dataset.nbopen && window.openBoardById){ openBoardById(t.dataset.nbopen, { edit: false }); return; }
   if (t.dataset.nowmemo){ toast('このブキはメモの対象外です（ランダム枠など）'); return; }
   if (t.dataset.lkind){ setUI({ listKind:t.dataset.lkind }); document.getElementById('main').scrollTop = 0; return; }
   if (t.id === 'wOnly'){ ui.wOnlyMemo = !ui.wOnlyMemo; t.classList.toggle('on', ui.wOnlyMemo); save('sm_ui', Object.assign(load('sm_ui', {}), { wOnlyMemo: ui.wOnlyMemo })); filterWeapons(); return; }

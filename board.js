@@ -993,6 +993,75 @@ window.addEventListener('resize', () => { if (B && bs && !g && !ptrs.size) fitVi
 // 上下の帯の高さが変わって地図の枠が変わった時、全体表示のままなら合わせ直す（拡大・移動していたらそのまま）
 if (window.ResizeObserver) new ResizeObserver(() => { if (B && bs && bs.view && bs.view.fitted && !g && !ptrs.size) fitView(); }).observe(view);
 
+// ---------- いまのステージに作戦図を出す ----------
+// 2026-11-17 ユーザー要望:「メモの部分を開いたら、このマップも簡単に確認出来て作戦をすぐに思い出せたり注意点を振り返れる」。
+// index.html の stageButton が置いた <div data-nbd="c:<CoopStageId>" / "v:<VsStageId>"> に、そのステージの作戦図の
+// 小さな絵（手順1）を並べる。タップで見る画面。無ければ作る入口だけを1行で出す
+const css3 = `
+.nowbd:empty{display:none}
+.nowbd{margin:-2px 0 8px}
+.nbrow{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:2px 0 2px}
+.nbrow::-webkit-scrollbar{display:none}
+.nbcard{flex:none;width:min(62vw,240px);text-align:left;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;padding:0}
+.nbthumb{position:relative;width:100%;background:#0b0a12}
+.nbthumb img,.nbthumb svg{position:absolute;inset:0;width:100%;height:100%}
+.nbthumb img{object-fit:fill}
+.nbcap{padding:6px 9px 7px;font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nbcap small{display:block;font-size:11px;font-weight:400;color:var(--sub);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nbmk{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px;color:var(--faint)}
+.nbmk button{font-size:11px;font-weight:600;color:var(--sub);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px 10px}
+`;
+const st3 = document.createElement('style'); st3.textContent = css3; document.head.appendChild(st3);
+let nowSeq = 0, nowUrls = [];
+function thumbSVG(b){
+  // objSVG は開いている作戦図（B）を基準に大きさを決めるので、一時的に差し替えて描く（同期処理の中だけ）
+  const keep = B; B = Object.assign({}, b, { rot: 0 });
+  try { return (b.steps[0] ? b.steps[0].objs : []).map(o => objSVG(o, false)).join(''); }
+  catch (e){ return ''; }
+  finally { B = keep; }
+}
+// いまのステージを離れたら、読み込み中の処理を捨てて画像を手放す
+window.releaseNowBoards = () => { nowSeq++; nowUrls.forEach(u => URL.revokeObjectURL(u)); nowUrls = []; };
+window.fillNowBoards = async function(){
+  const my = ++nowSeq;
+  const slots = [...document.querySelectorAll('[data-nbd]')];
+  if (!slots.length) return;
+  let boards = [];
+  try { boards = (await allBoards()).filter(b => b && typeof b.place === 'string' && Array.isArray(b.steps) && b.w > 0 && b.h > 0); } catch (e){ return; }
+  if (my !== nowSeq) return;
+  const order = { Low: 0, Mid: 1, High: 2 };
+  const groups = new Map();
+  slots.forEach(el => {
+    const k = el.dataset.nbd;
+    if (!groups.has(k)) groups.set(k, boards.filter(b => k.startsWith('c:') ? b.place.startsWith(k + ':') : b.place === k)
+      .sort((a, b) => (order[a.place.split(':')[2]] || 0) - (order[b.place.split(':')[2]] || 0) || b.updated - a.updated));
+  });
+  // 土台の画像（同じ場所は1回だけ読む）
+  const places = [...new Set([...groups.values()].flat().map(b => b.place))], urls = {};
+  for (const p of places){
+    try { const base = await baseGet(p); if (base) urls[p] = URL.createObjectURL(base.blob); } catch (e){}
+    if (my !== nowSeq){ Object.values(urls).forEach(u => URL.revokeObjectURL(u)); return; } // 新しい描画が来たら途中でやめる
+  }
+  nowUrls.forEach(u => URL.revokeObjectURL(u)); nowUrls = Object.values(urls);
+  slots.forEach(el => {
+    if (!el.isConnected) return;
+    const k = el.dataset.nbd, list = groups.get(k) || [];
+    if (!list.length){
+      el.innerHTML = '<div class="nbmk">作戦図 ' + (k.startsWith('c:')
+        ? TIDES.map(([t, n]) => '<button data-bplace="' + esc(k + ':' + t) + '">＋ ' + n + '</button>').join('')
+        : '<button data-bplace="' + esc(k) + '">＋ 作る</button>') + '</div>';
+      return;
+    }
+    el.innerHTML = '<div class="nbrow">' + list.map(b => {
+      const tide = b.place.startsWith('c:') ? TIDE_NAME[b.place.split(':')[2]] || '' : '';
+      const note = b.steps[0] && b.steps[0].note;
+      return '<button class="nbcard" data-nbopen="' + esc(b.id) + '"><div class="nbthumb" style="padding-top:' + (b.h / b.w * 100).toFixed(2) + '%">' +
+        (urls[b.place] ? '<img src="' + urls[b.place] + '" alt="">' : '') +
+        '<svg viewBox="0 0 ' + b.w + ' ' + b.h + '" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">' + thumbSVG(b) + '</svg></div>' +
+        '<div class="nbcap">' + esc(b.title) + '<small>' + esc([tide, b.steps.length > 1 ? '手順' + b.steps.length : '', note || ''].filter(Boolean).join('・')) + '</small></div></button>';
+    }).join('') + '</div>';
+  });
+};
 // ---------- バックアップ（index.html の書き出し・読み込みから呼ぶ） ----------
 const blobToDataURL = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); });
 // 書き出し: 並んでいる保存を終えてから、土台と作戦図を1回の読み取りでまとめて取る（同じ時点の内容にする）
