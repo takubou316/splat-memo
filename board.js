@@ -164,16 +164,28 @@ async function prepareImage(file, rot){
 const PLAYERS = [['1', '#ff7a3d'], ['2', '#4a90ff'], ['3', '#4fd27a'], ['4', '#ff5aa5']];
 // タマヒロイは Leanny の coopEnemy に絵が無い（2026-11-17確認、404で「?」になっていた）ので、同じ Leanny のナワバトラーのカードの絵
 // （images/minigame/card/Tamahiroi.png）から絵の部分を正方形に切り取った img/tamahiroi.png を使う
-const SALMONIDS = [['SakeFlyBagman', 'タマヒロイ', 'img/tamahiroi.png'], ['SakelienGolden', 'キンシャケ'], ['SakelienLarge', 'ドスコイ'], ['SakelienStandard', 'シャケ'],
+// 狂シャケ（ラッシュで出る凶暴なシャケの通称）は専用の絵が無く見た目もシャケと同じなので、シャケの絵に赤い縁と「狂」の印を付けて見分ける（[3] が印）
+const SALMONIDS = [['SakeFlyBagman', 'タマヒロイ', 'img/tamahiroi.png'], ['SakelienGolden', 'キンシャケ'], ['SakelienLarge', 'ドスコイ'], ['SakelienStandard', 'シャケ'], ['SakelienRush', '狂シャケ', LEANNY + 'coopEnemy/SakelienStandard.png', '狂'],
   ['SakelienSmall', 'コジャケ'], ['SakeBigMouth', 'ドロシャケ'], ['SakeCopter', 'シャケコプター'], ['Sakedozer', 'グリル']];
 const MARKS = [['カゴ', '#e6cf4a'], ['湧き', '#ff5aa5'], ['！', '#ff4d4d'], ['✕', '#9b96ad'], ['★', '#ffd23d'], ['集合', '#2fd6a8']];
 const COLORS = ['#ffffff', '#ff7a3d', '#ff4d4d', '#ffd23d', '#4fd27a', '#4a90ff', '#ff5aa5'];
+// プレイヤーはイカの形（自前で描いた絵。2026-11-17 ユーザー要望「プレイヤーはイカのマークがいい」）。100×100 の枠で描き、番号は右下の丸
+// NWにもイカのアイコンはあるが、許可をもらったのはマップ画像なので使わない
+function squidShape(color){
+  return '<path d="M50 3 Q63 13 80 37 Q90 51 82 58 Q76 62 68 61 L32 61 Q24 62 18 58 Q10 51 20 37 Q37 13 50 3Z" fill="' + color + '" stroke="#0b0a12" stroke-width="4" stroke-linejoin="round"/>' +
+    [24, 39, 54, 69].map(x => '<rect x="' + (x - 1) + '" y="55" width="11" height="38" rx="5.5" fill="' + color + '" stroke="#0b0a12" stroke-width="4"/>').join('') +
+    '<rect x="21" y="53" width="58" height="12" fill="' + color + '"/>' +
+    '<circle cx="37" cy="44" r="10" fill="#fff" stroke="#0b0a12" stroke-width="3"/><circle cx="63" cy="44" r="10" fill="#fff" stroke="#0b0a12" stroke-width="3"/>' +
+    '<circle cx="38" cy="45" r="5" fill="#0b0a12"/><circle cx="62" cy="45" r="5" fill="#0b0a12"/>';
+}
+function squidBadge(n){ return '<circle cx="82" cy="80" r="21" fill="#fff" stroke="#0b0a12" stroke-width="4"/><text x="82" y="81" text-anchor="middle" dominant-baseline="central" font-size="29" font-weight="700" fill="#0b0a12">' + esc(n) + '</text>'; }
+const squidHTML = (color, n, size) => '<svg viewBox="0 0 100 100" width="' + size + '" height="' + size + '" style="display:block;overflow:visible">' + squidShape(color) + squidBadge(n) + '</svg>';
 function iconInfo(k){
   const [kind, id] = [k.slice(0, k.indexOf(':')), k.slice(k.indexOf(':') + 1)];
   if (kind === 'boss'){ const x = (TIER_DATA.sets.boss.items || []).find(i => i.id === id); return { label: x ? x.name : id, img: x ? x.img : LEANNY + 'coopEnemy/' + id + '.png' }; }
-  if (kind === 'sake'){ const x = SALMONIDS.find(s => s[0] === id); return { label: x ? x[1] : id, img: x && x[2] ? x[2] : LEANNY + 'coopEnemy/' + id + '.png' }; }
+  if (kind === 'sake'){ const x = SALMONIDS.find(s => s[0] === id); return { label: x ? x[1] : id, img: x && x[2] ? x[2] : LEANNY + 'coopEnemy/' + id + '.png', badge: x && x[3] || '' }; }
   if (kind === 'weapon'){ const x = (TIER_DATA.sets.coopWeapon.items || []).find(i => i.id === id); if (x) return { label: x.name, img: x.img }; }
-  if (kind === 'player'){ const x = PLAYERS.find(p => p[0] === id); if (x) return { label: 'プレイヤー' + id, mark: id, color: x[1] }; }
+  if (kind === 'player'){ const x = PLAYERS.find(p => p[0] === id); if (x) return { label: 'プレイヤー' + id, mark: id, color: x[1], squid: true }; }
   if (kind === 'mark'){ const x = MARKS.find(m => m[0] === id); if (x) return { label: id, mark: id, color: x[1] }; }
   // 知らないアイコン（データの更新・壊れた読み込み）でも描けるように、灰色の「?」にする
   return { label: '不明', mark: '?', color: '#9b96ad' };
@@ -396,6 +408,9 @@ const css2 = `
 .bicons button img,.bicons button .mk{width:40px;height:40px;object-fit:contain;border-radius:50%;background:#0b0a12;border:1px solid var(--line2);pointer-events:none}
 .bicons button .mk{display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#1a1020;border:0}
 .bicons button span{width:52px;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.bicons .bimg{position:relative;display:block;width:40px;height:40px;overflow:visible}
+.bicons .bdg img{border:2px solid #ff4d4d}
+.bicons .bimg i{position:absolute;right:-3px;top:-3px;width:17px;height:17px;border-radius:50%;background:#ff4d4d;color:#fff;font-style:normal;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;border:1px solid #0b0a12}
 .bicons button.on{background:rgba(255,122,61,.18);color:var(--salmon)}
 .bghost{position:fixed;left:0;top:0;z-index:60;pointer-events:none;width:52px;height:52px;border-radius:50%;background:#0b0a12;border:2px solid #fff;box-shadow:0 6px 18px #000a;display:flex;align-items:center;justify-content:center;font-weight:700;color:#1a1020}
 .bghost img{width:44px;height:44px;object-fit:contain}
@@ -520,7 +535,9 @@ function objSVG(o, selected, alpha){
   if (o.t === 'icon'){
     const info = iconInfo(o.k), r = d * szOf(SZ.icon, o) / 2;
     let g = g0 + '<g' + upright(o.x, o.y) + '><circle cx="' + o.x + '" cy="' + o.y + '" r="' + (r * 1.35) + '" fill="transparent"/>';
-    if (info.img) g += '<circle cx="' + o.x + '" cy="' + o.y + '" r="' + r + '" fill="#0b0a12" stroke="rgba(255,255,255,.75)" stroke-width="' + (d * .002) + '"/><image href="' + esc(info.img) + '" x="' + (o.x - r * .85) + '" y="' + (o.y - r * .85) + '" width="' + (r * 1.7) + '" height="' + (r * 1.7) + '"/>';
+    if (info.img) g += '<circle cx="' + o.x + '" cy="' + o.y + '" r="' + r + '" fill="#0b0a12" stroke="' + (info.badge ? '#ff4d4d' : 'rgba(255,255,255,.75)') + '" stroke-width="' + (d * (info.badge ? .005 : .002)) + '"/><image href="' + esc(info.img) + '" x="' + (o.x - r * .85) + '" y="' + (o.y - r * .85) + '" width="' + (r * 1.7) + '" height="' + (r * 1.7) + '"/>' +
+      (info.badge ? '<circle cx="' + (o.x + r * .72) + '" cy="' + (o.y - r * .72) + '" r="' + (r * .42) + '" fill="#ff4d4d" stroke="#0b0a12" stroke-width="' + (d * .002) + '"/><text x="' + (o.x + r * .72) + '" y="' + (o.y - r * .72) + '" text-anchor="middle" dominant-baseline="central" font-size="' + (r * .52) + '" font-weight="700" fill="#fff">' + esc(info.badge) + '</text>' : '');
+    else if (info.squid){ const s = r * 2.3 / 100; g += '<g transform="translate(' + (o.x - 50 * s) + ' ' + (o.y - 50 * s) + ') scale(' + s + ')">' + squidShape(esc(info.color)) + squidBadge(info.mark) + '</g>'; }
     else g += '<circle cx="' + o.x + '" cy="' + o.y + '" r="' + r + '" fill="' + esc(info.color) + '" stroke="#0b0a12" stroke-width="' + (d * .003) + '"/><text x="' + o.x + '" y="' + o.y + '" text-anchor="middle" dominant-baseline="central" font-size="' + (r * (info.mark.length > 1 ? .7 : 1.1)) + '" font-weight="700" fill="#1a1020">' + esc(info.mark) + '</text>';
     if (selected) g += '<circle cx="' + o.x + '" cy="' + o.y + '" r="' + (r * 1.25) + '" fill="none" stroke="#fff" stroke-dasharray="' + (d * .008) + '" stroke-width="' + (d * .003) + '"/>';
     return g + '</g></g>';
@@ -609,7 +626,7 @@ function drawBoard(){
     if (!cats.find(c => c[0] === bs.cat)) bs.cat = cats[0][0];
     h += '<div class="bstrip"><div class="bcats">' + cats.map(([k, l]) => '<button data-bcat="' + k + '" class="' + (bs.cat === k ? 'on' : '') + '">' + l + '</button>').join('') + '</div>' +
       '<div class="bicons" id="bIcons">' + palItems(bs.cat).map(k => { const i = iconInfo(k);
-        return '<button data-pk="' + esc(k) + '" class="' + (bs.pending === k ? 'on' : '') + '">' + (i.img ? '<img src="' + esc(i.img) + '" alt="" draggable="false" loading="lazy">' : '<span class="mk" style="background:' + esc(i.color) + '">' + esc(i.mark) + '</span>') + '<span>' + esc(i.label) + '</span></button>'; }).join('') + '</div></div>';
+        return '<button data-pk="' + esc(k) + '" class="' + (bs.pending === k ? 'on' : '') + '">' + (i.img ? '<span class="bimg' + (i.badge ? ' bdg' : '') + '"><img src="' + esc(i.img) + '" alt="" draggable="false" loading="lazy">' + (i.badge ? '<i>' + esc(i.badge) + '</i>' : '') + '</span>' : i.squid ? '<span class="bimg">' + squidHTML(esc(i.color), i.mark, 40) + '</span>' : '<span class="mk" style="background:' + esc(i.color) + '">' + esc(i.mark) + '</span>') + '<span>' + esc(i.label) + '</span></button>'; }).join('') + '</div></div>';
   }
   h += '<div class="bsteprow"><span class="lab">手順</span>' + B.steps.map((s, i) => '<button class="sn' + (i === bs.step ? ' on' : '') + '" data-bgo="' + i + '">' + (i + 1) + '</button>').join('') +
     (bs.edit ? '<button class="sx" data-badd="1">＋ 写して追加</button>' + (n > 1 ? '<button class="sx del" data-bsdel="1">この手順を削除</button>' : '') : '') +
@@ -752,7 +769,7 @@ document.addEventListener('pointermove', e => {
   if (!stripDrag.ghost){
     if (dy < -14 && Math.abs(dy) > Math.abs(dx) * 1.2){
       const i = iconInfo(stripDrag.k), gh = document.createElement('div'); gh.className = 'bghost';
-      if (i.img) gh.innerHTML = '<img src="' + esc(i.img) + '" alt="">'; else { gh.style.background = i.color; gh.textContent = i.mark; }
+      if (i.img){ gh.innerHTML = '<img src="' + esc(i.img) + '" alt="">'; if (i.badge) gh.style.borderColor = '#ff4d4d'; } else if (i.squid){ gh.innerHTML = squidHTML(esc(i.color), i.mark, 46); } else { gh.style.background = i.color; gh.textContent = i.mark; }
       document.body.appendChild(gh); stripDrag.ghost = gh; stopPlay(); cancelGesture();
     } else if (Math.abs(dx) > 14) { stripDrag = null; return; }
     else return;
