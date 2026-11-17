@@ -162,14 +162,16 @@ async function prepareImage(file, rot){
 
 // ---------- アイコンの一覧 ----------
 const PLAYERS = [['1', '#ff7a3d'], ['2', '#4a90ff'], ['3', '#4fd27a'], ['4', '#ff5aa5']];
-const SALMONIDS = [['SakeFlyBagman', 'タマヒロイ'], ['SakelienGolden', 'キンシャケ'], ['SakelienLarge', 'ドスコイ'], ['SakelienStandard', 'シャケ'],
+// タマヒロイは Leanny の coopEnemy に絵が無い（2026-11-17確認、404で「?」になっていた）ので、同じ Leanny のナワバトラーのカードの絵
+// （images/minigame/card/Tamahiroi.png）から絵の部分を正方形に切り取った img/tamahiroi.png を使う
+const SALMONIDS = [['SakeFlyBagman', 'タマヒロイ', 'img/tamahiroi.png'], ['SakelienGolden', 'キンシャケ'], ['SakelienLarge', 'ドスコイ'], ['SakelienStandard', 'シャケ'],
   ['SakelienSmall', 'コジャケ'], ['SakeBigMouth', 'ドロシャケ'], ['SakeCopter', 'シャケコプター'], ['Sakedozer', 'グリル']];
 const MARKS = [['カゴ', '#e6cf4a'], ['湧き', '#ff5aa5'], ['！', '#ff4d4d'], ['✕', '#9b96ad'], ['★', '#ffd23d'], ['集合', '#2fd6a8']];
 const COLORS = ['#ffffff', '#ff7a3d', '#ff4d4d', '#ffd23d', '#4fd27a', '#4a90ff', '#ff5aa5'];
 function iconInfo(k){
   const [kind, id] = [k.slice(0, k.indexOf(':')), k.slice(k.indexOf(':') + 1)];
   if (kind === 'boss'){ const x = (TIER_DATA.sets.boss.items || []).find(i => i.id === id); return { label: x ? x.name : id, img: x ? x.img : LEANNY + 'coopEnemy/' + id + '.png' }; }
-  if (kind === 'sake'){ const x = SALMONIDS.find(s => s[0] === id); return { label: x ? x[1] : id, img: LEANNY + 'coopEnemy/' + id + '.png' }; }
+  if (kind === 'sake'){ const x = SALMONIDS.find(s => s[0] === id); return { label: x ? x[1] : id, img: x && x[2] ? x[2] : LEANNY + 'coopEnemy/' + id + '.png' }; }
   if (kind === 'weapon'){ const x = (TIER_DATA.sets.coopWeapon.items || []).find(i => i.id === id); if (x) return { label: x.name, img: x.img }; }
   if (kind === 'player'){ const x = PLAYERS.find(p => p[0] === id); if (x) return { label: 'プレイヤー' + id, mark: id, color: x[1] }; }
   if (kind === 'mark'){ const x = MARKS.find(m => m[0] === id); if (x) return { label: id, mark: id, color: x[1] }; }

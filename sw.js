@@ -1,10 +1,10 @@
 // アプリ本体はネットワーク優先（更新がすぐ届くように）、通信できないときだけキャッシュを使う。
 // スケジュールAPIはページ側でlocalStorageに控えているので、ここでは扱わない。
-const CACHE = 'stage-memo-v8';
+const CACHE = 'stage-memo-v9';
 // 同梱のマップ（maps/）は中身が変わらないので、版を上げても消さない別のキャッシュに入れ、キャッシュ優先で出す。
 // マップを取り込み直したら MAP_CACHE の名前を変える（古い分は activate で消える）
 const MAP_CACHE = 'stage-memo-maps-v1';
-const SHELL = ['./', './index.html', './contest-data.js', './tier-data.js', './tier.js', './board.js', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
+const SHELL = ['./', './index.html', './contest-data.js', './tier-data.js', './tier.js', './board.js', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png', './img/tamahiroi.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
