@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-17c';</script>
+<script>window.APP_VERSION = '2026-11-17d';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -711,7 +711,7 @@ function openPlay(sid, no, start){
 }
 function closePlay(fromPop){
   if (!play) return;
-  play = null;
+  play = null; bwThumbSeq++; releaseBwThumb(); // 読み込み中の作戦図の絵も無効にする
   document.getElementById('play').classList.remove('open');
   if (!fromPop && history.state && history.state.play) history.back();
   render();
@@ -811,7 +811,9 @@ function drawPlay(toTop){
   const bid = memoOf('bd:' + s.id + ':' + n);
   h += '<button class="bwave" data-bwave="1"><svg viewBox="0 0 24 24"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></svg>' +
     '<span class="bw-t"><b>' + (bid ? '作戦図を見る' : '作戦図を割り当てる') + '</b><small id="bwaveSub" data-bid="' + esc(bid) + '">' + (bid ? '読み込み中…' : esc(nameById(s.stage)) + '・' + esc(w.tide) + 'の作戦図を選ぶ・作る') + '</small></span>' +
-    (bid ? '<span class="chg" data-bwchg="1">変更</span>' : '') + '</button>';
+    (bid ? '<span class="chg" data-bwchg="1">変更</span>' : '') + '</button>' +
+    // 割り当てた作戦図の小さな絵（WAVEが始まった瞬間に図で思い出せるように）。タップで作戦図を開く
+    (bid ? '<button class="bwthumb" data-bwave="1" id="bwaveThumb" data-bid="' + esc(bid) + '"></button>' : '');
   // イベントの主役（グリルの狙われ順・キンシャケの出現順など）
   lists.forEach(b => {
     h += '<div class="psec"><div class="psh">' + esc(listTitle(w)) + '</div>' + capNote(b.caption) + '<ol class="olist big">' + b.items.map(x => '<li>' + esc(x) + '</li>').join('') + '</ol></div>';
@@ -858,14 +860,23 @@ function drawPlay(toTop){
   const body = document.getElementById('playBody');
   body.innerHTML = h;
   if (toTop) body.scrollTop = 0;
+  // 作戦図の絵は描き直すたびに世代を変え、前の絵の画像は手放す（遅れて届いた古い絵で上書きしない）
+  const thSeq = ++bwThumbSeq; releaseBwThumb();
   if (bid && window.boardMeta) boardMeta(bid).then(b => {
     // 読み込む間にWAVEを切り替えていたら書かない（別の作戦図の名前を出さない）
     const el = document.getElementById('bwaveSub'); if (!el || el.dataset.bid !== bid) return;
     el.textContent = b ? b.title + '・手順' + b.steps.length : '見つかりません（「変更」から選び直してください）';
+    if (b && window.boardThumb) boardThumb(b).then(r => {
+      const th = document.getElementById('bwaveThumb');
+      if (!th || thSeq !== bwThumbSeq || !play || th.dataset.bid !== bid || !r.html){ if (r.url) URL.revokeObjectURL(r.url); return; }
+      releaseBwThumb(); bwThumbUrl = r.url; th.innerHTML = r.html;
+    });
   });
   document.getElementById('waveBar').innerHTML = s.waves.map((x, i) =>
     '<button data-wave="' + i + '" class="' + (i === play.wave ? 'on' : '') + '"><b>W' + (i + 1) + '</b><small>' + esc(waveShort(x)) + '</small></button>').join('');
 }
+let bwThumbUrl = null, bwThumbSeq = 0; // WAVE画面の作戦図の絵（自分のスクショの時の Object URL）と描き直しの世代
+function releaseBwThumb(){ if (bwThumbUrl){ URL.revokeObjectURL(bwThumbUrl); bwThumbUrl = null; } }
 // キケン度を選ぶと、そのキケン度の湧き時刻で時系列を並べ直す（最大値を選んだら記録を消して既定に戻す）
 document.getElementById('play').addEventListener('change', e => {
   if (!play) return;

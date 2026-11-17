@@ -1,18 +1,43 @@
 // 作戦図（マップの上にアイコン・ペン・矢印・文字を置き、手順でコマ送り）。index.html と tier.js の後に読み込む。
-// 土台の画像は、ユーザーが自分で撮ったスクショ（参考: サーモンラーンNW https://salmon-learn-nw.gungee.jp/ のマップ）。端末内だけに保存。
+// 土台: サモランはサーモンラーンNW（https://salmon-learn-nw.gungee.jp/）のマップを同梱（作者の許可済み、2026-11-17）。自分のスクショも使える（端末内だけに保存）。
 // 設計はCodexと相談（2026-11-17）: タブは増やさずメモタブの「作戦図」に置く／閲覧が初期状態で編集は明示的に開始／
 // 1本指で地図を移動・2本指で拡大・全体表示ボタン／アイコンは選んでから地図をタップ／手順は「前へ 手順n/N 次へ」／
 // 土台・作戦・WAVEへの割り当てを分ける／画像も作戦もIndexedDBに保存。
 // 共有して使うもの: memos, save, load, esc, toast, render, ui, nfkc, memoOf, scenById, TIER_DATA, CONTEST_DATA
 'use strict';
 (function(){
-const SRC_URL = 'https://salmon-learn-nw.gungee.jp/maplist/';
-const SRC_NAME = 'サーモンラーンNW';
 const LEANNY = 'https://raw.githubusercontent.com/Leanny/splat3/main/images/';
 const TIDES = [['Low', '干潮'], ['Mid', '普通'], ['High', '満潮']];
 const TIDE_NAME = Object.fromEntries(TIDES);
 const COOP_STAGES = ['Q29vcFN0YWdlLTE=', 'Q29vcFN0YWdlLTI=', 'Q29vcFN0YWdlLTc=', 'Q29vcFN0YWdlLTY=', 'Q29vcFN0YWdlLTg=', 'Q29vcFN0YWdlLTQ=', 'Q29vcFN0YWdlLTk='];
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+// サーモンラーンNW のマップ（作者ガンジーさんの許可を得てアプリに同梱。2026-11-17 XのDMで「アプリ内（リポジトリ内）に直接画像を取り込んでいただいてまったく問題ございません」）
+// maps/nw/plain/<NW名>_<潮位>.svg（線画・全ステージ）と maps/nw/model/<NW名>_<潮位>.webp（立体風・5ステージ）。両方とも同じ範囲で切り抜いてあり重なる。
+// 値は [幅, 高さ, 立体風があるか]（NWの1016枠での大きさ）。作戦図の座標はこれを NW_K 倍した大きさ（拡大してもぼやけにくいよう大きめに描く）
+// 取り込み直しは tools/nw_maps.py（範囲は tools/nw_maps_bbox.json。詳しくは maps/nw/README.md）
+const NW_MAPS = {"Shakespiral_Low":[616,664,1],"Shakespiral_Mid":[388,415,1],"Shakespiral_High":[296,244,1],"Shakedent_Low":[536,587,1],"Shakedent_Mid":[414,306,1],"Shakedent_High":[244,211,1],"Shakeup_Low":[702,679,1],"Shakeup_Mid":[447,515,1],"Shakeup_High":[352,227,1],"Shakeship_Low":[701,509,1],"Shakeship_Mid":[433,438,1],"Shakeship_High":[373,159,1],"Shakehighway_Low":[576,657,0],"Shakehighway_Mid":[395,350,0],"Shakehighway_High":[288,213,0],"Shakelift_Low":[659,489,0],"Shakelift_Mid":[362,421,0],"Shakelift_High":[259,283,0],"Shakerail_Low":[710,607,1],"Shakerail_Mid":[433,407,1],"Shakerail_High":[254,338,1]};
+const NW_K = 4;
+const NW_NAME = 'サーモンラーンNW';
+const NW_URL = 'https://salmon-learn-nw.gungee.jp/';
+// 場所キー → NWのマップ名（'Shakeup_Mid' など）。バトル・ビッグランなど無いものは null
+function nwKey(p){
+  const a = String(p).split(':');
+  if (a[0] !== 'c' || typeof COOP_INTERNAL === 'undefined') return null;
+  const k = COOP_INTERNAL[a[1]] + '_' + a[2];
+  return NW_MAPS[k] ? k : null;
+}
+const nwSize = k => ({ w: NW_MAPS[k][0] * NW_K, h: NW_MAPS[k][1] * NW_K });
+const nwImg = (k, bg) => bg === 'nw3d' && NW_MAPS[k][2] ? 'maps/nw/model/' + k + '.webp' : 'maps/nw/plain/' + k + '.svg';
+const isNwBg = b => b && (b.bg === 'nw' || b.bg === 'nw3d');
+// 作戦図の土台の画像。{ url, own }（own=true は自分で開いた Object URL なので使い終わったら解放する）。無ければ null
+async function boardBgUrl(b){
+  if (isNwBg(b)){ const k = nwKey(b.place); return k ? { url: nwImg(k, b.bg), own: false } : null; }
+  const base = await baseGet(b.place).catch(() => null);
+  return base ? { url: URL.createObjectURL(base.blob), own: true } : null;
+}
+function creditOf(b){
+  return isNwBg(b) ? 'マップ: ' + NW_NAME + '（作者の許可を得て使用）' : '土台: 自分で撮ったスクショ';
+}
 
 const css = `
 .bp-stage{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:9px 12px;margin-bottom:6px}
@@ -34,6 +59,9 @@ const css = `
 #bplaceBody{flex:1;overflow-y:auto;padding:14px 16px 24px;-webkit-overflow-scrolling:touch}
 .bpl-base{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:12px}
 .bpl-base img{display:block;width:100%;max-height:44vh;object-fit:contain;border-radius:8px;background:#0b0a12}
+.bpl-own{margin-top:14px}
+.bpl-own summary{font-size:13px;font-weight:600;color:var(--sub);padding:10px 2px;cursor:pointer}
+.bpl-own[open] summary{margin-bottom:4px}
 .bpl-empty{text-align:center;padding:14px 6px;color:var(--sub);font-size:13px}
 .bpl-steps{counter-reset:s;margin:8px 0 0;padding:0;list-style:none;text-align:left;font-size:13px;color:var(--sub)}
 .bpl-steps li{margin:6px 0;padding-left:26px;position:relative}
@@ -57,46 +85,13 @@ const css = `
 #bStage{position:absolute;left:0;top:0;transform-origin:0 0}
 #bStage img{display:block;pointer-events:none;-webkit-user-drag:none}
 #bStage svg{position:absolute;left:0;top:0;overflow:visible}
-#bFit{position:absolute;right:10px;top:10px;z-index:2;background:rgba(20,18,28,.85);border:1px solid var(--line2);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:600;color:var(--text)}
 #bHint{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:2;background:rgba(255,122,61,.92);color:#1a1020;border-radius:999px;padding:6px 14px;font-size:12px;font-weight:600;display:none;max-width:70%;text-align:center}
 #bSaved{position:absolute;left:10px;top:12px;z-index:2;font-size:11px;color:var(--faint)}
 #bCredit{position:absolute;left:10px;bottom:6px;z-index:2;font-size:10px;color:rgba(255,255,255,.45)}
 #bBottom{flex:none;background:var(--nav);border-top:1px solid var(--line);padding:8px 10px calc(10px + env(safe-area-inset-bottom))}
-.bnote{font-size:13px;color:var(--text);padding:0 4px 8px;min-height:20px;white-space:pre-wrap;word-break:break-word}
-.bnote.none{color:var(--faint)}
-.bsteps{display:flex;gap:8px;align-items:center}
-.bsteps button{min-height:44px;border-radius:10px;background:var(--card);border:1px solid var(--line);font-weight:600;font-size:14px;color:var(--text)}
-.bsteps .nav{flex:none;width:72px}
-.bsteps .nav:disabled{opacity:.3}
-.bsteps .cur{flex:1}
-.btools{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin-bottom:8px}
-.btools button{min-height:44px;border-radius:10px;background:var(--card);border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font-size:11px;font-weight:600;color:var(--sub)}
-.btools button svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.btools button.on{background:var(--salmon);border-color:var(--salmon);color:#1a1020}
-.bopts{display:flex;gap:6px;align-items:center;margin-bottom:8px;min-height:32px;flex-wrap:wrap}
-.bopts .col{width:30px;height:30px;border-radius:50%;border:2px solid transparent}
-.bopts .col.on{border-color:#fff}
-.bopts .wd{min-width:40px;height:30px;border-radius:8px;background:var(--card);border:1px solid var(--line);font-size:11px;color:var(--sub)}
-.bopts .wd.on{border-color:#fff;color:var(--text)}
-.bopts .act{height:34px;padding:0 12px;border-radius:8px;background:var(--card);border:1px solid var(--line);font-size:12px;font-weight:600;color:var(--text)}
-.bopts .act.del{color:#ff8a8a}
-.bopts .lbl{font-size:11px;color:var(--faint);margin-right:2px}
 .bsheet-bg{position:fixed;inset:0;z-index:26;background:#0008;display:flex;align-items:flex-end}
 .bsheet{width:100%;max-height:78vh;overflow-y:auto;background:var(--bg);border-radius:18px 18px 0 0;padding:14px 14px calc(16px + env(safe-area-inset-bottom));border-top:1px solid var(--line)}
 .bsheet h3{margin:0 0 10px;font-size:15px;font-weight:600}
-.bpal-tabs{display:flex;gap:6px;margin-bottom:10px;overflow-x:auto}
-.bpal-tabs button{flex:none;padding:6px 12px;border-radius:999px;background:var(--card);border:1px solid var(--line);font-size:12px;font-weight:600;color:var(--sub)}
-.bpal-tabs button.on{background:var(--salmon);border-color:var(--salmon);color:#1a1020}
-.bpal{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.bpal button{display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 2px;border-radius:10px;background:var(--card);font-size:10px;line-height:1.2;color:var(--sub);min-height:72px}
-.bpal button img,.bpal button .mk{width:44px;height:44px;object-fit:contain;border-radius:10px;background:#0b0a12}
-.bpal button .mk{display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px}
-.bsl{list-style:none;margin:0;padding:0}
-.bsl li{display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
-.bsl li button.go{flex:1;text-align:left;font-size:13px;color:var(--text)}
-.bsl li button.go b{margin-right:6px}
-.bsl li.cur button.go{color:var(--salmon)}
-.bsl li button.x{flex:none;font-size:12px;color:#ff8a8a;padding:6px 8px}
 .bwave{display:flex;align-items:center;gap:10px;width:100%;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:12px;text-align:left;color:var(--text)}
 .bwave .bw-t{flex:1;min-width:0}
 .bwave b{font-size:14px;font-weight:600;display:block}
@@ -187,18 +182,19 @@ let statusCache = null; // { bases:Set(place), counts:{place:n} }
 async function loadStatus(){
   try {
     const [keys, boards] = await Promise.all([allBaseKeys(), allBoards()]);
-    const counts = {}; boards.forEach(b => { counts[b.place] = (counts[b.place] || 0) + 1; });
-    statusCache = { bases: new Set(keys), counts };
-  } catch (e){ statusCache = { bases: new Set(), counts: {}, err: true }; }
+    const counts = {}, own = {}; boards.forEach(b => { counts[b.place] = (counts[b.place] || 0) + 1; if (!isNwBg(b)) own[b.place] = (own[b.place] || 0) + 1; });
+    statusCache = { bases: new Set(keys), counts, own };
+  } catch (e){ statusCache = { bases: new Set(), counts: {}, own: {}, err: true }; }
   return statusCache;
 }
 function placeStatus(p){
   if (!statusCache) return ['…', ''];
   const n = statusCache.counts[p] || 0, b = statusCache.bases.has(p);
-  return n ? ['作戦' + n, 'has'] : b ? ['土台のみ', 'base'] : ['未登録', ''];
+  return n ? ['作戦' + n, 'has'] : nwKey(p) ? ['マップあり', 'base'] : b ? ['土台のみ', 'base'] : ['未登録', ''];
 }
 window.renderBoardList = function(kind){
-  let h = '<div class="bp-credit">マップの土台は、自分で撮ったスクショを使います（参考: <a href="' + SRC_URL + '" target="_blank" rel="noopener">' + SRC_NAME + '</a>のマップ）。画像はこのスマホの中だけに保存されます。</div>';
+  let h = '<div class="bp-credit">' + (kind === 'coop' ? 'サーモンランのマップは<a href="' + NW_URL + '" target="_blank" rel="noopener">' + NW_NAME + '</a>のものを、作者のガンジーさんの許可を得て使っています。自分のスクショを土台にもできます。'
+    : 'バトルのマップの土台は、自分で撮ったスクショを使います。画像はこのスマホの中だけに保存されます。') + '</div>';
   if (kind === 'coop'){
     COOP_STAGES.forEach(sid => {
       h += '<div class="bp-stage"><div class="bp-name"><img src="' + esc(stageImg[sid] || '') + '" alt="">' + esc(nameById(sid)) + '</div><div class="bp-tides">' +
@@ -249,33 +245,40 @@ async function drawPlace(){
   if (pl !== my) return;
   boards = boards.filter(b => b.place === pl.place).sort((a, b) => b.updated - a.updated);
   if (pl.baseUrl){ URL.revokeObjectURL(pl.baseUrl); pl.baseUrl = null; }
-  const coop = pl.place[0] === 'c', tide = coop ? pl.place.split(':')[2] : null;
-  const ngUrl = coop ? 'https://salmon-learn-nw.gungee.jp/map/?stage=' + (COOP_INTERNAL[placeStage(pl.place)] || '') + '&tide=' + tide : '';
-  let h = '';
+  const coop = pl.place[0] === 'c', nk = nwKey(pl.place);
+  // 自分のスクショを土台にする部分（バトルはこれだけ。サモランはNWのマップが基本で、これは畳んでおく）
+  let own = '';
   if (pl.pending){
-    h += '<div class="bpl-base"><div class="psh">この画像を「' + esc(placeName(pl.place)) + '」の土台にします</div><img src="' + pl.pending.url + '" style="transform:rotate(' + pl.pending.rot + 'deg)" alt="">' +
+    own += '<div class="bpl-base"><div class="psh">この画像を「' + esc(placeName(pl.place)) + '」の土台にします</div><img src="' + pl.pending.url + '" style="transform:rotate(' + pl.pending.rot + 'deg)" alt="">' +
       '<div class="bbtn-row"><button class="bbtn" data-brot="-90">↺ 左に回す</button><button class="bbtn" data-brot="90">↻ 右に回す</button></div>' +
       '<button class="bbtn main" data-bsave="1">この画像で登録</button><button class="bbtn sub" data-bcancel="1">やめる</button></div>';
   } else if (base){
     pl.baseUrl = URL.createObjectURL(base.blob);
-    h += '<div class="bpl-base"><div class="psh">土台（' + esc(base.src || '自分で撮ったスクショ') + '）</div><img src="' + pl.baseUrl + '" alt="">' +
+    own += '<div class="bpl-base"><div class="psh">自分のスクショ</div><img src="' + pl.baseUrl + '" alt="">' +
+      '<button class="bbtn' + (nk ? '' : ' main') + '" data-bnew="own">＋ このスクショで作戦図を作る</button>' +
       '<button class="bbtn sub" data-bpick="1">別の画像で登録し直す</button></div>';
   } else {
-    h += '<div class="bpl-base"><div class="bpl-empty"><b style="color:var(--text);font-size:14px">' + esc(placeName(pl.place)) + 'の土台がまだありません</b>' +
-      '<ol class="bpl-steps">' + (coop ? '<li>下の「' + SRC_NAME + 'で開く」で、このステージ・潮位のマップを表示する</li><li>スクショを撮り、写真アプリでマップの部分だけに切り抜く</li><li>このアプリに戻って「写真から選ぶ」</li>'
+    own += '<div class="bpl-base"><div class="bpl-empty">' + (nk ? '' : '<b style="color:var(--text);font-size:14px">' + esc(placeName(pl.place)) + 'の土台がまだありません</b>') +
+      '<ol class="bpl-steps">' + (coop ? '<li>使いたいマップの画面をスクショする</li><li>写真アプリでマップの部分だけに切り抜く</li><li>このアプリに戻って「写真から選ぶ」</li>'
         : '<li>ゲームのバトル中にXボタンでマップを出してスクショ（Switchの撮影ボタン）</li><li>スマホに送って、写真アプリでマップの部分だけに切り抜く</li><li>このアプリに戻って「写真から選ぶ」</li>') + '</ol></div>' +
-      (coop ? '<a class="bbtn" href="' + esc(ngUrl) + '" target="_blank" rel="noopener">' + SRC_NAME + 'で開く ↗</a>' : '') +
-      '<button class="bbtn main" data-bpick="1">写真から選ぶ</button></div>';
+      '<button class="bbtn' + (nk ? '' : ' main') + '" data-bpick="1">写真から選ぶ</button></div>';
   }
+  let h = '';
+  if (nk){
+    h += '<div class="bpl-base"><div class="psh">マップ（' + NW_NAME + '）</div><img src="' + esc(nwImg(nk, 'nw')) + '" alt="' + esc(placeName(pl.place)) + 'のマップ">' +
+      '<button class="bbtn main" data-bnew="nw">＋ この地図で作戦図を作る</button></div>';
+  } else h += own;
   h += '<div class="sec">作戦図</div><div class="bpl-list">';
-  if (!boards.length) h += '<div class="empty" style="padding:14px">' + (base ? '土台は登録済みです。下の「作戦図を作る」から始められます' : '土台を登録すると作れます') + '</div>';
+  if (!boards.length) h += '<div class="empty" style="padding:14px">' + (nk ? 'まだありません。上の「この地図で作戦図を作る」から始められます' : base ? '土台は登録済みです。「このスクショで作戦図を作る」から始められます' : '土台を登録すると作れます') + '</div>';
   boards.forEach(b => {
-    h += '<div class="row"><button class="rinfo" style="text-align:left;color:var(--text)" data-bopen="' + esc(b.id) + '"><div class="rname">' + esc(b.title) + '</div><div class="rprev">手順' + b.steps.length + '・' + fmtDate(b.updated) + '</div></button>' +
+    h += '<div class="row"><button class="rinfo" style="text-align:left;color:var(--text)" data-bopen="' + esc(b.id) + '"><div class="rname">' + esc(b.title) + '</div><div class="rprev">' +
+      (isNwBg(b) ? 'NWのマップ' : '自分のスクショ') + '・手順' + b.steps.length + '・' + fmtDate(b.updated) + '</div></button>' +
       (pl.assign ? '<button class="use" data-buse="' + esc(b.id) + '">このWAVEに使う</button>' : '') + '</div>';
   });
-  h += '</div>' + (base ? '<button class="bbtn main" data-bnew="1">＋ 作戦図を作る</button>' : '') +
-    (pl.assign && memoOf(bdKey(pl.assign.sid, pl.assign.wave)) ? '<button class="bbtn sub" data-bunassign="1">このWAVEの割り当てを外す</button>' : '') +
-    '<div class="bp-credit">土台の画像は自分で撮ったスクショです。マップの見方は<a href="' + SRC_URL + '" target="_blank" rel="noopener">' + SRC_NAME + '</a>を参考にしています。</div>';
+  h += '</div>' + (pl.assign && memoOf(bdKey(pl.assign.sid, pl.assign.wave)) ? '<button class="bbtn sub" data-bunassign="1">このWAVEの割り当てを外す</button>' : '');
+  if (nk) h += '<details class="bpl-own"' + (pl.pending || base ? ' open' : '') + '><summary>自分のスクショを土台にする</summary>' + own + '</details>';
+  h += '<div class="bp-credit">' + (nk ? 'マップは<a href="' + NW_URL + '" target="_blank" rel="noopener">' + NW_NAME + '</a>のものを、作者のガンジーさんの許可を得て使っています。'
+    : '土台の画像は自分で撮ったスクショです。このスマホの中だけに保存されます。') + '</div>';
   body.innerHTML = h;
 }
 function fmtDate(ms){ const d = new Date(ms); return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); }
@@ -301,7 +304,7 @@ $('bplaceBody').addEventListener('click', async e => {
   const t = e.target.closest('button'); if (!t || !pl) return;
   const d = t.dataset;
   if (d.bpick){
-    if (!d.bconfirmed && statusCache && statusCache.counts[pl.place] && !confirm('この場所の作戦図は、今の画像に合わせて置いてあります。別の画像にすると位置がずれることがあります。登録し直しますか？')) return;
+    if (!d.bconfirmed && statusCache && statusCache.own[pl.place] && !confirm('この場所の「自分のスクショ」の作戦図は、今の画像に合わせて置いてあります。別の画像にすると位置がずれることがあります。登録し直しますか？')) return;
     $('bplaceFile').click();
   }
   else if (d.brot){ pl.pending.rot = (pl.pending.rot + (+d.brot) + 360) % 360; drawPlace(); }
@@ -312,7 +315,7 @@ $('bplaceBody').addEventListener('click', async e => {
     t.disabled = true; t.textContent = '登録しています…';
     try {
       const img = await prepareImage(pend.file, pend.rot);
-      await basePut(key, { blob: img.blob, w: img.w, h: img.h, src: '自分で撮ったスクショ（参考: ' + SRC_NAME + '）', updated: Date.now() });
+      await basePut(key, { blob: img.blob, w: img.w, h: img.h, src: '自分で撮ったスクショ', updated: Date.now() });
       URL.revokeObjectURL(pend.url);
       if (pl === my) pl.pending = null;
       await loadStatus(); toast('土台を登録しました');
@@ -322,10 +325,14 @@ $('bplaceBody').addEventListener('click', async e => {
   else if (d.bnew){
     const my = pl, key = pl.place, assign = pl.assign;
     t.disabled = true;
-    const base = await baseGet(key).catch(() => null);
-    if (!base || pl !== my){ t.disabled = false; return; }
+    let size = null, bg = 'own';
+    if (d.bnew === 'nw'){ const nk = nwKey(key); if (nk){ size = nwSize(nk); bg = 'nw'; } }
+    else { const base = await baseGet(key).catch(() => null); if (base) size = { w: base.w, h: base.h }; }
+    if (!size || pl !== my){ t.disabled = false; return; }
+    await loadStatus();
+    if (pl !== my){ t.disabled = false; return; }
     const n = ((statusCache && statusCache.counts[key]) || 0) + 1;
-    const b = { id: uid(), place: key, title: placeName(key) + ' ' + n, w: base.w, h: base.h,
+    const b = { id: uid(), place: key, title: placeName(key) + ' ' + n, w: size.w, h: size.h, bg,
       steps: [{ id: uid(), note: '', objs: [] }], created: Date.now(), updated: Date.now() };
     try { await boardPut(b); } catch (err){ t.disabled = false; toast('保存できませんでした'); return; }
     await loadStatus();
@@ -375,7 +382,6 @@ const css2 = `
 .bopt input{flex:1;min-width:90px;height:32px;background:var(--card);border:1px solid var(--line2);border-radius:8px;color:var(--text);font:inherit;font-size:16px;padding:0 8px}
 .bvbtns{position:absolute;right:8px;top:8px;z-index:2;display:flex;flex-direction:column;gap:6px}
 .bvbtns button{background:rgba(20,18,28,.85);border:1px solid var(--line2);border-radius:999px;padding:6px 11px;font-size:11px;font-weight:600;color:var(--text)}
-#bFit{display:none}
 #bBottom{padding:6px 8px calc(8px + env(safe-area-inset-bottom))}
 .bstrip{margin-bottom:6px}
 .bcats{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;margin-bottom:4px}
@@ -414,8 +420,8 @@ bv.innerHTML = '<div class="ehead"><button class="back" id="bBack">‹ 戻る</b
   '<button class="hb" id="bUndo" aria-label="取り消し">↶</button><button class="hb" id="bRedo" aria-label="やり直し">↷</button><button class="hb main" id="bMode">編集</button></div>' +
   '<div id="bTop"></div>' +
   '<div id="bView"><div id="bStage"><img id="bImg" alt=""><svg id="bSvg" xmlns="http://www.w3.org/2000/svg"></svg></div>' +
-  '<div class="bvbtns"><button id="bFitBtn">全体を表示</button><button id="bRot">⟳ 向きを回す</button></div>' +
-  '<button id="bFit"></button><div id="bHint"></div><div id="bSaved"></div><div id="bCredit">土台: 自分で撮ったスクショ（参考: ' + SRC_NAME + '）</div></div>' +
+  '<div class="bvbtns"><button id="bFitBtn">全体を表示</button><button id="bRot">⟳ 向きを回す</button><button id="bStyle"></button></div>' +
+  '<div id="bHint"></div><div id="bSaved"></div><div id="bCredit"></div></div>' +
   '<div id="bBottom"></div>';
 document.body.appendChild(bv);
 
@@ -433,13 +439,13 @@ async function openBoard(id, opts){
   try { b = await boardGet(id); } catch (e){}
   if (my !== openSeq || B || pl !== plAt || (play && play.wave) !== playAt) return;
   if (!b){ toast('作戦図が見つかりません（削除されたかもしれません）'); return; }
-  const base = await baseGet(b.place).catch(() => null);
-  if (my !== openSeq || B || pl !== plAt || (play && play.wave) !== playAt) return;
+  const bgImg = await boardBgUrl(b).catch(() => null);
+  if (my !== openSeq || B || pl !== plAt || (play && play.wave) !== playAt){ if (bgImg && bgImg.own) URL.revokeObjectURL(bgImg.url); return; }
   B = b; if (![0, 90, 180, 270].includes(B.rot)) B.rot = 0;
   const last = load('sm_lasticons', []);
   bs = { edit: !!opts.edit, step: 0, tool: 'select', color: COLORS[1], wd: 1, sel: null, pending: null, view: null, wave: opts.wave, imgUrl: null,
     hist: [JSON.stringify(b.steps)], hi: 0, lastIcons: Array.isArray(last) ? last : [], ver: 0, savedVer: 0, cat: 'boss', playing: null };
-  if (base){ bs.imgUrl = URL.createObjectURL(base.blob); }
+  if (bgImg){ bs.imgUrl = bgImg.url; bs.imgOwn = bgImg.own; }
   $('bImg').src = bs.imgUrl || '';
   $('bImg').width = B.w; $('bImg').height = B.h;
   const svg = $('bSvg'); svg.setAttribute('width', B.w); svg.setAttribute('height', B.h); svg.setAttribute('viewBox', '0 0 ' + B.w + ' ' + B.h);
@@ -452,7 +458,7 @@ function closeBoard(fromPop){
   openSeq++; // 読み込み中の openBoard を無効にする
   if (!B) return;
   stopPlay(); cancelGesture(); endStripDrag(true); flushInputs();
-  if (bs.imgUrl) URL.revokeObjectURL(bs.imgUrl);
+  if (bs.imgUrl && bs.imgOwn) URL.revokeObjectURL(bs.imgUrl);
   B = null; bs = null; bv.classList.remove('open', 'editing'); closeBSheet();
   if (!fromPop && history.state && history.state.board) history.back();
   loadStatus().then(() => { if (pl) drawPlace(); render(); if (play) drawPlay(false); });
@@ -561,6 +567,8 @@ function drawBoard(){
   if (!B) return;
   bv.classList.toggle('editing', !!bs.edit);
   drawSvg();
+  $('bCredit').textContent = creditOf(B);
+  { const k = isNwBg(B) && nwKey(B.place), sb = $('bStyle'); sb.style.display = k && NW_MAPS[k][2] ? '' : 'none'; sb.textContent = B.bg === 'nw3d' ? '線画で見る' : '立体で見る'; }
   const waveLab = bs.wave ? 'WAVE ' + bs.wave + '・' : '';
   $('bTitle').innerHTML = esc(B.title) + '<small>' + esc(waveLab + placeName(B.place)) + (bs.edit ? '・名前はここをタップ' : '') + '</small>';
   $('bMode').textContent = bs.edit ? '完了' : '編集';
@@ -642,6 +650,13 @@ $('bRedo').onclick = () => { if (!bs) return; flushInputs(); if (bs.hi < bs.hist
 $('bBack').onclick = () => { if (history.state && history.state.board) history.back(); else closeBoard(false); };
 $('bMode').onclick = () => { if (!bs) return; flushInputs(); stopPlay(); cancelGesture(); endStripDrag(true); bs.edit = !bs.edit; bs.pending = null; bs.sel = null; bs.tool = 'select'; drawBoard(); requestAnimationFrame(fitView); };
 $('bFitBtn').onclick = () => fitView();
+// NWのマップは線画と立体風を切り替えられる（同じ範囲で重なるので、置いた物の位置はそのまま）
+$('bStyle').onclick = () => {
+  if (!B || !isNwBg(B)) return;
+  const k = nwKey(B.place); if (!k || !NW_MAPS[k][2]) return;
+  B.bg = B.bg === 'nw3d' ? 'nw' : 'nw3d'; bs.imgUrl = nwImg(k, B.bg); $('bImg').src = bs.imgUrl;
+  B.updated = Date.now(); persist(); drawBoard();
+};
 $('bRot').onclick = () => { if (!B) return; flushInputs(); cancelGesture(); B.rot = ((B.rot || 0) + 90) % 360; fitView(); drawSvg(); persist(); };
 $('bTitle').onclick = () => {
   if (!bs || !bs.edit) return;
@@ -999,6 +1014,8 @@ if (window.ResizeObserver) new ResizeObserver(() => { if (B && bs && bs.view && 
 // 小さな絵（手順1）を並べる。タップで見る画面。無ければ作る入口だけを1行で出す
 const css3 = `
 .nowbd:empty{display:none}
+.bwthumb{display:block;width:100%;margin:-4px 0 12px;padding:0;background:none;border:0}
+.bwthumb:empty{display:none}
 .nowbd{margin:-2px 0 8px}
 .nbrow{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:2px 0 2px}
 .nbrow::-webkit-scrollbar{display:none}
@@ -1013,6 +1030,7 @@ const css3 = `
 `;
 const st3 = document.createElement('style'); st3.textContent = css3; document.head.appendChild(st3);
 let nowSeq = 0, nowUrls = [];
+const prefetched = new Set();
 function thumbSVG(b){
   // objSVG は開いている作戦図（B）を基準に大きさを決めるので、一時的に差し替えて描く（同期処理の中だけ）
   const keep = B; B = Object.assign({}, b, { rot: 0 });
@@ -1020,12 +1038,23 @@ function thumbSVG(b){
   catch (e){ return ''; }
   finally { B = keep; }
 }
+// ばちこんのWAVE画面に出す、割り当てた作戦図の小さな絵（手順1）。{ html, url }（url は自分のスクショの時だけ。使い終わったら解放する）
+// 縦長のマップでも画面を埋めないよう、高さは画面の38%まで
+window.boardThumb = async b => {
+  if (!b || !Array.isArray(b.steps) || !(b.w > 0 && b.h > 0)) return { html: '', url: null };
+  const bg = await boardBgUrl(b).catch(() => null);
+  return { url: bg && bg.own ? bg.url : null,
+    html: '<div style="width:min(100%,calc(38vh * ' + (b.w / b.h).toFixed(4) + '));margin:0 auto"><div class="nbthumb" style="padding-top:' + (b.h / b.w * 100).toFixed(2) + '%;border-radius:10px;overflow:hidden">' +
+      (bg ? '<img src="' + esc(bg.url) + '" alt="">' : '') + '<svg viewBox="0 0 ' + b.w + ' ' + b.h + '" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">' + thumbSVG(b) + '</svg></div></div>' };
+};
 // いまのステージを離れたら、読み込み中の処理を捨てて画像を手放す
 window.releaseNowBoards = () => { nowSeq++; nowUrls.forEach(u => URL.revokeObjectURL(u)); nowUrls = []; };
 window.fillNowBoards = async function(){
   const my = ++nowSeq;
   const slots = [...document.querySelectorAll('[data-nbd]')];
   if (!slots.length) return;
+  // 今のサモランのステージのマップ（3つの潮位）を先に読んでおく（スマホに保存され、電波が弱くても作戦図がすぐ開ける）
+  slots.forEach(el => { const k = el.dataset.nbd; if (k.startsWith('c:')) TIDES.forEach(([t]) => { const nk = nwKey(k + ':' + t); if (nk && !prefetched.has(nk)){ prefetched.add(nk); fetch(nwImg(nk, 'nw')).then(r => { if (!r.ok) prefetched.delete(nk); }, () => prefetched.delete(nk)); } }); });
   let boards = [];
   try { boards = (await allBoards()).filter(b => b && typeof b.place === 'string' && Array.isArray(b.steps) && b.w > 0 && b.h > 0); } catch (e){ return; }
   if (my !== nowSeq) return;
@@ -1037,7 +1066,7 @@ window.fillNowBoards = async function(){
       .sort((a, b) => (order[a.place.split(':')[2]] || 0) - (order[b.place.split(':')[2]] || 0) || b.updated - a.updated));
   });
   // 土台の画像（同じ場所は1回だけ読む）
-  const places = [...new Set([...groups.values()].flat().map(b => b.place))], urls = {};
+  const places = [...new Set([...groups.values()].flat().filter(b => !isNwBg(b)).map(b => b.place))], urls = {}; // 自分のスクショの土台だけ読む（NWのマップは同梱のファイル）
   for (const p of places){
     try { const base = await baseGet(p); if (base) urls[p] = URL.createObjectURL(base.blob); } catch (e){}
     if (my !== nowSeq){ Object.values(urls).forEach(u => URL.revokeObjectURL(u)); return; } // 新しい描画が来たら途中でやめる
@@ -1056,7 +1085,7 @@ window.fillNowBoards = async function(){
       const tide = b.place.startsWith('c:') ? TIDE_NAME[b.place.split(':')[2]] || '' : '';
       const note = b.steps[0] && b.steps[0].note;
       return '<button class="nbcard" data-nbopen="' + esc(b.id) + '"><div class="nbthumb" style="padding-top:' + (b.h / b.w * 100).toFixed(2) + '%">' +
-        (urls[b.place] ? '<img src="' + urls[b.place] + '" alt="">' : '') +
+        (isNwBg(b) && nwKey(b.place) ? '<img src="' + esc(nwImg(nwKey(b.place), b.bg)) + '" alt="">' : urls[b.place] ? '<img src="' + urls[b.place] + '" alt="">' : '') +
         '<svg viewBox="0 0 ' + b.w + ' ' + b.h + '" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">' + thumbSVG(b) + '</svg></div>' +
         '<div class="nbcap">' + esc(b.title) + '<small>' + esc([tide, b.steps.length > 1 ? '手順' + b.steps.length : '', note || ''].filter(Boolean).join('・')) + '</small></div></button>';
     }).join('') + '</div>';
@@ -1115,8 +1144,10 @@ function cleanBoard(b, icons){
   // 1つの手順に同じIDが2つあると選択・再生が混ざるので、2つ目以降は別IDに
   steps.forEach(s => { const seen = new Set(); s.objs.forEach(o => { if (seen.has(o.id)) o.id = uid(); seen.add(o.id); }); });
   if (!steps.length) return null;
+  // NWのマップの作戦図は、同梱のマップの大きさに合わせる（無い場所なら自分のスクショ扱い）
+  const nk = (b.bg === 'nw' || b.bg === 'nw3d') ? nwKey(b.place) : null;
   return { id: typeof b.id === 'string' && ID_RE.test(b.id) ? b.id : uid(), place: b.place, title: String(b.title || '作戦図').slice(0, 40),
-    w, h, rot: [0, 90, 180, 270].includes(b.rot) ? b.rot : 0, steps, created: Number.isFinite(b.created) ? b.created : Date.now(), updated: Number.isFinite(b.updated) ? b.updated : Date.now() };
+    bg: nk ? b.bg : 'own', w: nk ? nwSize(nk).w : w, h: nk ? nwSize(nk).h : h, rot: [0, 90, 180, 270].includes(b.rot) ? b.rot : 0, steps, created: Number.isFinite(b.created) ? b.created : Date.now(), updated: Number.isFinite(b.updated) ? b.updated : Date.now() };
 }
 // 読み込み: 今ある土台・作戦図は消さずに追加（同じIDがあれば新しいIDの別の作戦図として入れる）。土台は無い場所だけ入れる。
 // 画像は実際に読み込めるか確かめ、取り込みと同じく縮小し直す。戻り値の idMap（元のID→入れたID）でWAVEの割り当てを付け替える
