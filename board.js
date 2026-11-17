@@ -346,23 +346,81 @@ $('bplaceBody').addEventListener('click', async e => {
 });
 
 // ---------- 作戦図の画面 ----------
-const ICON_SVG = {
-  move: '<svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg>',
-  select: '<svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 2-3 6z"/></svg>',
-  pen: '<svg viewBox="0 0 24 24"><path d="M4 20l4-1 11-11-3-3L5 16z"/></svg>',
-  arrow: '<svg viewBox="0 0 24 24"><path d="M4 20L20 4M20 4h-7M20 4v7"/></svg>',
-  add: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
-};
+// 2026-11-17 valo-memo の作戦ボード（ユーザーいわく「めっちゃ使いやすくした」）に合わせて作り直し。スマホ向けに:
+//  ・アイコンは画面下の帯にいつも出しておく（押してから地図をタップ、または上へ引っぱって地図に落とす）
+//  ・道具は 選ぶ/ペン/矢印/直線/四角/丸/文字/消しゴム、色と太さはそのすぐ下
+//  ・手順は番号のボタンで直接切り替え、＋で今の手順を写して追加、▶ 再生で手順の間を動かして見せる（写した物は同じIDのまま）
+//  ・選んだ物は、その場で色・太さ・大きさ・文字・複製・削除（入力の小窓を開かない）
+//  ・「向きを回す」で地図を90°ずつ回せる（作戦図ごとに覚える）
+const css2 = `
+#board .ehead{gap:6px}
+#bTop{flex:none;background:var(--nav);border-bottom:1px solid var(--line);padding:6px 8px 4px;display:none}
+#board.editing #bTop{display:block}
+.btl{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px}
+.btl::-webkit-scrollbar{display:none}
+.btl button{flex:none;min-width:46px;min-height:44px;border-radius:10px;background:var(--card);border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font-size:10px;font-weight:600;color:var(--sub);padding:2px 6px}
+.btl button .gl{font-size:16px;line-height:1.1;color:var(--text)}
+.btl button.on{background:var(--salmon);border-color:var(--salmon);color:#1a1020}
+.btl button.on .gl{color:#1a1020}
+.bopt{display:flex;gap:6px;align-items:center;min-height:36px;overflow-x:auto;scrollbar-width:none}
+.bopt::-webkit-scrollbar{display:none}
+.bopt .col{flex:none;width:28px;height:28px;border-radius:50%;border:2px solid transparent}
+.bopt .col.on{border-color:#fff;box-shadow:0 0 0 2px var(--nav) inset}
+.bopt .seg3{flex:none;display:flex;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:2px}
+.bopt .seg3 button{min-width:38px;height:28px;border-radius:6px;font-size:11px;font-weight:600;color:var(--sub)}
+.bopt .seg3 button.on{background:var(--card2);color:var(--text)}
+.bopt .act{flex:none;height:32px;padding:0 11px;border-radius:8px;background:var(--card);border:1px solid var(--line);font-size:12px;font-weight:600;color:var(--text)}
+.bopt .act.del{color:#ff8a8a}
+.bopt .lbl{flex:none;font-size:10px;color:var(--faint);font-weight:600}
+.bopt input{flex:1;min-width:90px;height:32px;background:var(--card);border:1px solid var(--line2);border-radius:8px;color:var(--text);font:inherit;font-size:16px;padding:0 8px}
+.bvbtns{position:absolute;right:8px;top:8px;z-index:2;display:flex;flex-direction:column;gap:6px}
+.bvbtns button{background:rgba(20,18,28,.85);border:1px solid var(--line2);border-radius:999px;padding:6px 11px;font-size:11px;font-weight:600;color:var(--text)}
+#bFit{display:none}
+#bBottom{padding:6px 8px calc(8px + env(safe-area-inset-bottom))}
+.bstrip{margin-bottom:6px}
+.bcats{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;margin-bottom:4px}
+.bcats::-webkit-scrollbar{display:none}
+.bcats button{flex:none;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;color:var(--sub);background:var(--card);border:1px solid var(--line)}
+.bcats button.on{color:#1a1020;background:var(--salmon);border-color:var(--salmon)}
+.bicons{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;touch-action:pan-x;padding-bottom:2px}
+.bicons::-webkit-scrollbar{display:none}
+.bicons button{flex:none;width:54px;display:flex;flex-direction:column;align-items:center;gap:1px;border-radius:10px;padding:3px 0;font-size:9px;color:var(--sub);line-height:1.15;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.bicons button img,.bicons button .mk{width:40px;height:40px;object-fit:contain;border-radius:50%;background:#0b0a12;border:1px solid var(--line2);pointer-events:none}
+.bicons button .mk{display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#1a1020;border:0}
+.bicons button span{width:52px;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.bicons button.on{background:rgba(255,122,61,.18);color:var(--salmon)}
+.bghost{position:fixed;left:0;top:0;z-index:60;pointer-events:none;width:52px;height:52px;border-radius:50%;background:#0b0a12;border:2px solid #fff;box-shadow:0 6px 18px #000a;display:flex;align-items:center;justify-content:center;font-weight:700;color:#1a1020}
+.bghost img{width:44px;height:44px;object-fit:contain}
+.bsteprow{display:flex;gap:4px;align-items:center;overflow-x:auto;scrollbar-width:none}
+.bsteprow::-webkit-scrollbar{display:none}
+.bsteprow .sn{flex:none;min-width:40px;height:40px;border-radius:10px;background:var(--card);border:1px solid var(--line);font-size:14px;font-weight:700;color:var(--sub)}
+.bsteprow .sn.on{background:var(--salmon);border-color:var(--salmon);color:#1a1020}
+.bsteprow .sx{flex:none;height:40px;padding:0 12px;border-radius:10px;background:var(--card);border:1px solid var(--line);font-size:12px;font-weight:600;color:var(--text)}
+.bsteprow .sx.play{color:var(--salmon)}
+.bsteprow .sx.del{color:#ff8a8a}
+.bsteprow .lab{flex:none;font-size:10px;color:var(--faint);font-weight:600;margin-right:2px}
+.bmemo{margin-top:6px}
+.bmemo textarea{width:100%;min-height:38px;max-height:84px;resize:none;background:var(--card);border:1px solid var(--line);border-radius:10px;color:var(--text);font:inherit;font-size:16px;line-height:1.4;padding:7px 10px}
+.bmemo .vt{font-size:13px;color:var(--text);padding:2px 4px;white-space:pre-wrap;word-break:break-word}
+.bmemo .vt.none{color:var(--faint)}
+`;
+const st2 = document.createElement('style'); st2.textContent = css2; document.head.appendChild(st2);
+
+const TOOLS = [['select', '↖', '選ぶ'], ['pen', '✎', 'ペン'], ['arrow', '➜', '矢印'], ['line', '／', '直線'], ['rect', '▭', '四角'], ['circle', '◯', '丸'], ['text', 'A', '文字'], ['erase', '⌫', '消しゴム']];
+const WD_LABEL = [['細い', 0], ['ふつう', 1], ['太い', 2]];
+const SZ_LABEL = [['小', 0], ['中', 1], ['大', 2]];
 const bv = document.createElement('div'); bv.id = 'board'; bv.className = 'ovl';
 bv.innerHTML = '<div class="ehead"><button class="back" id="bBack">‹ 戻る</button><button id="bTitle"></button>' +
   '<button class="hb" id="bUndo" aria-label="取り消し">↶</button><button class="hb" id="bRedo" aria-label="やり直し">↷</button><button class="hb main" id="bMode">編集</button></div>' +
+  '<div id="bTop"></div>' +
   '<div id="bView"><div id="bStage"><img id="bImg" alt=""><svg id="bSvg" xmlns="http://www.w3.org/2000/svg"></svg></div>' +
-  '<button id="bFit">全体表示</button><div id="bHint"></div><div id="bSaved"></div><div id="bCredit">土台: 自分で撮ったスクショ（参考: ' + SRC_NAME + '）</div></div>' +
+  '<div class="bvbtns"><button id="bFitBtn">全体を表示</button><button id="bRot">⟳ 向きを回す</button></div>' +
+  '<button id="bFit"></button><div id="bHint"></div><div id="bSaved"></div><div id="bCredit">土台: 自分で撮ったスクショ（参考: ' + SRC_NAME + '）</div></div>' +
   '<div id="bBottom"></div>';
 document.body.appendChild(bv);
 
 let B = null;      // 開いている作戦図
-let bs = null;     // 画面の状態 { edit, step, tool, color, wd, sel, pending, view:{s,tx,ty}, wave, imgUrl, hist, hi }
+let bs = null;     // 画面の状態
 let openSeq = 0;
 let saveQueue = Promise.resolve();     // 保存の列（board.js 全体で1本）
 const deletedIds = new Set();          // 削除した作戦図（後から保存が来ても書かない）
@@ -377,9 +435,10 @@ async function openBoard(id, opts){
   if (!b){ toast('作戦図が見つかりません（削除されたかもしれません）'); return; }
   const base = await baseGet(b.place).catch(() => null);
   if (my !== openSeq || B || pl !== plAt || (play && play.wave) !== playAt) return;
-  B = b;
+  B = b; if (![0, 90, 180, 270].includes(B.rot)) B.rot = 0;
+  const last = load('sm_lasticons', []);
   bs = { edit: !!opts.edit, step: 0, tool: 'select', color: COLORS[1], wd: 1, sel: null, pending: null, view: null, wave: opts.wave, imgUrl: null,
-    hist: [JSON.stringify(b.steps)], hi: 0, lastIcons: load('sm_lasticons', []), ver: 0, savedVer: 0 };
+    hist: [JSON.stringify(b.steps)], hi: 0, lastIcons: Array.isArray(last) ? last : [], ver: 0, savedVer: 0, cat: 'boss', playing: null };
   if (base){ bs.imgUrl = URL.createObjectURL(base.blob); }
   $('bImg').src = bs.imgUrl || '';
   $('bImg').width = B.w; $('bImg').height = B.h;
@@ -387,14 +446,14 @@ async function openBoard(id, opts){
   bv.classList.add('open');
   history.pushState({ board: true }, '');
   $('bSaved').textContent = '';
-  requestAnimationFrame(() => { fitView(); drawBoard(); });
+  drawBoard(); requestAnimationFrame(fitView);
 }
 function closeBoard(fromPop){
   openSeq++; // 読み込み中の openBoard を無効にする
   if (!B) return;
-  cancelGesture();
+  stopPlay(); cancelGesture(); endStripDrag(true); flushInputs();
   if (bs.imgUrl) URL.revokeObjectURL(bs.imgUrl);
-  B = null; bs = null; bv.classList.remove('open'); closeBSheet();
+  B = null; bs = null; bv.classList.remove('open', 'editing'); closeBSheet();
   if (!fromPop && history.state && history.state.board) history.back();
   loadStatus().then(() => { if (pl) drawPlace(); render(); if (play) drawPlay(false); });
 }
@@ -411,82 +470,147 @@ window.boardMeta = async id => { try { return await boardGet(id); } catch (e){ r
 
 const D = () => Math.max(B.w, B.h);
 const curObjs = () => B.steps[bs.step].objs;
-function applyView(){ const v = bs.view; $('bStage').style.transform = 'translate(' + v.tx + 'px,' + v.ty + 'px) scale(' + v.s + ')'; }
+
+// ---- 表示（拡大・移動・回転）----
+// 画面上の点 P = T + s*(C + R(p - C))（C は土台の中心、R は回転）。逆に p = C + R⁻¹((P - T)/s - C)
+const rad = () => (B.rot || 0) * Math.PI / 180;
+function applyView(){
+  const v = bs.view, cx = B.w / 2, cy = B.h / 2;
+  $('bStage').style.transform = 'translate(' + v.tx + 'px,' + v.ty + 'px) scale(' + v.s + ') translate(' + cx + 'px,' + cy + 'px) rotate(' + (B.rot || 0) + 'deg) translate(' + (-cx) + 'px,' + (-cy) + 'px)';
+}
 function fitView(){
   if (!B) return;
-  const r = $('bView').getBoundingClientRect(), s = Math.min(r.width / B.w, r.height / B.h) * 0.96;
-  bs.view = { s, tx: (r.width - B.w * s) / 2, ty: (r.height - B.h * s) / 2, fit: s };
+  const r = $('bView').getBoundingClientRect(), side = (B.rot || 0) % 180 !== 0;
+  const rw = side ? B.h : B.w, rh = side ? B.w : B.h;
+  const s = Math.min(r.width / rw, r.height / rh) * 0.96;
+  bs.view = { s, tx: r.width / 2 - s * B.w / 2, ty: r.height / 2 - s * B.h / 2, fit: s, fitted: true }; // fitted: 全体表示のまま（動かしたら false）
   applyView();
 }
-const toImg = (cx, cy) => { const r = $('bView').getBoundingClientRect(), v = bs.view; return [(cx - r.left - v.tx) / v.s, (cy - r.top - v.ty) / v.s]; };
+function toImg(px, py){
+  const r = $('bView').getBoundingClientRect(), v = bs.view, a = -rad();
+  const qx = (px - r.left - v.tx) / v.s - B.w / 2, qy = (py - r.top - v.ty) / v.s - B.h / 2;
+  return [B.w / 2 + qx * Math.cos(a) - qy * Math.sin(a), B.h / 2 + qx * Math.sin(a) + qy * Math.cos(a)];
+}
+function toScreen(ix, iy){ // 画面のビューの中の座標（左上が0）
+  const v = bs.view, a = rad(), dx = ix - B.w / 2, dy = iy - B.h / 2;
+  return [v.tx + v.s * (B.w / 2 + dx * Math.cos(a) - dy * Math.sin(a)), v.ty + v.s * (B.h / 2 + dx * Math.sin(a) + dy * Math.cos(a))];
+}
 
+// ---- 描く ----
 // 大きさは土台の長い辺に対する割合（拡大すると一緒に大きくなる）
-const SZ = { icon: 0.06, text: 0.032, wd: [0.004, 0.007, 0.012] };
-function objSVG(o, selected){
-  const d = D(), id = esc(o.id), sel = selected ? ' sel' : '';
+const SZ = { icon: [0.045, 0.06, 0.08], text: [0.024, 0.032, 0.046], wd: [0.004, 0.007, 0.012] };
+const wdOf = o => SZ.wd[[0, 1, 2].includes(o.wd) ? o.wd : 1];
+const szOf = (arr, o) => arr[[0, 1, 2].includes(o.sz) ? o.sz : 1];
+function upright(x, y){ return B.rot ? ' transform="rotate(' + (-B.rot) + ' ' + x + ' ' + y + ')"' : ''; } // 地図を回してもアイコン・文字は立てたまま
+function hitAndSel(d, path, w, selected){
+  return '<path d="' + path + '" stroke="transparent" stroke-width="' + Math.max(w * 4, d * .03) + '" fill="none" stroke-linecap="round" stroke-linejoin="round"/>' +
+    (selected ? '<path d="' + path + '" stroke="#fff" stroke-width="' + (w + d * .006) + '" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".55"/>' : '');
+}
+function objSVG(o, selected, alpha){
+  const d = D(), id = esc(o.id), sel = selected ? ' sel' : '', op = alpha != null && alpha < 1 ? ' opacity="' + alpha.toFixed(2) + '"' : '';
+  const g0 = '<g class="bo' + sel + '" data-oid="' + id + '"' + op + '>';
   if (o.t === 'icon'){
-    const info = iconInfo(o.k), r = d * SZ.icon / 2;
-    let g = '<g class="bo' + sel + '" data-oid="' + id + '"><circle cx="' + o.x + '" cy="' + o.y + '" r="' + (r * 1.35) + '" fill="transparent"/>';
+    const info = iconInfo(o.k), r = d * szOf(SZ.icon, o) / 2;
+    let g = g0 + '<g' + upright(o.x, o.y) + '><circle cx="' + o.x + '" cy="' + o.y + '" r="' + (r * 1.35) + '" fill="transparent"/>';
     if (info.img) g += '<circle cx="' + o.x + '" cy="' + o.y + '" r="' + r + '" fill="#0b0a12" stroke="rgba(255,255,255,.75)" stroke-width="' + (d * .002) + '"/><image href="' + esc(info.img) + '" x="' + (o.x - r * .85) + '" y="' + (o.y - r * .85) + '" width="' + (r * 1.7) + '" height="' + (r * 1.7) + '"/>';
     else g += '<circle cx="' + o.x + '" cy="' + o.y + '" r="' + r + '" fill="' + esc(info.color) + '" stroke="#0b0a12" stroke-width="' + (d * .003) + '"/><text x="' + o.x + '" y="' + o.y + '" text-anchor="middle" dominant-baseline="central" font-size="' + (r * (info.mark.length > 1 ? .7 : 1.1)) + '" font-weight="700" fill="#1a1020">' + esc(info.mark) + '</text>';
     if (selected) g += '<circle cx="' + o.x + '" cy="' + o.y + '" r="' + (r * 1.25) + '" fill="none" stroke="#fff" stroke-dasharray="' + (d * .008) + '" stroke-width="' + (d * .003) + '"/>';
-    return g + '</g>';
+    return g + '</g></g>';
   }
   if (o.t === 'pen'){
-    const p = o.pts.map((q, i) => (i ? 'L' : 'M') + q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('');
-    const w = d * SZ.wd[[0, 1, 2].includes(o.wd) ? o.wd : 1];
-    return '<g class="bo' + sel + '" data-oid="' + id + '"><path d="' + p + '" stroke="transparent" stroke-width="' + Math.max(w * 4, d * .03) + '" fill="none" stroke-linecap="round" stroke-linejoin="round"/>' +
-      (selected ? '<path d="' + p + '" stroke="#fff" stroke-width="' + (w + d * .006) + '" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".55"/>' : '') +
-      '<path d="' + p + '" stroke="' + esc(o.c) + '" stroke-width="' + w + '" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>';
+    const p = o.pts.map((q, i) => (i ? 'L' : 'M') + q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join(''), w = d * wdOf(o);
+    return g0 + hitAndSel(d, p, w, selected) + '<path d="' + p + '" stroke="' + esc(o.c) + '" stroke-width="' + w + '" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>';
+  }
+  if (o.t === 'line'){
+    const p = 'M' + o.x1 + ' ' + o.y1 + 'L' + o.x2 + ' ' + o.y2, w = d * wdOf(o);
+    return g0 + hitAndSel(d, p, w, selected) + '<path d="' + p + '" stroke="' + esc(o.c) + '" stroke-width="' + w + '" stroke-linecap="round"/></g>';
   }
   if (o.t === 'arrow'){
-    const w = d * SZ.wd[[0, 1, 2].includes(o.wd) ? o.wd : 1], ang = Math.atan2(o.y2 - o.y1, o.x2 - o.x1), hl = Math.max(w * 4, d * .025);
+    const w = d * wdOf(o), ang = Math.atan2(o.y2 - o.y1, o.x2 - o.x1), hl = Math.max(w * 4, d * .025);
     const hx = o.x2 - Math.cos(ang) * hl, hy = o.y2 - Math.sin(ang) * hl, nx = -Math.sin(ang) * hl * .55, ny = Math.cos(ang) * hl * .55;
-    const line = 'M' + o.x1 + ' ' + o.y1 + 'L' + hx + ' ' + hy;
-    return '<g class="bo' + sel + '" data-oid="' + id + '"><path d="M' + o.x1 + ' ' + o.y1 + 'L' + o.x2 + ' ' + o.y2 + '" stroke="transparent" stroke-width="' + Math.max(w * 4, d * .03) + '"/>' +
-      (selected ? '<path d="M' + o.x1 + ' ' + o.y1 + 'L' + o.x2 + ' ' + o.y2 + '" stroke="#fff" stroke-width="' + (w + d * .006) + '" opacity=".55" stroke-linecap="round"/>' : '') +
-      '<path d="' + line + '" stroke="' + esc(o.c) + '" stroke-width="' + w + '" stroke-linecap="round"/>' +
+    return g0 + hitAndSel(d, 'M' + o.x1 + ' ' + o.y1 + 'L' + o.x2 + ' ' + o.y2, w, selected) +
+      '<path d="M' + o.x1 + ' ' + o.y1 + 'L' + hx + ' ' + hy + '" stroke="' + esc(o.c) + '" stroke-width="' + w + '" stroke-linecap="round"/>' +
       '<path d="M' + o.x2 + ' ' + o.y2 + 'L' + (hx + nx) + ' ' + (hy + ny) + 'L' + (hx - nx) + ' ' + (hy - ny) + 'Z" fill="' + esc(o.c) + '"/></g>';
   }
+  if (o.t === 'rect'){
+    const w = d * wdOf(o), p = 'M' + o.x + ' ' + o.y + 'h' + o.w + 'v' + o.h + 'h' + (-o.w) + 'Z';
+    return g0 + hitAndSel(d, p, w, selected) + '<path d="' + p + '" stroke="' + esc(o.c) + '" stroke-width="' + w + '" fill="' + esc(o.c) + '" fill-opacity=".12" stroke-linejoin="round"/></g>';
+  }
+  if (o.t === 'circle'){
+    const w = d * wdOf(o), p = 'M' + (o.x - o.r) + ' ' + o.y + 'a' + o.r + ' ' + o.r + ' 0 1 0 ' + (o.r * 2) + ' 0a' + o.r + ' ' + o.r + ' 0 1 0 ' + (-o.r * 2) + ' 0';
+    return g0 + hitAndSel(d, p, w, selected) + '<path d="' + p + '" stroke="' + esc(o.c) + '" stroke-width="' + w + '" fill="' + esc(o.c) + '" fill-opacity=".12"/></g>';
+  }
   if (o.t === 'text'){
-    const fs = d * SZ.text;
-    return '<g class="bo' + sel + '" data-oid="' + id + '"><text x="' + o.x + '" y="' + o.y + '" text-anchor="middle" dominant-baseline="central" font-size="' + fs + '" font-weight="700" fill="' + esc(o.c) + '" stroke="#0b0a12" stroke-width="' + (fs * .22) + '" paint-order="stroke" style="font-family:-apple-system,\'Hiragino Sans\',sans-serif">' + esc(o.s) + '</text>' +
-      (selected ? '<rect x="' + (o.x - fs * o.s.length * .55) + '" y="' + (o.y - fs * .8) + '" width="' + (fs * o.s.length * 1.1) + '" height="' + (fs * 1.6) + '" fill="none" stroke="#fff" stroke-dasharray="' + (d * .008) + '" stroke-width="' + (d * .003) + '"/>' : '') + '</g>';
+    const fs = d * szOf(SZ.text, o), s = String(o.s || '');
+    return g0 + '<g' + upright(o.x, o.y) + '><text x="' + o.x + '" y="' + o.y + '" text-anchor="middle" dominant-baseline="central" font-size="' + fs + '" font-weight="700" fill="' + esc(o.c) + '" stroke="#0b0a12" stroke-width="' + (fs * .22) + '" paint-order="stroke" style="font-family:-apple-system,\'Hiragino Sans\',sans-serif">' + esc(s) + '</text>' +
+      '<rect x="' + (o.x - fs * Math.max(1, s.length) * .55) + '" y="' + (o.y - fs * .8) + '" width="' + (fs * Math.max(1, s.length) * 1.1) + '" height="' + (fs * 1.6) + '" fill="transparent"' + (selected ? ' stroke="#fff" stroke-dasharray="' + (d * .008) + '" stroke-width="' + (d * .003) + '"' : '') + '/></g></g>';
   }
   return '';
 }
+function drawSvg(){ $('bSvg').innerHTML = curObjs().map(o => objSVG(o, bs.sel === o.id)).join('') + (bs.draft ? objSVG(bs.draft, false) : ''); }
+// 打ちかけの文字（選んだ文字・手順のメモ）は打つたびに中身へ入れ、確定（change）を待たずに、
+// 描き直し・手順の切り替え・閉じる前などに flushInputs() で1回の変更として保存する（入力欄が消えても失わない）
+let inputDirty = false;
+function flushInputs(){
+  if (!inputDirty || !B) return;
+  inputDirty = false;
+  curObjs().forEach(o => { if (o.t === 'text' && !String(o.s).trim()) o.s = '文字'; });
+  commit();
+}
 function drawBoard(){
   if (!B) return;
-  const objs = curObjs();
-  $('bSvg').innerHTML = objs.map(o => objSVG(o, bs.sel === o.id)).join('') + (bs.draft ? objSVG(bs.draft, false) : '');
+  bv.classList.toggle('editing', !!bs.edit);
+  drawSvg();
   const waveLab = bs.wave ? 'WAVE ' + bs.wave + '・' : '';
-  $('bTitle').innerHTML = esc(B.title) + '<small>' + esc(waveLab + placeName(B.place)) + (bs.edit ? '・編集中（タイトルをタップで名前を変更）' : '') + '</small>';
+  $('bTitle').innerHTML = esc(B.title) + '<small>' + esc(waveLab + placeName(B.place)) + (bs.edit ? '・名前はここをタップ' : '') + '</small>';
   $('bMode').textContent = bs.edit ? '完了' : '編集';
   $('bUndo').style.display = $('bRedo').style.display = bs.edit ? '' : 'none';
   $('bUndo').disabled = bs.hi <= 0; $('bRedo').disabled = bs.hi >= bs.hist.length - 1;
   const hint = $('bHint');
-  if (bs.pending){ hint.style.display = 'block'; hint.textContent = (bs.pending.t === 'text' ? '「' + bs.pending.s + '」' : iconInfo(bs.pending.k).label) + '：置く場所をタップ'; }
+  if (bs.pending){ hint.style.display = 'block'; hint.textContent = iconInfo(bs.pending).label + '：置く場所をタップ（上に引っぱって置くこともできます）'; }
+  else if (bs.edit && bs.tool === 'text'){ hint.style.display = 'block'; hint.textContent = '文字を置く場所をタップ'; }
   else hint.style.display = 'none';
+  // 上: 道具と、色・太さ（物を選んでいる時はその物の設定）
+  if (bs.edit){
+    const objs = curObjs(), sel = bs.sel && objs.find(o => o.id === bs.sel);
+    let top = '<div class="btl">' + TOOLS.map(([k, gl, l]) => '<button data-btool="' + k + '" class="' + (bs.tool === k && !bs.pending ? 'on' : '') + '"><span class="gl">' + gl + '</span>' + l + '</button>').join('') + '</div><div class="bopt">';
+    const cols = cur => COLORS.map(c => '<button class="col' + (cur === c ? ' on' : '') + '" data-bcol="' + c + '" style="background:' + c + '"></button>').join('');
+    const seg = (items, cur, key) => '<span class="seg3">' + items.map(([l, v]) => '<button data-' + key + '="' + v + '" class="' + (cur === v ? 'on' : '') + '">' + l + '</button>').join('') + '</span>';
+    if (sel){
+      top += '<span class="lbl">選んでいる物</span>';
+      if (sel.t === 'text') top += '<input id="bTxt" value="' + esc(sel.s) + '" maxlength="30" placeholder="文字">';
+      if (sel.t !== 'icon') top += cols(sel.c);
+      if (sel.t === 'icon' || sel.t === 'text') top += seg(SZ_LABEL, [0, 1, 2].includes(sel.sz) ? sel.sz : 1, 'bsz');
+      else top += seg(WD_LABEL, [0, 1, 2].includes(sel.wd) ? sel.wd : 1, 'bwd');
+      top += '<button class="act" data-bdup="1">複製</button><button class="act del" data-bdel="1">削除</button>';
+    } else if (['pen', 'arrow', 'line', 'rect', 'circle', 'text'].includes(bs.tool)){
+      top += cols(bs.color) + (bs.tool !== 'text' ? seg(WD_LABEL, bs.wd, 'bwd') : '');
+    } else {
+      top += '<span class="lbl">' + (bs.tool === 'erase' ? '消したい物をなぞる・タップ' : '置いた物をタップで選ぶ・そのまま動かす。何もない所をなぞると地図が動く。2本指で拡大') + '</span>';
+    }
+    $('bTop').innerHTML = top + '</div>';
+  }
+  // 下: アイコンの帯（編集中）、手順、手順のメモ
   const st = B.steps[bs.step], n = B.steps.length;
   let h = '';
   if (bs.edit){
-    const tools = [['move', '移動'], ['select', '選択'], ['pen', 'ペン'], ['arrow', '矢印'], ['add', '追加']];
-    h += '<div class="btools">' + tools.map(([k, l]) => '<button data-btool="' + k + '" class="' + (bs.tool === k && !bs.pending ? 'on' : '') + '">' + ICON_SVG[k] + l + '</button>').join('') + '</div>';
-    const sel = bs.sel && objs.find(o => o.id === bs.sel);
-    if (sel){
-      h += '<div class="bopts"><span class="lbl">選択中</span><button class="act" data-bdup="1">複製</button>' + (sel.t === 'text' ? '<button class="act" data-btxt="1">文字を編集</button>' : '') +
-        (sel.t !== 'icon' ? COLORS.map(c => '<button class="col' + (sel.c === c ? ' on' : '') + '" data-bcol="' + c + '" style="background:' + c + '"></button>').join('') : '') +
-        '<button class="act del" data-bdel="1">削除</button></div>';
-    } else if (bs.tool === 'pen' || bs.tool === 'arrow'){
-      h += '<div class="bopts">' + COLORS.map(c => '<button class="col' + (bs.color === c ? ' on' : '') + '" data-bcol="' + c + '" style="background:' + c + '"></button>').join('') +
-        [['細', 0], ['中', 1], ['太', 2]].map(([l, v]) => '<button class="wd' + (bs.wd === v ? ' on' : '') + '" data-bwd="' + v + '">' + l + '</button>').join('') + '</div>';
-    } else h += '<div class="bopts"><span class="lbl">' + ({ move: '1本指で地図を動かせます', select: '置いた物をタップで選ぶ・そのまま指で動かす', add: '' }[bs.tool] || '') + '　2本指で拡大</span></div>';
+    const cats = [['boss', 'オオモノ'], ['sake', 'シャケ'], ['player', 'プレイヤー・印'], ['weapon', 'ブキ']];
+    if (bs.lastIcons.length) cats.unshift(['recent', '最近']);
+    if (!cats.find(c => c[0] === bs.cat)) bs.cat = cats[0][0];
+    h += '<div class="bstrip"><div class="bcats">' + cats.map(([k, l]) => '<button data-bcat="' + k + '" class="' + (bs.cat === k ? 'on' : '') + '">' + l + '</button>').join('') + '</div>' +
+      '<div class="bicons" id="bIcons">' + palItems(bs.cat).map(k => { const i = iconInfo(k);
+        return '<button data-pk="' + esc(k) + '" class="' + (bs.pending === k ? 'on' : '') + '">' + (i.img ? '<img src="' + esc(i.img) + '" alt="" draggable="false" loading="lazy">' : '<span class="mk" style="background:' + esc(i.color) + '">' + esc(i.mark) + '</span>') + '<span>' + esc(i.label) + '</span></button>'; }).join('') + '</div></div>';
   }
-  h += '<button class="bnote' + (st.note ? '' : ' none') + '" data-bnote="1" style="display:block;width:100%;text-align:left">' + (st.note ? esc(st.note) : (bs.edit ? '＋ この手順の要点を書く' : '（この手順の要点はまだありません）')) + '</button>';
-  h += '<div class="bsteps"><button class="nav" data-bstep="-1"' + (bs.step > 0 ? '' : ' disabled') + '>‹ 前へ</button><button class="cur" data-blist="1">手順 ' + (bs.step + 1) + ' / ' + n + '</button>' +
-    (bs.edit && bs.step === n - 1 ? '<button class="nav" data-bdupstep="1">複製して次へ</button>' : '<button class="nav" data-bstep="1"' + (bs.step < n - 1 ? '' : ' disabled') + '>次へ ›</button>') + '</div>';
+  h += '<div class="bsteprow"><span class="lab">手順</span>' + B.steps.map((s, i) => '<button class="sn' + (i === bs.step ? ' on' : '') + '" data-bgo="' + i + '">' + (i + 1) + '</button>').join('') +
+    (bs.edit ? '<button class="sx" data-badd="1">＋ 写して追加</button>' + (n > 1 ? '<button class="sx del" data-bsdel="1">この手順を削除</button>' : '') : '') +
+    (n > 1 ? '<button class="sx play" data-bplay="1">' + (bs.playing ? '■ 止める' : '▶ 再生') + '</button>' : '') +
+    (bs.edit ? '<button class="sx" data-bmore="1">…</button>' : '') + '</div>';
+  // 再生中は入力欄にしない（再生が次の手順へ進む時の描き直しで、打ちかけが消えないように）
+  h += '<div class="bmemo">' + (bs.edit && !bs.playing ? '<textarea id="bNote" maxlength="80" placeholder="手順' + (bs.step + 1) + 'のメモ（例: 左湧き、タワー優先）">' + esc(st.note || '') + '</textarea>'
+    : '<div class="vt' + (st.note ? '' : ' none') + '">' + (st.note ? esc(st.note) : '（手順' + (bs.step + 1) + 'のメモはありません）') + '</div>') + '</div>';
   $('bBottom').innerHTML = h;
 }
+
 // ---- 保存・取り消し ----
 // 保存は「確定した時点の写し」を、全作戦図で1本の列に並べて順に書く（後から来た保存が先に終わったり、
 // 削除の後に保存が走って復活したりしないように）。表示は変更番号と保存完了番号を比べて出す
@@ -512,50 +636,167 @@ function persist(){
     }
   });
 }
-function goHist(i){ cancelGesture(); bs.hi = i; B.steps = JSON.parse(bs.hist[i]); if (bs.step >= B.steps.length) bs.step = B.steps.length - 1; bs.sel = null; B.updated = Date.now(); persist(); drawBoard(); }
-$('bUndo').onclick = () => { if (bs && bs.hi > 0) goHist(bs.hi - 1); };
-$('bRedo').onclick = () => { if (bs && bs.hi < bs.hist.length - 1) goHist(bs.hi + 1); };
+function goHist(i){ stopPlay(); cancelGesture(); endStripDrag(true); bs.hi = i; B.steps = JSON.parse(bs.hist[i]); if (bs.step >= B.steps.length) bs.step = B.steps.length - 1; bs.sel = null; B.updated = Date.now(); persist(); drawBoard(); }
+$('bUndo').onclick = () => { if (!bs) return; flushInputs(); if (bs.hi > 0) goHist(bs.hi - 1); };
+$('bRedo').onclick = () => { if (!bs) return; flushInputs(); if (bs.hi < bs.hist.length - 1) goHist(bs.hi + 1); };
 $('bBack').onclick = () => { if (history.state && history.state.board) history.back(); else closeBoard(false); };
-$('bMode').onclick = () => { cancelGesture(); bs.edit = !bs.edit; bs.pending = null; bs.sel = null; bs.tool = 'select'; drawBoard(); };
-$('bFit').onclick = () => fitView();
+$('bMode').onclick = () => { if (!bs) return; flushInputs(); stopPlay(); cancelGesture(); endStripDrag(true); bs.edit = !bs.edit; bs.pending = null; bs.sel = null; bs.tool = 'select'; drawBoard(); requestAnimationFrame(fitView); };
+$('bFitBtn').onclick = () => fitView();
+$('bRot').onclick = () => { if (!B) return; flushInputs(); cancelGesture(); B.rot = ((B.rot || 0) + 90) % 360; fitView(); drawSvg(); persist(); };
 $('bTitle').onclick = () => {
-  if (!bs.edit) return;
+  if (!bs || !bs.edit) return;
   cancelGesture();
   const v = prompt('作戦図の名前', B.title); if (v === null || !v.trim()) return;
-  B.title = v.trim().slice(0, 40); commit();
+  B.title = v.trim().slice(0, 40); B.updated = Date.now(); persist(); drawBoard(); // 名前は取り消しの対象外
 };
-
-// ---- 下の操作 ----
+function newObjFor(tool, x, y){
+  return { id: uid(), t: 'text', s: '文字', c: bs.color, sz: 1, x, y };
+}
+// ---- 上の操作（道具・色・太さ・選んだ物）----
+$('bTop').addEventListener('click', e => {
+  const t = e.target.closest('button'); if (!t || !B) return;
+  if (t.dataset.btool || t.dataset.bdel || t.dataset.bdup) flushInputs();
+  stopPlay(); cancelGesture(); // 地図に指を置いたまま押した場合、描きかけ・動かしかけは捨てる
+  const d = t.dataset, objs = curObjs(), sel = bs.sel && objs.find(o => o.id === bs.sel);
+  if (d.btool){ bs.tool = d.btool; bs.pending = null; bs.sel = null; drawBoard(); }
+  else if (d.bcol){ if (sel){ sel.c = d.bcol; commit(); } else { bs.color = d.bcol; drawBoard(); } }
+  else if (d.bwd != null){ if (sel){ sel.wd = +d.bwd; commit(); } else { bs.wd = +d.bwd; drawBoard(); } }
+  else if (d.bsz != null && sel){ sel.sz = +d.bsz; commit(); }
+  else if (d.bdel && sel){ B.steps[bs.step].objs = objs.filter(o => o !== sel); bs.sel = null; commit(); toast('削除しました（↶で戻せます）'); }
+  else if (d.bdup && sel){ if (!roomFor(1, sel.t === 'pen' ? sel.pts.length : 0)) return; const c = JSON.parse(JSON.stringify(sel)); c.id = uid(); shiftObj(c, D() * .03, D() * .03); objs.push(c); bs.sel = c.id; commit(); }
+});
+// 選んだ文字の書き換えは、打つたびに地図へ反映し、確定（入力欄を離れる）で1回の変更として保存
+$('bTop').addEventListener('input', e => {
+  if (e.target.id !== 'bTxt' || !B) return;
+  const o = curObjs().find(x => x.id === bs.sel); if (!o) return;
+  o.s = e.target.value.slice(0, 30); inputDirty = true; drawSvg();
+});
+$('bTop').addEventListener('change', e => { if (e.target.id === 'bTxt') flushInputs(); });
+// ---- 下の操作（アイコンの帯・手順・メモ）----
 $('bBottom').addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t || !B) return;
-  cancelGesture(); // 地図に指を置いたまま別の指でボタンを押した場合、描きかけ・動かしかけは捨てる
-  const d = t.dataset, objs = curObjs(), sel = bs.sel && objs.find(o => o.id === bs.sel);
-  if (d.btool){ if (d.btool === 'add'){ openPalette(); return; } bs.tool = d.btool; bs.pending = null; bs.sel = null; drawBoard(); }
-  else if (d.bcol){ if (sel){ sel.c = d.bcol; commit(); } else { bs.color = d.bcol; drawBoard(); } }
-  else if (d.bwd != null){ bs.wd = +d.bwd; drawBoard(); }
-  else if (d.bdel && sel){ B.steps[bs.step].objs = objs.filter(o => o !== sel); bs.sel = null; commit(); toast('削除しました（↶で戻せます）'); }
-  else if (d.bdup && sel){ const c = JSON.parse(JSON.stringify(sel)); c.id = uid(); shiftObj(c, D() * .03, D() * .03); objs.push(c); bs.sel = c.id; commit(); }
-  else if (d.btxt && sel){ const v = prompt('文字', sel.s); if (v !== null && v.trim()){ sel.s = v.trim().slice(0, 30); commit(); } }
-  else if (d.bstep){ bs.step = Math.max(0, Math.min(B.steps.length - 1, bs.step + (+d.bstep))); bs.sel = null; drawBoard(); }
-  else if (d.bdupstep){
-    if (B.steps.length >= 30){ toast('手順は30まで'); return; }
-    const c = JSON.parse(JSON.stringify(B.steps[bs.step])); c.id = uid(); c.note = ''; c.objs.forEach(o => { o.id = uid(); });
+  const d = t.dataset;
+  flushInputs();
+  if (d.bplay){ if (bs.playing) stopPlay(); else startPlay(); return; }
+  stopPlay(); cancelGesture();
+  if (d.bcat){ bs.cat = d.bcat; drawBoard(); }
+  else if (d.pk){
+    if (stripDrag && stripDrag.used) return; // 引っぱって置いた直後のクリックは無視
+    bs.pending = bs.pending === d.pk ? null : d.pk; bs.sel = null; drawBoard();
+  }
+  else if (d.bgo != null){ bs.step = +d.bgo; bs.sel = null; drawBoard(); }
+  else if (d.badd){
+    if (B.steps.length >= LIM.steps){ toast('手順は' + LIM.steps + 'まで'); return; }
+    if (penPts(B.steps) + penPts([B.steps[bs.step]]) > LIM.points){ toast('ペンの線が多すぎて写せません（線を消してください）'); return; }
+    // 今の手順を写して次に入れる。中の物は同じIDのまま（再生でどう動いたかを見せるため）
+    const c = JSON.parse(JSON.stringify(B.steps[bs.step])); c.id = uid(); c.note = '';
     B.steps.splice(bs.step + 1, 0, c); bs.step++; bs.sel = null; commit(); toast('手順' + (bs.step + 1) + 'を作りました（前の手順の写し）');
   }
-  else if (d.bnote){
-    if (!bs.edit) return;
-    const v = prompt('手順' + (bs.step + 1) + 'の要点（例: 左湧き、タワー優先）', B.steps[bs.step].note || '');
-    if (v === null) return; B.steps[bs.step].note = v.trim().slice(0, 80); commit();
+  else if (d.bsdel){
+    if (B.steps.length <= 1) return;
+    B.steps.splice(bs.step, 1); if (bs.step >= B.steps.length) bs.step = B.steps.length - 1; bs.sel = null; commit(); toast('手順を削除しました（↶で戻せます）');
   }
-  else if (d.blist) openStepList();
+  else if (d.bmore) openMore();
 });
+$('bBottom').addEventListener('input', e => {
+  if (e.target.id !== 'bNote' || !B) return;
+  B.steps[bs.step].note = e.target.value.slice(0, 80); inputDirty = true;
+});
+$('bBottom').addEventListener('change', e => { if (e.target.id === 'bNote') flushInputs(); });
 function shiftObj(o, dx, dy){
   if (o.t === 'pen') o.pts = o.pts.map(p => [p[0] + dx, p[1] + dy]);
-  else if (o.t === 'arrow'){ o.x1 += dx; o.y1 += dy; o.x2 += dx; o.y2 += dy; }
+  else if (o.t === 'arrow' || o.t === 'line'){ o.x1 += dx; o.y1 += dy; o.x2 += dx; o.y2 += dy; }
   else { o.x += dx; o.y += dy; }
 }
+// 書き出し→読み込みで欠けないよう、読み込みの上限（LIM）と同じ上限を編集でも守る
+const penPts = steps => steps.reduce((n, s) => n + s.objs.reduce((m, o) => m + (o.t === 'pen' ? o.pts.length : 0), 0), 0);
+function roomFor(nObjs, nPts){
+  if (curObjs().length + nObjs > LIM.objs){ toast('1つの手順に置けるのは' + LIM.objs + '個まで'); return false; }
+  if (nPts && penPts(B.steps) + nPts > LIM.points){ toast('ペンの線が多すぎます（消すか手順を減らしてください）'); return false; }
+  return true;
+}
+function placeAt(k, x, y){
+  if (!roomFor(1, 0)){ bs.pending = null; drawBoard(); return; }
+  const o = { id: uid(), t: 'icon', k, sz: 1, x, y };
+  curObjs().push(o); bs.pending = null; bs.tool = 'select'; bs.sel = o.id;
+  bs.lastIcons = [k].concat(bs.lastIcons.filter(x => x !== k)).slice(0, 10); save('sm_lasticons', bs.lastIcons);
+  commit();
+}
 
-// ---- シート（アイコン・手順の一覧） ----
+// ---- アイコンの帯から引っぱって置く（横に動かすと帯のスクロール、上に動かすと掴む）----
+let stripDrag = null; // { k, x0, y0, ghost, used }
+$('bBottom').addEventListener('pointerdown', e => {
+  const b = e.target.closest('[data-pk]'); if (!b || !B || !bs.edit || ptrs.size || stripDrag) return; // 地図を触っている間は掴まない
+  stripDrag = { k: b.dataset.pk, x0: e.clientX, y0: e.clientY, ghost: null, used: false, id: e.pointerId, board: B, bs, step: bs.step };
+});
+document.addEventListener('pointermove', e => {
+  if (!stripDrag || e.pointerId !== stripDrag.id) return;
+  const dx = e.clientX - stripDrag.x0, dy = e.clientY - stripDrag.y0;
+  if (!stripDrag.ghost){
+    if (dy < -14 && Math.abs(dy) > Math.abs(dx) * 1.2){
+      const i = iconInfo(stripDrag.k), gh = document.createElement('div'); gh.className = 'bghost';
+      if (i.img) gh.innerHTML = '<img src="' + esc(i.img) + '" alt="">'; else { gh.style.background = i.color; gh.textContent = i.mark; }
+      document.body.appendChild(gh); stripDrag.ghost = gh; stopPlay(); cancelGesture();
+    } else if (Math.abs(dx) > 14) { stripDrag = null; return; }
+    else return;
+  }
+  stripDrag.ghost.style.transform = 'translate(' + (e.clientX - 26) + 'px,' + (e.clientY - 70) + 'px)'; // 指で隠れないよう上に
+});
+function endStripDrag(cancel, e){
+  if (!stripDrag) return;
+  const d = stripDrag;
+  if (d.ghost){
+    d.ghost.remove(); d.used = true; setTimeout(() => { if (stripDrag === d) stripDrag = null; }, 300);
+    if (!cancel && e && B){
+      const r = $('bView').getBoundingClientRect(), px = e.clientX, py = e.clientY - 44; // 影を見て離す位置（指の少し上）に置く
+      // 掴んだ時と同じ作戦図・手順・編集中の時だけ置く（途中で手順や表示が変わったら置かない）
+      const same = B === d.board && bs === d.bs && bs.step === d.step && bs.edit && !bs.playing && !ptrs.size;
+      if (same && px >= r.left && px <= r.right && py >= r.top && py <= r.bottom){ const [x, y] = toImg(px, py); placeAt(d.k, x, y); }
+    }
+  } else stripDrag = null;
+}
+document.addEventListener('pointerup', e => { if (stripDrag && e.pointerId === stripDrag.id) endStripDrag(false, e); });
+document.addEventListener('pointercancel', e => { if (stripDrag && e.pointerId === stripDrag.id) endStripDrag(true); });
+
+// ---- 手順の再生（同じIDの物は前の手順の位置から動かす、無くなる物は消え、増える物は現れる）----
+function lerpObj(a, b, t){
+  const L = (p, q) => p + (q - p) * t, o = Object.assign({}, b);
+  if (a.t !== b.t) return t < .5 ? a : b;
+  if (b.t === 'icon' || b.t === 'text'){ o.x = L(a.x, b.x); o.y = L(a.y, b.y); }
+  else if (b.t === 'pen'){ if (a.pts.length !== b.pts.length) return t < .5 ? a : b; o.pts = b.pts.map((q, i) => [L(a.pts[i][0], q[0]), L(a.pts[i][1], q[1])]); }
+  else if (b.t === 'arrow' || b.t === 'line'){ o.x1 = L(a.x1, b.x1); o.y1 = L(a.y1, b.y1); o.x2 = L(a.x2, b.x2); o.y2 = L(a.y2, b.y2); }
+  else if (b.t === 'rect'){ o.x = L(a.x, b.x); o.y = L(a.y, b.y); o.w = L(a.w, b.w); o.h = L(a.h, b.h); }
+  else if (b.t === 'circle'){ o.x = L(a.x, b.x); o.y = L(a.y, b.y); o.r = L(a.r, b.r); }
+  return o;
+}
+function frameSVG(sa, sb, t){
+  const ma = new Map(sa.objs.map(o => [o.id, o])), mb = new Set(sb.objs.map(o => o.id));
+  let h = '';
+  sa.objs.forEach(o => { if (!mb.has(o.id) && t < 1) h += objSVG(o, false, 1 - t); });
+  sb.objs.forEach(o => { const a = ma.get(o.id); h += a ? objSVG(lerpObj(a, o, t), false) : objSVG(o, false, t); });
+  return h;
+}
+function startPlay(){
+  if (!B || B.steps.length < 2) return;
+  cancelGesture(); bs.sel = null;
+  const my = { i: 0, t0: performance.now() }; bs.playing = my; bs.step = 0; drawBoard();
+  const HOLD = 700, MOVE = 800;
+  const tick = now => {
+    if (!bs || bs.playing !== my) return;
+    const el = now - my.t0;
+    if (el < HOLD){ my.raf = requestAnimationFrame(tick); return; }
+    const t = Math.min(1, (el - HOLD) / MOVE), e2 = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    $('bSvg').innerHTML = frameSVG(B.steps[my.i], B.steps[my.i + 1], e2);
+    if (t < 1){ my.raf = requestAnimationFrame(tick); return; }
+    my.i++; bs.step = my.i; my.t0 = now;
+    if (my.i >= B.steps.length - 1){ bs.playing = null; drawBoard(); return; }
+    drawBoard(); my.raf = requestAnimationFrame(tick);
+  };
+  my.raf = requestAnimationFrame(tick);
+}
+function stopPlay(){ if (bs && bs.playing){ cancelAnimationFrame(bs.playing.raf); bs.playing = null; if (B) drawBoard(); } }
+
+// ---- シート（その他の操作）----
 let bsheet = null;
 function closeBSheet(){ if (bsheet){ bsheet.remove(); bsheet = null; } }
 function showBSheet(html){
@@ -566,7 +807,6 @@ function showBSheet(html){
   document.body.appendChild(bsheet);
   return bsheet;
 }
-let palTab = 'boss';
 function contestWeapons(){
   // ばちこんから開いた時は、そのシナリオの支給ブキを先に出す
   if (!play) return [];
@@ -574,79 +814,60 @@ function contestWeapons(){
   return inst ? inst.weapons.map(w => coopWeaponIdByName(w.name)).filter(Boolean) : [];
 }
 function palItems(tab){
-  if (tab === 'recent') return bs.lastIcons.filter(k => iconInfo(k).label);
+  if (tab === 'recent') return bs.lastIcons.filter(k => typeof k === 'string' && iconInfo(k).label !== '不明');
   if (tab === 'boss') return (TIER_DATA.sets.boss.items || []).map(x => 'boss:' + x.id);
   if (tab === 'sake') return SALMONIDS.map(s => 'sake:' + s[0]);
   if (tab === 'player') return PLAYERS.map(p => 'player:' + p[0]).concat(MARKS.map(m => 'mark:' + m[0]));
   if (tab === 'weapon'){ const cw = contestWeapons(); return cw.map(id => 'weapon:' + id).concat((TIER_DATA.sets.coopWeapon.items || []).filter(x => !cw.includes(x.id)).map(x => 'weapon:' + x.id)); }
   return [];
 }
-function openPalette(){
-  const tabs = [['boss', 'オオモノ'], ['sake', 'その他のシャケ'], ['player', 'プレイヤー・印'], ['weapon', 'ブキ']];
-  if (bs.lastIcons.length) tabs.unshift(['recent', '最近']);
-  if (!tabs.find(t => t[0] === palTab)) palTab = tabs[0][0];
-  const html = '<h3>置くものを選ぶ</h3><div class="bpal-tabs">' + tabs.map(([k, l]) => '<button data-ptab="' + k + '" class="' + (palTab === k ? 'on' : '') + '">' + l + '</button>').join('') +
-    '<button data-ptxt="1">文字</button></div><div class="bpal">' +
-    palItems(palTab).map(k => { const i = iconInfo(k);
-      return '<button data-pk="' + esc(k) + '">' + (i.img ? '<img src="' + esc(i.img) + '" alt="" loading="lazy">' : '<span class="mk" style="background:' + esc(i.color) + ';color:#1a1020">' + esc(i.mark) + '</span>') + '<span>' + esc(i.label) + '</span></button>'; }).join('') + '</div>';
-  const el = showBSheet(html);
-  el.addEventListener('click', e => {
-    const t = e.target.closest('button'); if (!t) return;
-    if (t.dataset.ptab){ palTab = t.dataset.ptab; openPalette(); }
-    else if (t.dataset.ptxt){
-      closeBSheet();
-      const v = prompt('置く文字（短く。例: 先にタワー）'); if (!v || !v.trim()) return;
-      bs.pending = { t: 'text', s: v.trim().slice(0, 30) }; bs.sel = null; drawBoard();
-    }
-    else if (t.dataset.pk){
-      const k = t.dataset.pk; closeBSheet();
-      bs.pending = { t: 'icon', k }; bs.sel = null;
-      bs.lastIcons = [k].concat(bs.lastIcons.filter(x => x !== k)).slice(0, 8); save('sm_lasticons', bs.lastIcons);
-      drawBoard();
-    }
-  });
-}
-function openStepList(){
-  const html = '<h3>手順の一覧</h3><ul class="bsl">' + B.steps.map((s, i) => '<li class="' + (i === bs.step ? 'cur' : '') + '"><button class="go" data-sgo="' + i + '"><b>手順' + (i + 1) + '</b>' + esc(s.note || '（要点なし）') + '・' + s.objs.length + '個</button>' +
-    (bs.edit && B.steps.length > 1 ? '<button class="x" data-sdel="' + i + '">削除</button>' : '') + '</li>').join('') + '</ul>' +
-    (bs.edit ? '<button class="bbtn" data-sdelboard="1" style="color:#ff8a8a">この作戦図を削除</button>' : '');
-  const el = showBSheet(html);
+function openMore(){
+  const el = showBSheet('<h3>' + esc(B.title) + '</h3>' +
+    '<button class="bbtn" data-mren="1">名前を変える</button><button class="bbtn" data-mdupb="1">この作戦図を複製</button>' +
+    '<button class="bbtn" data-mdelb="1" style="color:#ff8a8a">この作戦図を削除</button><button class="bbtn sub" data-mclose="1">とじる</button>');
   el.addEventListener('click', async e => {
     const t = e.target.closest('button'); if (!t) return;
-    if (t.dataset.sgo != null){ bs.step = +t.dataset.sgo; bs.sel = null; closeBSheet(); drawBoard(); }
-    else if (t.dataset.sdel != null){
-      const i = +t.dataset.sdel; if (!confirm('手順' + (i + 1) + 'を削除します（↶で戻せます）')) return;
-      B.steps.splice(i, 1); if (bs.step >= B.steps.length) bs.step = B.steps.length - 1; closeBSheet(); commit();
+    if (t.dataset.mclose) closeBSheet();
+    else if (t.dataset.mren){ closeBSheet(); $('bTitle').onclick(); }
+    else if (t.dataset.mdupb){
+      closeBSheet();
+      const c = JSON.parse(JSON.stringify(B)); c.id = uid(); c.title = (B.title + '（コピー）').slice(0, 40); c.created = c.updated = Date.now();
+      // 複製の保存も同じ列に並べる（書き出しなどが取りこぼさないように）
+      const job = saveQueue.then(() => boardPut(c)); saveQueue = job.catch(() => {});
+      try { await job; toast('複製しました（場所の一覧にあります）'); } catch (err){ toast('複製できませんでした'); }
     }
-    else if (t.dataset.sdelboard){
+    else if (t.dataset.mdelb){
       if (!confirm('「' + B.title + '」を削除します。元に戻せません。よろしいですか？')) return;
-      const id = B.id; closeBSheet();
+      const id = B.id, mine = bs; closeBSheet();
       // 先に「削除した」印を付け、並んでいる保存を全部終えてから消す（遅れた保存で復活させない）
       deletedIds.add(id);
       await saveQueue;
       try { await boardDel(id); } catch (err){ deletedIds.delete(id); toast('削除できませんでした'); return; }
       Object.keys(memos).forEach(k => { if (k.startsWith('bd:') && memos[k] === id) delete memos[k]; });
       if (!save('sm_memos', memos)) toast('WAVEの割り当てを消せませんでした（次に開いた時に「見つかりません」と出ます）');
+      // 待っている間に別の作戦図を開いていたら、その画面は閉じない
+      if (bs !== mine) return;
       if (history.state && history.state.board) history.back(); else closeBoard(false);
     }
   });
 }
 
 // ---- 指の操作 ----
-// 1本指: 閲覧・移動＝地図を動かす／選択＝置いた物を動かす（空いている所は地図を動かす）／ペン・矢印＝描く／置く待ち＝タップで置く。
+// 1本指: 見る時・選ぶ（何もない所）＝地図を動かす／選ぶ（物の上）＝その物を動かす／ペン・矢印・直線・四角・丸＝描く／
+//        文字＝タップで置く／消しゴム＝なぞった物を消す／アイコンを置く待ち＝タップで置く（動かしたら地図の移動）。
 // 2本指: いつでも地図の拡大・移動。2本目が触れたら描きかけ・動かしかけは取り消す
 const ptrs = new Map();
-let g = null; // { kind:'pan'|'pinch'|'draw'|'arrow'|'drag'|'tap', step, ... }
+let g = null;
 const TAP = 6;
-// 動かしかけの物を、触り始めた手順の中で元に戻す
 function restoreDrag(){
   if (g && g.kind === 'drag' && g.orig && B && B.steps[g.step]){ const o = B.steps[g.step].objs.find(x => x.id === g.oid); if (o) Object.assign(o, JSON.parse(g.orig)); }
+  if (g && g.kind === 'erase' && g.removed && g.removed.length && B && B.steps[g.step]) B.steps[g.step].objs = g.before;
 }
 function cancelGesture(){
   restoreDrag();
   if (bs) bs.draft = null;
   g = null; ptrs.clear();
-  if (B) drawBoard();
+  if (B) drawSvg();
 }
 function startPinch(){
   const [a, b] = [...ptrs.values()];
@@ -654,29 +875,47 @@ function startPinch(){
 }
 function startPan(p, extra){ g = Object.assign({ kind: 'pan', x0: p.x, y0: p.y, tx: bs.view.tx, ty: bs.view.ty, far: false }, extra || {}); }
 const view = $('bView');
+const DRAW_TOOLS = ['pen', 'arrow', 'line', 'rect', 'circle'];
 view.addEventListener('pointerdown', e => {
-  if (!B || e.target.closest('#bFit')) return;
-  // 新しく1本目の指が触れたのに古い指が残っている＝前の指の終わりの合図を取り逃がしている。片付けてから始める
-  if (e.isPrimary && ptrs.size) cancelGesture();
+  if (!B || e.target.closest('.bvbtns')) return;
+  flushInputs(); stopPlay(); endStripDrag(true);
+  if (e.isPrimary && ptrs.size) cancelGesture(); // 前の指の終わりを取り逃がしていたら片付ける
   try { view.setPointerCapture(e.pointerId); } catch (err){} // 取れなくても操作は続ける
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (ptrs.size >= 2){
-    // 描きかけ・動かしかけは取り消して、拡大・移動に切り替える（3本目以降は数に入れない）
-    if (ptrs.size === 2){ restoreDrag(); bs.draft = null; startPinch(); drawBoard(); }
+    if (ptrs.size === 2){ restoreDrag(); bs.draft = null; startPinch(); drawSvg(); }
     return;
   }
   const [ix, iy] = toImg(e.clientX, e.clientY);
   const hit = e.target.closest && e.target.closest('[data-oid]');
   const x0 = e.clientX, y0 = e.clientY, step = bs.step;
-  if (bs.edit && bs.pending) startPan({ x: x0, y: y0 }, { place: true }); // 置く待ち: 指を動かしたら地図の移動、動かさずに離したら置く
-  else if (bs.edit && bs.tool === 'pen') { bs.draft = { id: 'draft', t: 'pen', c: bs.color, wd: bs.wd, pts: [[ix, iy]] }; g = { kind: 'draw', step, x0, y0, lx: x0, ly: y0 }; }
-  else if (bs.edit && bs.tool === 'arrow') { bs.draft = { id: 'draft', t: 'arrow', c: bs.color, wd: bs.wd, x1: ix, y1: iy, x2: ix, y2: iy }; g = { kind: 'arrow', step, x0, y0 }; }
-  else if (bs.edit && bs.tool === 'select' && hit && curObjs().find(x => x.id === hit.dataset.oid)){
+  if (!bs.edit) startPan({ x: x0, y: y0 });
+  else if (bs.pending || bs.tool === 'text') startPan({ x: x0, y: y0 }, { place: bs.pending ? 'icon' : 'text' });
+  else if (DRAW_TOOLS.includes(bs.tool)){
+    const base = { id: 'draft', c: bs.color, wd: bs.wd };
+    bs.draft = bs.tool === 'pen' ? Object.assign(base, { t: 'pen', pts: [[ix, iy]] })
+      : bs.tool === 'rect' ? Object.assign(base, { t: 'rect', x: ix, y: iy, w: 0, h: 0 })
+      : bs.tool === 'circle' ? Object.assign(base, { t: 'circle', x: ix, y: iy, r: 0 })
+      : Object.assign(base, { t: bs.tool, x1: ix, y1: iy, x2: ix, y2: iy });
+    g = { kind: 'draw', step, x0, y0, lx: x0, ly: y0, ix, iy };
+  }
+  else if (bs.tool === 'erase'){
+    g = { kind: 'erase', step, before: curObjs().slice(), removed: [] };
+    eraseAt(e.clientX, e.clientY);
+  }
+  else if (bs.tool === 'select' && hit && curObjs().find(x => x.id === hit.dataset.oid)){
     const o = curObjs().find(x => x.id === hit.dataset.oid);
     bs.sel = o.id; g = { kind: 'drag', step, oid: o.id, x0, y0, ix, iy, orig: JSON.stringify(o), moved: false }; drawBoard();
   }
-  else startPan({ x: x0, y: y0 }, { selTap: bs.edit && bs.tool === 'select' });
+  else startPan({ x: x0, y: y0 }, { selTap: bs.tool === 'select' });
 });
+function eraseAt(px, py){
+  const el = document.elementFromPoint(px, py), hit = el && el.closest && el.closest('#bSvg [data-oid]');
+  if (!hit) return;
+  const objs = curObjs(), i = objs.findIndex(o => o.id === hit.dataset.oid);
+  if (i < 0) return;
+  g.removed.push(objs[i].id); objs.splice(i, 1); drawSvg();
+}
 view.addEventListener('pointermove', e => {
   if (!B || !ptrs.has(e.pointerId)) return;
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -684,31 +923,37 @@ view.addEventListener('pointermove', e => {
   if (g.kind === 'pinch'){
     if (ptrs.size < 2) return;
     const [a, b] = [...ptrs.values()], dd = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-    const r = view.getBoundingClientRect(), v0 = g.v0;
-    const s = Math.max(v0.fit * 0.6, Math.min(v0.fit * 8, v0.s * dd / Math.max(g.d0, 1)));
-    // 2本指の中点の下の地図の点が、指についてくるように
-    const px = (g.mx - r.left - v0.tx) / v0.s, py = (g.my - r.top - v0.ty) / v0.s;
-    bs.view = { s, tx: mx - r.left - px * s, ty: my - r.top - py * s, fit: v0.fit }; applyView();
+    const v0 = g.v0, s = Math.max(v0.fit * 0.6, Math.min(v0.fit * 8, v0.s * dd / Math.max(g.d0, 1)));
+    // 2本指の中点の下の地図の点が、指についてくるように（回転していても同じ式）
+    const keep = bs.view; bs.view = v0; const [px, py] = toImg(g.mx, g.my); bs.view = keep;
+    const r = view.getBoundingClientRect(), a2 = rad(), dx = px - B.w / 2, dy = py - B.h / 2;
+    const sx = B.w / 2 + dx * Math.cos(a2) - dy * Math.sin(a2), sy = B.h / 2 + dx * Math.sin(a2) + dy * Math.cos(a2);
+    bs.view = { s, tx: mx - r.left - s * sx, ty: my - r.top - s * sy, fit: v0.fit, fitted: false }; applyView();
     return;
   }
   if (g.step != null && g.step !== bs.step){ cancelGesture(); return; } // 途中で手順が変わったら取りやめ
   const [ix, iy] = toImg(e.clientX, e.clientY);
   if (g.kind === 'pan'){
     if (!g.far && Math.hypot(e.clientX - g.x0, e.clientY - g.y0) >= TAP) g.far = true; // 一度でも大きく動いたらタップ扱いにしない
-    bs.view.tx = g.tx + (e.clientX - g.x0); bs.view.ty = g.ty + (e.clientY - g.y0); applyView();
+    bs.view.tx = g.tx + (e.clientX - g.x0); bs.view.ty = g.ty + (e.clientY - g.y0); if (g.far) bs.view.fitted = false; applyView();
   }
   else if (g.kind === 'draw'){
-    if (Math.hypot(e.clientX - g.lx, e.clientY - g.ly) < 3) return; // 点を間引く
-    if (bs.draft.pts.length >= 2000) return;
-    g.lx = e.clientX; g.ly = e.clientY; bs.draft.pts.push([ix, iy]); $('bSvg').innerHTML = curObjs().map(o => objSVG(o, false)).join('') + objSVG(bs.draft, false);
+    const d = bs.draft; if (!d) return;
+    if (d.t === 'pen'){
+      if (Math.hypot(e.clientX - g.lx, e.clientY - g.ly) < 3 || d.pts.length >= 2000) return; // 点を間引く
+      g.lx = e.clientX; g.ly = e.clientY; d.pts.push([ix, iy]);
+    } else if (d.t === 'rect'){ d.x = Math.min(g.ix, ix); d.y = Math.min(g.iy, iy); d.w = Math.abs(ix - g.ix); d.h = Math.abs(iy - g.iy); }
+    else if (d.t === 'circle'){ d.r = Math.hypot(ix - g.ix, iy - g.iy); }
+    else { d.x2 = ix; d.y2 = iy; }
+    drawSvg();
   }
-  else if (g.kind === 'arrow'){ bs.draft.x2 = ix; bs.draft.y2 = iy; $('bSvg').innerHTML = curObjs().map(o => objSVG(o, false)).join('') + objSVG(bs.draft, false); }
+  else if (g.kind === 'erase') eraseAt(e.clientX, e.clientY);
   else if (g.kind === 'drag'){
     if (!g.moved && Math.hypot(e.clientX - g.x0, e.clientY - g.y0) < TAP) return;
     g.moved = true;
     const o = curObjs().find(x => x.id === g.oid); if (!o) return;
     Object.assign(o, JSON.parse(g.orig)); shiftObj(o, ix - g.ix, iy - g.iy);
-    $('bSvg').innerHTML = curObjs().map(x => objSVG(x, x.id === bs.sel)).join('');
+    drawSvg();
   }
 });
 function endPtr(e){
@@ -722,30 +967,31 @@ function endPtr(e){
     else g = null;
     return;
   }
-  if (ptrs.size) return; // まだ他の指が残っている（3本以上の時など）
+  if (ptrs.size) return; // まだ他の指が残っている
   if (g.step != null && g.step !== bs.step){ cancelGesture(); return; }
   const [ix, iy] = toImg(e.clientX, e.clientY);
-  if (g.kind === 'pan' && g.place && !g.far && bs.pending){
-    const p = bs.pending, o = p.t === 'text' ? { id: uid(), t: 'text', s: p.s, c: '#ffffff', x: ix, y: iy } : { id: uid(), t: 'icon', k: p.k, x: ix, y: iy };
-    curObjs().push(o); bs.pending = null; bs.tool = 'select'; bs.sel = o.id; commit();
+  const small = D() * .02;
+  if (g.kind === 'pan' && g.place && !g.far){
+    if (g.place === 'icon' && bs.pending) placeAt(bs.pending, ix, iy);
+    else if (g.place === 'text' && roomFor(1, 0)){ const o = newObjFor('text', ix, iy); curObjs().push(o); bs.tool = 'select'; bs.sel = o.id; commit(); const inp = $('bTxt'); if (inp){ inp.focus(); inp.select(); } }
   }
   else if (g.kind === 'draw'){
     const d = bs.draft; bs.draft = null;
-    if (d && d.pts.length > 1){ d.id = uid(); curObjs().push(d); commit(); } else drawBoard();
+    const ok = d && (d.t === 'pen' ? d.pts.length > 1 : d.t === 'rect' ? d.w > small && d.h > small : d.t === 'circle' ? d.r > small / 2 : Math.hypot(d.x2 - d.x1, d.y2 - d.y1) > small);
+    if (ok && roomFor(1, d.t === 'pen' ? d.pts.length : 0)){ d.id = uid(); curObjs().push(d); commit(); } else drawSvg();
   }
-  else if (g.kind === 'arrow'){
-    const d = bs.draft; bs.draft = null;
-    if (d && Math.hypot(d.x2 - d.x1, d.y2 - d.y1) > D() * .02){ d.id = uid(); curObjs().push(d); commit(); } else drawBoard();
-  }
+  else if (g.kind === 'erase'){ if (g.removed.length){ bs.sel = null; commit(); } }
   else if (g.kind === 'drag'){ if (g.moved) commit(); else drawBoard(); }
   else if (g.kind === 'pan' && g.selTap && !g.far && bs.sel){ bs.sel = null; drawBoard(); }
   g = null;
 }
 view.addEventListener('pointerup', endPtr);
-// 指の取り消し・指を追えなくなった時: 描きかけ・動かしかけは捨てる
+// 指の取り消し・指を追えなくなった時: 描きかけ・動かしかけ・消しかけは元に戻す
 view.addEventListener('pointercancel', e => { if (ptrs.has(e.pointerId)) cancelGesture(); });
 view.addEventListener('lostpointercapture', e => { if (ptrs.has(e.pointerId) && g && g.kind !== 'pinch') { ptrs.delete(e.pointerId); if (!ptrs.size){ if (g.kind === 'pan') g = null; else cancelGesture(); } } });
-window.addEventListener('resize', () => { if (B) fitView(); });
+window.addEventListener('resize', () => { if (B && bs && !g && !ptrs.size) fitView(); });
+// 上下の帯の高さが変わって地図の枠が変わった時、全体表示のままなら合わせ直す（拡大・移動していたらそのまま）
+if (window.ResizeObserver) new ResizeObserver(() => { if (B && bs && bs.view && bs.view.fitted && !g && !ptrs.size) fitView(); }).observe(view);
 
 // ---------- バックアップ（index.html の書き出し・読み込みから呼ぶ） ----------
 const blobToDataURL = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); });
@@ -768,7 +1014,7 @@ window.exportBoards = async () => {
 };
 const PLACE_RE = /^(c:[A-Za-z0-9+/=]{1,40}:(Low|Mid|High)|v:[A-Za-z0-9+/=]{1,40})$/;
 const ID_RE = /^[a-z0-9]{1,40}$/;
-const LIM = { boards: 300, bases: 60, baseBytes: 12e6, points: 20000, objs: 400, steps: 30 };
+const LIM = { boards: 300, bases: 60, baseBytes: 12e6, points: 60000, objs: 400, steps: 30 }; // 編集側も同じ上限を守る（roomFor）
 const ICON_KEYS = () => new Set([
   ...(TIER_DATA.sets.boss.items || []).map(x => 'boss:' + x.id), ...SALMONIDS.map(s => 'sake:' + s[0]),
   ...(TIER_DATA.sets.coopWeapon.items || []).map(x => 'weapon:' + x.id), ...PLAYERS.map(p => 'player:' + p[0]), ...MARKS.map(m => 'mark:' + m[0])]);
@@ -777,24 +1023,31 @@ function cleanBoard(b, icons){
   const w = Math.min(4000, Math.max(1, Number.isFinite(b.w) ? b.w : 1)), h = Math.min(4000, Math.max(1, Number.isFinite(b.h) ? b.h : 1));
   const lim = Math.max(w, h) * 3; // 座標は土台の周りまで
   const num = v => Number.isFinite(v) ? Math.max(-lim, Math.min(lim, v)) : 0, col = c => /^#[0-9a-f]{6}$/i.test(c) ? c : '#ffffff';
-  const wd = v => [0, 1, 2].includes(v) ? v : 1;
+  const wd = v => [0, 1, 2].includes(v) ? v : 1, pos = v => Number.isFinite(v) ? Math.max(0, Math.min(lim, v)) : 0;
+  // 物のIDは作戦図の中で付け替える（同じIDは手順をまたいで同じ新ID＝再生で動きがつながる）
+  const idm = new Map(), oid = v => { const k = String(v); if (!idm.has(k)) idm.set(k, uid()); return idm.get(k); };
   let points = 0;
   const steps = b.steps.slice(0, LIM.steps).filter(s => s && Array.isArray(s.objs)).map(s => ({ id: uid(), note: String(s.note || '').slice(0, 80),
     objs: s.objs.slice(0, LIM.objs).map(o => {
       if (!o || typeof o !== 'object') return null;
-      if (o.t === 'icon' && typeof o.k === 'string' && icons.has(o.k)) return { id: uid(), t: 'icon', k: o.k, x: num(o.x), y: num(o.y) };
-      if (o.t === 'text' && typeof o.s === 'string') return { id: uid(), t: 'text', s: o.s.slice(0, 30), c: col(o.c), x: num(o.x), y: num(o.y) };
-      if (o.t === 'arrow') return { id: uid(), t: 'arrow', c: col(o.c), wd: wd(o.wd), x1: num(o.x1), y1: num(o.y1), x2: num(o.x2), y2: num(o.y2) };
+      const id = oid(o.id);
+      if (o.t === 'icon' && typeof o.k === 'string' && icons.has(o.k)) return { id, t: 'icon', k: o.k, sz: wd(o.sz), x: num(o.x), y: num(o.y) };
+      if (o.t === 'text' && typeof o.s === 'string') return { id, t: 'text', s: o.s.slice(0, 30), c: col(o.c), sz: wd(o.sz), x: num(o.x), y: num(o.y) };
+      if (o.t === 'arrow' || o.t === 'line') return { id, t: o.t, c: col(o.c), wd: wd(o.wd), x1: num(o.x1), y1: num(o.y1), x2: num(o.x2), y2: num(o.y2) };
+      if (o.t === 'rect') return { id, t: 'rect', c: col(o.c), wd: wd(o.wd), x: num(o.x), y: num(o.y), w: pos(o.w), h: pos(o.h) };
+      if (o.t === 'circle') return { id, t: 'circle', c: col(o.c), wd: wd(o.wd), x: num(o.x), y: num(o.y), r: pos(o.r) };
       if (o.t === 'pen' && Array.isArray(o.pts)){
         const pts = o.pts.slice(0, Math.max(0, Math.min(2000, LIM.points - points))).filter(p => Array.isArray(p)).map(p => [num(p[0]), num(p[1])]);
         points += pts.length;
-        return pts.length > 1 ? { id: uid(), t: 'pen', c: col(o.c), wd: wd(o.wd), pts } : null;
+        return pts.length > 1 ? { id, t: 'pen', c: col(o.c), wd: wd(o.wd), pts } : null;
       }
       return null;
     }).filter(Boolean) }));
+  // 1つの手順に同じIDが2つあると選択・再生が混ざるので、2つ目以降は別IDに
+  steps.forEach(s => { const seen = new Set(); s.objs.forEach(o => { if (seen.has(o.id)) o.id = uid(); seen.add(o.id); }); });
   if (!steps.length) return null;
   return { id: typeof b.id === 'string' && ID_RE.test(b.id) ? b.id : uid(), place: b.place, title: String(b.title || '作戦図').slice(0, 40),
-    w, h, steps, created: Number.isFinite(b.created) ? b.created : Date.now(), updated: Number.isFinite(b.updated) ? b.updated : Date.now() };
+    w, h, rot: [0, 90, 180, 270].includes(b.rot) ? b.rot : 0, steps, created: Number.isFinite(b.created) ? b.created : Date.now(), updated: Number.isFinite(b.updated) ? b.updated : Date.now() };
 }
 // 読み込み: 今ある土台・作戦図は消さずに追加（同じIDがあれば新しいIDの別の作戦図として入れる）。土台は無い場所だけ入れる。
 // 画像は実際に読み込めるか確かめ、取り込みと同じく縮小し直す。戻り値の idMap（元のID→入れたID）でWAVEの割り当てを付け替える
