@@ -183,6 +183,11 @@ const SALMONIDS = [['SakeFlyBagman', 'タマヒロイ', 'img/tamahiroi.png'], ['
   ['SakelienSmall', 'コジャケ'], ['SakeBigMouth', 'ドロシャケ'], ['SakeCopter', 'シャケコプター'], ['Sakedozer', 'グリル']];
 const MARKS = [['カゴ', '#e6cf4a'], ['湧き', '#ff5aa5'], ['！', '#ff4d4d'], ['✕', '#9b96ad'], ['★', '#ffd23d'], ['集合', '#2fd6a8']];
 const COLORS = ['#ffffff', '#ff7a3d', '#ff4d4d', '#ffd23d', '#4fd27a', '#4a90ff', '#ff5aa5'];
+// ハエ（ラッシュでヒカリバエに狙われている人）の印の色。プレイヤーのアイコンにだけ付け、1つの手順では1人だけ（2026-11-18 ユーザー要望）
+const FLY_C = '#e8ff3a';
+const isPlayer = o => o && o.t === 'icon' && typeof o.k === 'string' && o.k.startsWith('player:');
+// 1つの手順のハエを1人にそろえる（keep を渡さなければ最初の1人を残す、null なら全員外す）。編集・読み込みで同じ規則を使う
+function normFly(objs, keep){ let first = keep === undefined ? objs.find(o => o.fly && isPlayer(o)) : keep; objs.forEach(o => { if (o.fly && (o !== first || !isPlayer(o))) delete o.fly; }); }
 function iconInfo(k){
   const [kind, id] = [k.slice(0, k.indexOf(':')), k.slice(k.indexOf(':') + 1)];
   if (kind === 'boss'){ const x = (TIER_DATA.sets.boss.items || []).find(i => i.id === id); return { label: x ? x.name : id, img: x ? x.img : LEANNY + 'coopEnemy/' + id + '.png' }; }
@@ -405,6 +410,10 @@ const css2 = `
 .bopt .seg3 button.on{background:var(--card2);color:var(--text)}
 .bopt .act{flex:none;height:32px;padding:0 11px;border-radius:8px;background:var(--card);border:1px solid var(--line);font-size:12px;font-weight:600;color:var(--text)}
 .bopt .act.del{color:#ff8a8a}
+.bopt .act.fly{height:36px;color:${FLY_C};background:var(--card);border-color:${FLY_C}}
+.bopt .act.fly.on{color:#1a1020;background:${FLY_C}}
+.bfly{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:13px;font-weight:600;color:var(--text)}
+.bfly b{font-size:11px;color:#1a1020;background:${FLY_C};border-radius:999px;padding:2px 8px}
 .bopt .lbl{flex:none;font-size:10px;color:var(--faint);font-weight:600}
 .bopt input{flex:1;min-width:90px;height:32px;background:var(--card);border:1px solid var(--line2);border-radius:8px;color:var(--text);font:inherit;font-size:16px;padding:0 8px}
 .bvbtns{position:absolute;right:8px;top:8px;z-index:2;display:flex;flex-direction:column;gap:6px}
@@ -551,6 +560,11 @@ function objSVG(o, selected, alpha){
     if (info.img) g += '<circle cx="' + o.x + '" cy="' + o.y + '" r="' + r + '" fill="#0b0a12" stroke="' + (info.badge ? '#ff4d4d' : 'rgba(255,255,255,.75)') + '" stroke-width="' + (d * (info.badge ? .005 : .002)) + '"/><image href="' + esc(info.img) + '" x="' + (o.x - r * .85) + '" y="' + (o.y - r * .85) + '" width="' + (r * 1.7) + '" height="' + (r * 1.7) + '"/>' +
       (info.badge ? '<circle cx="' + (o.x + r * .72) + '" cy="' + (o.y - r * .72) + '" r="' + (r * .42) + '" fill="#ff4d4d" stroke="#0b0a12" stroke-width="' + (d * .002) + '"/><text x="' + (o.x + r * .72) + '" y="' + (o.y - r * .72) + '" text-anchor="middle" dominant-baseline="central" font-size="' + (r * .52) + '" font-weight="700" fill="#fff">' + esc(info.badge) + '</text>' : '');
     else g += '<circle cx="' + o.x + '" cy="' + o.y + '" r="' + r + '" fill="' + esc(info.color) + '" stroke="#0b0a12" stroke-width="' + (d * .003) + '"/><text x="' + o.x + '" y="' + o.y + '" text-anchor="middle" dominant-baseline="central" font-size="' + (r * (info.mark.length > 1 ? .7 : 1.1)) + '" font-weight="700" fill="#1a1020">' + esc(info.mark) + '</text>';
+    // ハエ（ラッシュでヒカリバエに狙われている人）: 黄色く光る縁と、上に「ハエ」の札
+    // 白い地図でも見えるよう暗い下地の上に黄色の縁。札は小さくなりすぎないよう最小の大きさを決め、土台の上端に近ければ下に出す
+    if (o.fly){ const fs = Math.max(r * .9, d * .026), pw = fs * 2.5, up = o.y - r * 1.15 - fs * 1.1, py = up - fs * .75 < 0 ? o.y + r * 1.15 + fs * 1.1 : up;
+      g += '<circle cx="' + o.x + '" cy="' + o.y + '" r="' + (r * 1.12) + '" fill="none" stroke="#0b0a12" stroke-width="' + (r * .42) + '"/><circle cx="' + o.x + '" cy="' + o.y + '" r="' + (r * 1.22) + '" fill="none" stroke="' + FLY_C + '" stroke-opacity=".5" stroke-width="' + (r * .5) + '"/><circle cx="' + o.x + '" cy="' + o.y + '" r="' + (r * 1.08) + '" fill="none" stroke="' + FLY_C + '" stroke-width="' + (r * .16) + '"/>' +
+        '<rect x="' + (o.x - pw / 2) + '" y="' + (py - fs * .75) + '" width="' + pw + '" height="' + (fs * 1.5) + '" rx="' + (fs * .75) + '" fill="' + FLY_C + '" stroke="#0b0a12" stroke-width="' + (d * .002) + '"/><text x="' + o.x + '" y="' + py + '" text-anchor="middle" dominant-baseline="central" font-size="' + fs + '" font-weight="700" fill="#1a1020">ハエ</text>'; }
     if (selected) g += '<circle cx="' + o.x + '" cy="' + o.y + '" r="' + (r * 1.25) + '" fill="none" stroke="#fff" stroke-dasharray="' + (d * .008) + '" stroke-width="' + (d * .003) + '"/>';
     return g + '</g></g>';
   }
@@ -621,11 +635,12 @@ function drawBoard(){
       if (sel.t !== 'icon') top += cols(sel.c);
       if (sel.t === 'icon' || sel.t === 'text') top += seg(SZ_LABEL, [0, 1, 2].includes(sel.sz) ? sel.sz : 1, 'bsz');
       else top += seg(WD_LABEL, [0, 1, 2].includes(sel.wd) ? sel.wd : 1, 'bwd');
+      if (isPlayer(sel)) top += '<button class="act fly' + (sel.fly ? ' on' : '') + '" data-bfly="1" aria-pressed="' + !!sel.fly + '">' + (sel.fly ? '✓ ハエ' : 'ハエを付ける') + '</button>';
       top += '<button class="act" data-bdup="1">複製</button><button class="act del" data-bdel="1">削除</button>';
     } else if (['pen', 'arrow', 'line', 'rect', 'circle', 'text'].includes(bs.tool)){
       top += cols(bs.color) + (bs.tool !== 'text' ? seg(WD_LABEL, bs.wd, 'bwd') : '');
     } else {
-      top += '<span class="lbl">' + (bs.tool === 'erase' ? '消したい物をなぞる・タップ' : '置いた物をタップで選ぶ・そのまま動かす。何もない所をなぞると地図が動く。2本指で拡大') + '</span>';
+      top += '<span class="lbl">' + (bs.tool === 'erase' ? '消したい物をなぞる・タップ' : (B.sw === 'rush' ? 'ラッシュ: プレイヤーを選ぶとハエを付けられます。' : '') + '置いた物をタップで選ぶ・そのまま動かす。何もない所をなぞると地図が動く。2本指で拡大') + '</span>';
     }
     $('bTop').innerHTML = top + '</div>';
   }
@@ -645,6 +660,8 @@ function drawBoard(){
     (n > 1 ? '<button class="sx play" data-bplay="1">' + (bs.playing ? '■ 止める' : '▶ 再生') + '</button>' : '') +
     (bs.edit ? '<button class="sx" data-bmore="1">…</button>' : '') + '</div>';
   // 再生中は入力欄にしない（再生が次の手順へ進む時の描き直しで、打ちかけが消えないように）
+  const flyP = st.objs.find(o => o.fly && isPlayer(o));
+  if (flyP) h += '<div class="bfly"><b>ハエ</b>' + esc(iconInfo(flyP.k).label) + '</div>';
   h += '<div class="bmemo">' + (bs.edit && !bs.playing ? '<textarea id="bNote" maxlength="80" placeholder="手順' + (bs.step + 1) + 'のメモ（例: 左湧き、タワー優先）">' + esc(st.note || '') + '</textarea>'
     : '<div class="vt' + (st.note ? '' : ' none') + '">' + (st.note ? esc(st.note) : '（手順' + (bs.step + 1) + 'のメモはありません）') + '</div>') + '</div>';
   $('bBottom').innerHTML = h;
@@ -709,7 +726,11 @@ $('bTop').addEventListener('click', e => {
   else if (d.bwd != null){ if (sel){ sel.wd = +d.bwd; commit(); } else { bs.wd = +d.bwd; drawBoard(); } }
   else if (d.bsz != null && sel){ sel.sz = +d.bsz; commit(); }
   else if (d.bdel && sel){ B.steps[bs.step].objs = objs.filter(o => o !== sel); bs.sel = null; commit(); toast('削除しました（↶で戻せます）'); }
-  else if (d.bdup && sel){ if (!roomFor(1, sel.t === 'pen' ? sel.pts.length : 0)) return; const c = JSON.parse(JSON.stringify(sel)); c.id = uid(); shiftObj(c, D() * .03, D() * .03); objs.push(c); bs.sel = c.id; commit(); }
+  else if (d.bfly && sel && isPlayer(sel)){
+    const on = !sel.fly; normFly(objs, null); if (on) sel.fly = true;
+    commit(); toast(on ? iconInfo(sel.k).label + 'にハエを付けました（この手順では1人だけ）' : 'ハエを外しました');
+  }
+  else if (d.bdup && sel){ if (!roomFor(1, sel.t === 'pen' ? sel.pts.length : 0)) return; const c = JSON.parse(JSON.stringify(sel)); c.id = uid(); delete c.fly; shiftObj(c, D() * .03, D() * .03); objs.push(c); bs.sel = c.id; commit(); }
 });
 // 選んだ文字の書き換えは、打つたびに地図へ反映し、確定（入力欄を離れる）で1回の変更として保存
 $('bTop').addEventListener('input', e => {
@@ -819,7 +840,10 @@ function frameSVG(sa, sb, t){
   const ma = new Map(sa.objs.map(o => [o.id, o])), mb = new Set(sb.objs.map(o => o.id));
   let h = '';
   sa.objs.forEach(o => { if (!mb.has(o.id) && t < 1) h += objSVG(o, false, 1 - t); });
-  sb.objs.forEach(o => { const a = ma.get(o.id); h += a ? objSVG(lerpObj(a, o, t), false) : objSVG(o, false, t); });
+  // ハエは動いている間は前の手順の人のまま（画面下の表示と同じ）。手順が切り替わった所で次の人に移る
+  sb.objs.forEach(o => { const a = ma.get(o.id);
+    if (a){ const x = lerpObj(a, o, t); if (a.fly) x.fly = true; else delete x.fly; h += objSVG(x, false); }
+    else { const x = Object.assign({}, o); delete x.fly; h += objSVG(x, false, t); } });
   return h;
 }
 function startPlay(){
@@ -1174,7 +1198,7 @@ function cleanBoard(b, icons){
     objs: s.objs.slice(0, LIM.objs).map(o => {
       if (!o || typeof o !== 'object') return null;
       const id = oid(o.id);
-      if (o.t === 'icon' && typeof o.k === 'string' && icons.has(o.k)) return { id, t: 'icon', k: o.k, sz: wd(o.sz), x: num(o.x), y: num(o.y) };
+      if (o.t === 'icon' && typeof o.k === 'string' && icons.has(o.k)) return Object.assign({ id, t: 'icon', k: o.k, sz: wd(o.sz), x: num(o.x), y: num(o.y) }, o.fly === true && o.k.startsWith('player:') ? { fly: true } : {});
       if (o.t === 'text' && typeof o.s === 'string') return { id, t: 'text', s: o.s.slice(0, 30), c: col(o.c), sz: wd(o.sz), x: num(o.x), y: num(o.y) };
       if (o.t === 'arrow' || o.t === 'line') return { id, t: o.t, c: col(o.c), wd: wd(o.wd), x1: num(o.x1), y1: num(o.y1), x2: num(o.x2), y2: num(o.y2) };
       if (o.t === 'rect') return { id, t: 'rect', c: col(o.c), wd: wd(o.wd), x: num(o.x), y: num(o.y), w: pos(o.w), h: pos(o.h) };
@@ -1186,6 +1210,7 @@ function cleanBoard(b, icons){
       }
       return null;
     }).filter(Boolean) }));
+  steps.forEach(s => normFly(s.objs)); // ハエは1つの手順に1人だけ
   // 1つの手順に同じIDが2つあると選択・再生が混ざるので、2つ目以降は別IDに
   steps.forEach(s => { const seen = new Set(); s.objs.forEach(o => { if (seen.has(o.id)) o.id = uid(); seen.add(o.id); }); });
   if (!steps.length) return null;
