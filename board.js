@@ -519,6 +519,9 @@ const curObjs = () => B.steps[bs.step].objs;
 // ---- 表示（拡大・移動・回転）----
 // 画面上の点 P = T + s*(C + R(p - C))（C は土台の中心、R は回転）。逆に p = C + R⁻¹((P - T)/s - C)
 const rad = () => (B.rot || 0) * Math.PI / 180;
+// 拡大率が変わった時の描き直し（1コマに1回まで）
+let redrawRaf = 0;
+function redrawSoon(){ if (redrawRaf) return; redrawRaf = requestAnimationFrame(() => { redrawRaf = 0; if (B && bs && !bs.playing) drawSvg(); }); }
 function applyView(){
   const v = bs.view, cx = B.w / 2, cy = B.h / 2;
   $('bStage').style.transform = 'translate(' + v.tx + 'px,' + v.ty + 'px) scale(' + v.s + ') translate(' + cx + 'px,' + cy + 'px) rotate(' + (B.rot || 0) + 'deg) translate(' + (-cx) + 'px,' + (-cy) + 'px)';
@@ -529,7 +532,7 @@ function fitView(){
   const rw = side ? B.h : B.w, rh = side ? B.w : B.h;
   const s = Math.min(r.width / rw, r.height / rh) * 0.96;
   bs.view = { s, tx: r.width / 2 - s * B.w / 2, ty: r.height / 2 - s * B.h / 2, fit: s, fitted: true }; // fitted: 全体表示のまま（動かしたら false）
-  applyView();
+  applyView(); redrawSoon();
 }
 function toImg(px, py){
   const r = $('bView').getBoundingClientRect(), v = bs.view, a = -rad();
@@ -543,7 +546,7 @@ function toScreen(ix, iy){ // 画面のビューの中の座標（左上が0）
 
 // ---- 描く ----
 // 大きさは土台の長い辺に対する割合（拡大すると一緒に大きくなる）
-const SZ = { icon: [0.045, 0.06, 0.08], text: [0.024, 0.032, 0.046], wd: [0.004, 0.007, 0.012] };
+const SZ = { icon: [0.035, 0.045, 0.06], text: [0.024, 0.032, 0.046], wd: [0.004, 0.007, 0.012] };
 const wdOf = o => SZ.wd[[0, 1, 2].includes(o.wd) ? o.wd : 1];
 const szOf = (arr, o) => arr[[0, 1, 2].includes(o.sz) ? o.sz : 1];
 function upright(x, y){ return B.rot ? ' transform="rotate(' + (-B.rot) + ' ' + x + ' ' + y + ')"' : ''; } // 地図を回してもアイコン・文字は立てたまま
@@ -551,21 +554,30 @@ function hitAndSel(d, path, w, selected){
   return '<path d="' + path + '" stroke="transparent" stroke-width="' + Math.max(w * 4, d * .03) + '" fill="none" stroke-linecap="round" stroke-linejoin="round"/>' +
     (selected ? '<path d="' + path + '" stroke="#fff" stroke-width="' + (w + d * .006) + '" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".55"/>' : '');
 }
-function objSVG(o, selected, alpha){
+// アイコンの大きさ（2026-11-18 ユーザー「アイコンがでかすぎて重なったときにみえない」）: 開いている作戦図では、拡大・縮小しても
+// 画面上の見た目の大きさ（直径 ICON_PX）を変えない（拡大すると間が空いて重なりがほどける。valo-memo・NWと同じ考え方）。
+// 小さな絵（thumbMode）では地図に対する大きさ（SZ.icon）で描く。拡大率が変わったら drawSvg で描き直す
+const ICON_PX = [22, 30, 40];
+let thumbMode = false;
+function iconR(o){
+  const i = [0, 1, 2].includes(o.sz) ? o.sz : 1;
+  if (!thumbMode && bs && bs.view && bs.view.s > 0) return ICON_PX[i] / 2 / bs.view.s;
+  return D() * SZ.icon[i] / 2;
+}function objSVG(o, selected, alpha){
   const d = D(), id = esc(o.id), sel = selected ? ' sel' : '', op = alpha != null && alpha < 1 ? ' opacity="' + alpha.toFixed(2) + '"' : '';
   const g0 = '<g class="bo' + sel + '" data-oid="' + id + '"' + op + '>';
   if (o.t === 'icon'){
-    const info = iconInfo(o.k), r = d * szOf(SZ.icon, o) / 2;
+    const info = iconInfo(o.k), r = iconR(o);
     let g = g0 + '<g' + upright(o.x, o.y) + '><circle cx="' + o.x + '" cy="' + o.y + '" r="' + (r * 1.35) + '" fill="transparent"/>';
-    if (info.img) g += '<circle cx="' + o.x + '" cy="' + o.y + '" r="' + r + '" fill="#0b0a12" stroke="' + (info.badge ? '#ff4d4d' : 'rgba(255,255,255,.75)') + '" stroke-width="' + (d * (info.badge ? .005 : .002)) + '"/><image href="' + esc(info.img) + '" x="' + (o.x - r * .85) + '" y="' + (o.y - r * .85) + '" width="' + (r * 1.7) + '" height="' + (r * 1.7) + '"/>' +
-      (info.badge ? '<circle cx="' + (o.x + r * .72) + '" cy="' + (o.y - r * .72) + '" r="' + (r * .42) + '" fill="#ff4d4d" stroke="#0b0a12" stroke-width="' + (d * .002) + '"/><text x="' + (o.x + r * .72) + '" y="' + (o.y - r * .72) + '" text-anchor="middle" dominant-baseline="central" font-size="' + (r * .52) + '" font-weight="700" fill="#fff">' + esc(info.badge) + '</text>' : '');
-    else g += '<circle cx="' + o.x + '" cy="' + o.y + '" r="' + r + '" fill="' + esc(info.color) + '" stroke="#0b0a12" stroke-width="' + (d * .003) + '"/><text x="' + o.x + '" y="' + o.y + '" text-anchor="middle" dominant-baseline="central" font-size="' + (r * (info.mark.length > 1 ? .7 : 1.1)) + '" font-weight="700" fill="#1a1020">' + esc(info.mark) + '</text>';
+    if (info.img) g += '<circle cx="' + o.x + '" cy="' + o.y + '" r="' + r + '" fill="#0b0a12" stroke="' + (info.badge ? '#ff4d4d' : 'rgba(255,255,255,.75)') + '" stroke-width="' + (r * (info.badge ? .16 : .07)) + '"/><image href="' + esc(info.img) + '" x="' + (o.x - r * .85) + '" y="' + (o.y - r * .85) + '" width="' + (r * 1.7) + '" height="' + (r * 1.7) + '"/>' +
+      (info.badge ? '<circle cx="' + (o.x + r * .72) + '" cy="' + (o.y - r * .72) + '" r="' + (r * .42) + '" fill="#ff4d4d" stroke="#0b0a12" stroke-width="' + (r * .07) + '"/><text x="' + (o.x + r * .72) + '" y="' + (o.y - r * .72) + '" text-anchor="middle" dominant-baseline="central" font-size="' + (r * .52) + '" font-weight="700" fill="#fff">' + esc(info.badge) + '</text>' : '');
+    else g += '<circle cx="' + o.x + '" cy="' + o.y + '" r="' + r + '" fill="' + esc(info.color) + '" stroke="#0b0a12" stroke-width="' + (r * .1) + '"/><text x="' + o.x + '" y="' + o.y + '" text-anchor="middle" dominant-baseline="central" font-size="' + (r * (info.mark.length > 1 ? .7 : 1.1)) + '" font-weight="700" fill="#1a1020">' + esc(info.mark) + '</text>';
     // ハエ（ラッシュでヒカリバエに狙われている人）: 黄色く光る縁と、上に「ハエ」の札
     // 白い地図でも見えるよう暗い下地の上に黄色の縁。札は小さくなりすぎないよう最小の大きさを決め、土台の上端に近ければ下に出す
-    if (o.fly){ const fs = Math.max(r * .9, d * .026), pw = fs * 2.5, up = o.y - r * 1.15 - fs * 1.1, py = up - fs * .75 < 0 ? o.y + r * 1.15 + fs * 1.1 : up;
+    if (o.fly){ const fs = r * .9, pw = fs * 2.5, up = o.y - r * 1.15 - fs * 1.1, py = up - fs * .75 < 0 ? o.y + r * 1.15 + fs * 1.1 : up;
       g += '<circle cx="' + o.x + '" cy="' + o.y + '" r="' + (r * 1.12) + '" fill="none" stroke="#0b0a12" stroke-width="' + (r * .42) + '"/><circle cx="' + o.x + '" cy="' + o.y + '" r="' + (r * 1.22) + '" fill="none" stroke="' + FLY_C + '" stroke-opacity=".5" stroke-width="' + (r * .5) + '"/><circle cx="' + o.x + '" cy="' + o.y + '" r="' + (r * 1.08) + '" fill="none" stroke="' + FLY_C + '" stroke-width="' + (r * .16) + '"/>' +
-        '<rect x="' + (o.x - pw / 2) + '" y="' + (py - fs * .75) + '" width="' + pw + '" height="' + (fs * 1.5) + '" rx="' + (fs * .75) + '" fill="' + FLY_C + '" stroke="#0b0a12" stroke-width="' + (d * .002) + '"/><text x="' + o.x + '" y="' + py + '" text-anchor="middle" dominant-baseline="central" font-size="' + fs + '" font-weight="700" fill="#1a1020">ハエ</text>'; }
-    if (selected) g += '<circle cx="' + o.x + '" cy="' + o.y + '" r="' + (r * 1.25) + '" fill="none" stroke="#fff" stroke-dasharray="' + (d * .008) + '" stroke-width="' + (d * .003) + '"/>';
+        '<rect x="' + (o.x - pw / 2) + '" y="' + (py - fs * .75) + '" width="' + pw + '" height="' + (fs * 1.5) + '" rx="' + (fs * .75) + '" fill="' + FLY_C + '" stroke="#0b0a12" stroke-width="' + (r * .07) + '"/><text x="' + o.x + '" y="' + py + '" text-anchor="middle" dominant-baseline="central" font-size="' + fs + '" font-weight="700" fill="#1a1020">ハエ</text>'; }
+    if (selected) g += '<circle cx="' + o.x + '" cy="' + o.y + '" r="' + (r * 1.25) + '" fill="none" stroke="#fff" stroke-dasharray="' + (r * .3) + '" stroke-width="' + (r * .1) + '"/>';
     return g + '</g></g>';
   }
   if (o.t === 'pen'){
@@ -1012,7 +1024,7 @@ view.addEventListener('pointermove', e => {
     const keep = bs.view; bs.view = v0; const [px, py] = toImg(g.mx, g.my); bs.view = keep;
     const r = view.getBoundingClientRect(), a2 = rad(), dx = px - B.w / 2, dy = py - B.h / 2;
     const sx = B.w / 2 + dx * Math.cos(a2) - dy * Math.sin(a2), sy = B.h / 2 + dx * Math.sin(a2) + dy * Math.cos(a2);
-    bs.view = { s, tx: mx - r.left - s * sx, ty: my - r.top - s * sy, fit: v0.fit, fitted: false }; applyView();
+    bs.view = { s, tx: mx - r.left - s * sx, ty: my - r.top - s * sy, fit: v0.fit, fitted: false }; applyView(); redrawSoon(); // アイコンの見た目の大きさを保つため描き直す
     return;
   }
   if (g.step != null && g.step !== bs.step){ cancelGesture(); return; } // 途中で手順が変わったら取りやめ
@@ -1102,10 +1114,10 @@ let nowSeq = 0, nowUrls = [];
 const prefetched = new Set();
 function thumbSVG(b){
   // objSVG は開いている作戦図（B）を基準に大きさを決めるので、一時的に差し替えて描く（同期処理の中だけ）
-  const keep = B; B = Object.assign({}, b, { rot: 0 });
+  const keep = B; B = Object.assign({}, b, { rot: 0 }); thumbMode = true;
   try { return (b.steps[0] ? b.steps[0].objs : []).map(o => objSVG(o, false)).join(''); }
   catch (e){ return ''; }
-  finally { B = keep; }
+  finally { B = keep; thumbMode = false; }
 }
 // ばちこんのWAVE画面に出す、割り当てた作戦図の小さな絵（手順1）。{ html, url }（url は自分のスクショの時だけ。使い終わったら解放する）
 // 縦長のマップでも画面を埋めないよう、高さは画面の38%まで
