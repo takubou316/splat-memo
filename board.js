@@ -60,6 +60,11 @@ const css = `
 .bpl-base{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:12px}
 .bpl-base img{display:block;width:100%;max-height:44vh;object-fit:contain;border-radius:8px;background:#0b0a12}
 .bpl-own{margin-top:14px}
+.bswrow{display:flex;gap:6px;align-items:center;overflow-x:auto;scrollbar-width:none;margin:-4px -16px 12px;padding:2px 16px}
+.bswrow::-webkit-scrollbar{display:none}
+.bswrow .lbl{flex:none;font-size:11px;font-weight:600;color:var(--faint)}
+.bswrow button{flex:none;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;color:var(--sub);background:var(--card);border:1px solid var(--line)}
+.bswrow button.on{color:#1a1020;background:var(--salmon);border-color:var(--salmon)}
 .bpl-own summary{font-size:13px;font-weight:600;color:var(--sub);padding:10px 2px;cursor:pointer}
 .bpl-own[open] summary{margin-bottom:4px}
 .bpl-empty{text-align:center;padding:14px 6px;color:var(--sub);font-size:13px}
@@ -132,6 +137,15 @@ const boardPut = b => idbDo('boards', 'readwrite', s => s.put(b, b.id));
 const boardDel = id => idbDo('boards', 'readwrite', s => s.delete(id));
 const allBoards = () => idbDo('boards', 'readonly', s => s.getAll());
 
+// 特殊WAVE（2026-11-18 ユーザー要望「特殊WAVEを選択できるようにしたい」→ 作戦図ごとに付ける）。作戦図の sw に [0] を入れる（'' = 通常）。
+// [2] は起きる潮位（攻略＆検証wiki「特殊な状況」で確認: ドスコイ大量発生・巨大タツマキは干潮のみ、ラッシュ・グリル発進・キンシャケ探し・ドロシャケ噴出は干潮では起きない）。
+// [1] の名前は contest-data.js の event と同じ（ばちこんのWAVEから作る時に自動で選ぶ）
+const SW = [['', '通常', 'Low Mid High'], ['rush', 'ラッシュ', 'Mid High'], ['fog', '霧', 'Low Mid High'], ['griller', 'グリル発進', 'Mid High'],
+  ['goldie', 'キンシャケ探し', 'Mid High'], ['mudmouth', 'ドロシャケ噴出', 'Mid High'], ['mothership', 'ハコビヤ襲来', 'Low Mid High'],
+  ['cohock', 'ドスコイ大量発生', 'Low'], ['tornado', '巨大タツマキ', 'Low']];
+const swName = k => (SW.find(s => s[0] === (k || '')) || SW[0])[1];
+const swByName = n => (SW.find(s => s[1] === n) || SW[0])[0];
+const swFor = p => { const a = String(p).split(':'); return a[0] === 'c' ? SW.filter(s => s[2].split(' ').includes(a[2])) : []; }; // その場所で起きる特殊WAVE（バトルは無し）
 // 場所のキー: サモラン 'c:<CoopStageId>:<Low|Mid|High>' / バトル 'v:<VsStageId>'
 const coopPlace = (sid, tide) => 'c:' + sid + ':' + tide;
 function placeName(p){
@@ -234,7 +248,10 @@ place.innerHTML = '<div class="ehead"><button class="back" id="bplaceBack">‹ �
 document.body.appendChild(place);
 let pl = null; // { place, assign:{sid,wave}|null, pending:{file,rot,url}|null, baseUrl }
 async function openPlace(p, assign){
-  pl = { place: p, assign: assign || null, pending: null, baseUrl: null };
+  // sw: 特殊WAVEで絞る（null = すべて）。ばちこんのWAVEから来たら、そのWAVEの特殊WAVE（無ければ通常）を選んでおく
+  let sw0 = null;
+  if (assign && p[0] === 'c' && typeof scenById === 'function'){ const s = scenById(assign.sid), w = s && Array.isArray(s.waves) && s.waves[assign.wave - 1]; if (w) sw0 = swByName(w.event || ''); }
+  pl = { place: p, assign: assign || null, pending: null, baseUrl: null, sw: sw0 };
   $('bplaceTitle').textContent = placeName(p) + (assign ? '（WAVE ' + assign.wave + ' に使う作戦図）' : '');
   place.classList.add('open');
   history.pushState({ bplace: true }, '');
@@ -258,6 +275,9 @@ async function drawPlace(){
   catch (e){ if (pl === my) body.innerHTML = '<div class="empty">保存場所を開けませんでした（プライベートブラウズでは使えません）</div>'; return; }
   if (pl !== my) return;
   boards = boards.filter(b => b.place === pl.place).sort((a, b) => b.updated - a.updated);
+  const swList = swFor(pl.place), swSel = pl.sw;
+  if (swSel != null) boards = boards.filter(b => (b.sw || '') === swSel);
+  const swSuffix = swSel ? '（' + swName(swSel) + '）' : '';
   if (pl.baseUrl){ URL.revokeObjectURL(pl.baseUrl); pl.baseUrl = null; }
   const coop = pl.place[0] === 'c', nk = nwKey(pl.place);
   // 自分のスクショを土台にする部分（バトルはこれだけ。サモランはNWのマップが基本で、これは畳んでおく）
@@ -269,7 +289,7 @@ async function drawPlace(){
   } else if (base){
     pl.baseUrl = URL.createObjectURL(base.blob);
     own += '<div class="bpl-base"><div class="psh">自分のスクショ</div><img src="' + pl.baseUrl + '" alt="">' +
-      '<button class="bbtn' + (nk ? '' : ' main') + '" data-bnew="own">＋ このスクショで作戦図を作る</button>' +
+      '<button class="bbtn' + (nk ? '' : ' main') + '" data-bnew="own">＋ このスクショで作戦図を作る' + swSuffix + '</button>' +
       '<button class="bbtn sub" data-bpick="1">別の画像で登録し直す</button></div>';
   } else {
     own += '<div class="bpl-base"><div class="bpl-empty">' + (nk ? '' : '<b style="color:var(--text);font-size:14px">' + esc(placeName(pl.place)) + 'の土台がまだありません</b>') +
@@ -278,15 +298,18 @@ async function drawPlace(){
       '<button class="bbtn' + (nk ? '' : ' main') + '" data-bpick="1">写真から選ぶ</button></div>';
   }
   let h = '';
+  // 特殊WAVEの選択（サモランだけ。その潮位で起きるものだけ出す）
+  if (swList.length) h += '<div class="bswrow"><span class="lbl">特殊WAVE</span>' + [['*', 'すべて']].concat(swList.map(s => [s[0], s[1]])).map(([k, n]) =>
+    '<button data-bsw="' + k + '" class="' + ((k === '*' ? swSel == null : swSel === k) ? 'on' : '') + '">' + n + '</button>').join('') + '</div>';
   if (nk){
     h += '<div class="bpl-base"><div class="psh">マップ（' + NW_NAME + '）</div><img src="' + esc(nwImg(nk, 'nw')) + '" alt="' + esc(placeName(pl.place)) + 'のマップ">' +
-      '<button class="bbtn main" data-bnew="nw">＋ この地図で作戦図を作る</button></div>';
+      '<button class="bbtn main" data-bnew="nw">＋ この地図で作戦図を作る' + swSuffix + '</button></div>';
   } else h += own;
   h += '<div class="sec">作戦図</div><div class="bpl-list">';
-  if (!boards.length) h += '<div class="empty" style="padding:14px">' + (nk ? 'まだありません。上の「この地図で作戦図を作る」から始められます' : base ? '土台は登録済みです。「このスクショで作戦図を作る」から始められます' : '土台を登録すると作れます') + '</div>';
+  if (!boards.length) h += '<div class="empty" style="padding:14px">' + (swSel != null ? swName(swSel) + 'の作戦図はまだありません。' + (nk ? '上の「この地図で作戦図を作る」で' + swName(swSel) + 'の作戦図を作れます' : '') : nk ? 'まだありません。上の「この地図で作戦図を作る」から始められます' : base ? '土台は登録済みです。「このスクショで作戦図を作る」から始められます' : '土台を登録すると作れます') + '</div>';
   boards.forEach(b => {
     h += '<div class="row"><button class="rinfo" style="text-align:left;color:var(--text)" data-bopen="' + esc(b.id) + '"><div class="rname">' + esc(b.title) + '</div><div class="rprev">' +
-      (isNwBg(b) ? 'NWのマップ' : '自分のスクショ') + '・手順' + b.steps.length + '・' + fmtDate(b.updated) + '</div></button>' +
+      (b.sw ? swName(b.sw) + '・' : '') + (isNwBg(b) ? 'NWのマップ' : '自分のスクショ') + '・手順' + b.steps.length + '・' + fmtDate(b.updated) + '</div></button>' +
       (pl.assign ? '<button class="use" data-buse="' + esc(b.id) + '">このWAVEに使う</button>' : '') + '</div>';
   });
   h += '</div>' + (pl.assign && memoOf(bdKey(pl.assign.sid, pl.assign.wave)) ? '<button class="bbtn sub" data-bunassign="1">このWAVEの割り当てを外す</button>' : '');
@@ -321,6 +344,7 @@ $('bplaceBody').addEventListener('click', async e => {
     if (!d.bconfirmed && statusCache && statusCache.own[pl.place] && !confirm('この場所の「自分のスクショ」の作戦図は、今の画像に合わせて置いてあります。別の画像にすると位置がずれることがあります。登録し直しますか？')) return;
     $('bplaceFile').click();
   }
+  else if (d.bsw != null){ pl.sw = d.bsw === '*' ? null : d.bsw; drawPlace(); } // 「通常」は data-bsw=""（空）なので有無で見る
   else if (d.brot){ pl.pending.rot = (pl.pending.rot + (+d.brot) + 360) % 360; drawPlace(); }
   else if (d.bcancel){ URL.revokeObjectURL(pl.pending.url); pl.pending = null; drawPlace(); }
   else if (d.bsave){
@@ -345,8 +369,8 @@ $('bplaceBody').addEventListener('click', async e => {
     if (!size || pl !== my){ t.disabled = false; return; }
     await loadStatus();
     if (pl !== my){ t.disabled = false; return; }
-    const n = ((statusCache && statusCache.counts[key]) || 0) + 1;
-    const b = { id: uid(), place: key, title: placeName(key) + ' ' + n, w: size.w, h: size.h, bg,
+    const n = ((statusCache && statusCache.counts[key]) || 0) + 1, sw = swFor(key).some(s => s[0] === my.sw) ? my.sw : '';
+    const b = { id: uid(), place: key, title: placeName(key) + (sw ? ' ' + swName(sw) : '') + ' ' + n, autoTitle: true, w: size.w, h: size.h, bg, sw,
       steps: [{ id: uid(), note: '', objs: [] }], created: Date.now(), updated: Date.now() };
     try { await boardPut(b); } catch (err){ t.disabled = false; toast('保存できませんでした'); return; }
     await loadStatus();
@@ -589,7 +613,7 @@ function drawBoard(){
   $('bCredit').textContent = creditOf(B);
   { const k = isNwBg(B) && nwKey(B.place), sb = $('bStyle'); sb.style.display = k && NW_MAPS[k][2] ? '' : 'none'; sb.textContent = B.bg === 'nw3d' ? '線画で見る' : '立体で見る'; }
   const waveLab = bs.wave ? 'WAVE ' + bs.wave + '・' : '';
-  $('bTitle').innerHTML = esc(B.title) + '<small>' + esc(waveLab + placeName(B.place)) + (bs.edit ? '・名前はここをタップ' : '') + '</small>';
+  $('bTitle').innerHTML = esc(B.title) + '<small>' + esc(waveLab + placeName(B.place) + (B.sw ? '・' + swName(B.sw) : '')) + (bs.edit ? '・名前はここをタップ' : '') + '</small>';
   $('bMode').textContent = bs.edit ? '完了' : '編集';
   $('bUndo').style.display = $('bRedo').style.display = bs.edit ? '' : 'none';
   $('bUndo').disabled = bs.hi <= 0; $('bRedo').disabled = bs.hi >= bs.hist.length - 1;
@@ -681,7 +705,7 @@ $('bTitle').onclick = () => {
   if (!bs || !bs.edit) return;
   cancelGesture();
   const v = prompt('作戦図の名前', B.title); if (v === null || !v.trim()) return;
-  B.title = v.trim().slice(0, 40); B.updated = Date.now(); persist(); drawBoard(); // 名前は取り消しの対象外
+  B.title = v.trim().slice(0, 40); B.autoTitle = false; B.updated = Date.now(); persist(); drawBoard(); // 名前は取り消しの対象外
 };
 function newObjFor(tool, x, y){
   return { id: uid(), t: 'text', s: '文字', c: bs.color, sz: 1, x, y };
@@ -855,17 +879,31 @@ function palItems(tab){
   if (tab === 'weapon'){ const cw = contestWeapons(); return cw.map(id => 'weapon:' + id).concat((TIER_DATA.sets.coopWeapon.items || []).filter(x => !cw.includes(x.id)).map(x => 'weapon:' + x.id)); }
   return [];
 }
-function openMore(){
+// 作戦図の特殊WAVEを選び直す（名前と同じく取り消しの対象外）
+function openSwSheet(){
+  const el = showBSheet('<h3>特殊WAVE</h3><div class="bswrow" style="flex-wrap:wrap;margin:0 0 6px;padding:0">' + swFor(B.place).map(s =>
+    '<button data-swpick="' + s[0] + '" class="' + ((B.sw || '') === s[0] ? 'on' : '') + '">' + s[1] + '</button>').join('') + '</div><button class="bbtn sub" data-mclose="1">とじる</button>');
+  el.addEventListener('click', e => {
+    const t = e.target.closest('button'); if (!t || !B) return;
+    if (t.dataset.swpick != null){
+      // 名前が作った時の自動の名前（場所＋特殊WAVE＋番号）のままなら、名前の特殊WAVEも付け替える
+      const auto = sw => placeName(B.place) + (sw ? ' ' + swName(sw) : '') + ' ', m = B.autoTitle !== false && B.title.startsWith(auto(B.sw)) && /^\d+$/.test(B.title.slice(auto(B.sw).length)); // 自分で付けた名前（autoTitle=false）は変えない
+      if (m) B.title = auto(t.dataset.swpick) + B.title.slice(auto(B.sw).length);
+      B.sw = t.dataset.swpick; B.updated = Date.now(); persist(); drawBoard(); toast('特殊WAVEを「' + swName(B.sw) + '」にしました'); }
+    closeBSheet();
+  });
+}function openMore(){
   const el = showBSheet('<h3>' + esc(B.title) + '</h3>' +
-    '<button class="bbtn" data-mren="1">名前を変える</button><button class="bbtn" data-mdupb="1">この作戦図を複製</button>' +
+    (swFor(B.place).length ? '<button class="bbtn" data-msw="1">特殊WAVE: ' + esc(swName(B.sw)) + '（変える）</button>' : '') + '<button class="bbtn" data-mren="1">名前を変える</button><button class="bbtn" data-mdupb="1">この作戦図を複製</button>' +
     '<button class="bbtn" data-mdelb="1" style="color:#ff8a8a">この作戦図を削除</button><button class="bbtn sub" data-mclose="1">とじる</button>');
   el.addEventListener('click', async e => {
     const t = e.target.closest('button'); if (!t) return;
     if (t.dataset.mclose) closeBSheet();
     else if (t.dataset.mren){ closeBSheet(); $('bTitle').onclick(); }
+    else if (t.dataset.msw) openSwSheet();
     else if (t.dataset.mdupb){
       closeBSheet();
-      const c = JSON.parse(JSON.stringify(B)); c.id = uid(); c.title = (B.title + '（コピー）').slice(0, 40); c.created = c.updated = Date.now();
+      const c = JSON.parse(JSON.stringify(B)); c.id = uid(); c.title = (B.title + '（コピー）').slice(0, 40); c.autoTitle = false; c.created = c.updated = Date.now();
       // 複製の保存も同じ列に並べる（書き出しなどが取りこぼさないように）
       const job = saveQueue.then(() => boardPut(c)); saveQueue = job.catch(() => {});
       try { await job; toast('複製しました（場所の一覧にあります）'); } catch (err){ toast('複製できませんでした'); }
@@ -1101,7 +1139,7 @@ window.fillNowBoards = async function(){
       return;
     }
     el.innerHTML = '<div class="nbrow">' + list.map(b => {
-      const tide = b.place.startsWith('c:') ? TIDE_NAME[b.place.split(':')[2]] || '' : '';
+      const tide = (b.place.startsWith('c:') ? TIDE_NAME[b.place.split(':')[2]] || '' : '') + (b.sw ? '・' + swName(b.sw) : '');
       const note = b.steps[0] && b.steps[0].note;
       return '<button class="nbcard" data-nbopen="' + esc(b.id) + '"><div class="nbthumb" style="padding-top:' + (b.h / b.w * 100).toFixed(2) + '%">' +
         (isNwBg(b) && nwKey(b.place) ? '<img src="' + esc(nwImg(nwKey(b.place), b.bg)) + '" alt="">' : urls[b.place] ? '<img src="' + urls[b.place] + '" alt="">' : '') +
@@ -1166,7 +1204,7 @@ function cleanBoard(b, icons){
   // NWのマップの作戦図は、同梱のマップの大きさに合わせる（無い場所なら自分のスクショ扱い）
   const nk = (b.bg === 'nw' || b.bg === 'nw3d') ? nwKey(b.place) : null;
   return { id: typeof b.id === 'string' && ID_RE.test(b.id) ? b.id : uid(), place: b.place, title: String(b.title || '作戦図').slice(0, 40),
-    bg: nk ? b.bg : 'own', w: nk ? nwSize(nk).w : w, h: nk ? nwSize(nk).h : h, rot: [0, 90, 180, 270].includes(b.rot) ? b.rot : 0, steps, created: Number.isFinite(b.created) ? b.created : Date.now(), updated: Number.isFinite(b.updated) ? b.updated : Date.now() };
+    bg: nk ? b.bg : 'own', sw: swFor(b.place).some(s => s[0] === b.sw) ? b.sw : '', w: nk ? nwSize(nk).w : w, h: nk ? nwSize(nk).h : h, rot: [0, 90, 180, 270].includes(b.rot) ? b.rot : 0, steps, created: Number.isFinite(b.created) ? b.created : Date.now(), updated: Number.isFinite(b.updated) ? b.updated : Date.now() };
 }
 // 読み込み: 今ある土台・作戦図は消さずに追加（同じIDがあれば新しいIDの別の作戦図として入れる）。土台は無い場所だけ入れる。
 // 画像は実際に読み込めるか確かめ、取り込みと同じく縮小し直す。戻り値の idMap（元のID→入れたID）でWAVEの割り当てを付け替える
