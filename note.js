@@ -3,7 +3,7 @@
 // → まずはバトルだけ・新しいタブで作り、出来が良ければ「いまのステージ」と入れ替える（ユーザー判断 2026-11-21）。
 // 画面: 今のバトルのモード → ステージとブキのカード → ルール → メモ（ステージ×ブキ／ステージ×ルール／作戦図／ブキ／ステージ）
 // メモはその場で書けて自動保存。ステージ×ルール（vs:<id>:<rule>）・ブキ（wv:）・ステージ（vs:<id>:all）は今あるメモと同じキー。
-// ステージ×ブキだけ新しいキー sb:<VsStageId>:<ブキID>。
+// ステージ×ブキ（sb:<VsStageId>:<ブキID>）とルール（rl:<ルールID>、全ステージ共通）は新しいキー。
 // 共有して使うもの: sched, curAndNext, memos, save, load, esc, memoOf, kVs, RULES, RULE_NAME, nameById, stageName, stageImg, allStages, TIER_DATA, render, ui, toast
 'use strict';
 (function(){
@@ -124,6 +124,8 @@ window.renderNote = function(){
   if (c.ruleId) h += sec(kVs(c.stageId, c.ruleId), sName + ' × ' + rName, 'このステージのこのルール', '例: ' + rName + 'のときはここを取る など', !w);
   h += '<div class="nb-sec"><h3>作戦図<small>' + esc(sName) + '</small></h3><div class="nowbd" data-nbd="v:' + esc(c.stageId) + '"></div></div>';
   if (w) h += sec('wv:' + w.id, w.name + 'のメモ', '全ステージ共通', '例: 射程、スペシャルの使いどころ など');
+  // ルールのメモ（全ステージ共通。2026-11-21 ユーザー要望「ルールごと共通のメモが欲しい」）。キーは rl:<ルールID>
+  if (c.ruleId) h += sec('rl:' + c.ruleId, rName + 'のメモ', '全ステージ共通', '例: ' + rName + 'の基本の立ち回り、カウントの取り方 など');
   h += sec(kVs(c.stageId), sName + 'のメモ', '全ルール共通', '例: 地形の特徴、よく通る道 など');
   return h;
 };

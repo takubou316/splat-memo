@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-21b';</script>
+<script>window.APP_VERSION = '2026-11-21c';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -1071,7 +1071,7 @@ function importMemos(file){
       const n = Object.keys(m).length, nc = Object.keys(cs).length;
       if (!confirm(n + '件のメモ' + (nc ? 'と' + nc + '件のばちこんシナリオ' : '') + 'を読み込みます。同じものは上書きされます（それ以外は残ります）。よろしいですか？')) return;
       for (const [k0, v] of Object.entries(m)){
-        if (typeof v !== 'string' || !/^(coop|vs|cm|ct|sp|wc|wv|bs|th|dg|nb|bd|sb):/.test(k0)) continue;
+        if (typeof v !== 'string' || !/^(coop|vs|cm|ct|sp|wc|wv|bs|th|dg|nb|bd|sb|rl):/.test(k0)) continue;
         let k = k0;
         // 秒のメモは「64.0」などの書き方を揃える（表示側のキーと一致させるため）
         const mt = k0.match(/^(ct:\d+:\d+:)([\d.]+)$/);
