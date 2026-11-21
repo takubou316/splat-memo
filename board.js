@@ -1133,7 +1133,7 @@ window.releaseNowBoards = () => { nowSeq++; nowUrls.forEach(u => URL.revokeObjec
 window.fillNowBoards = async function(){
   const my = ++nowSeq;
   const slots = [...document.querySelectorAll('[data-nbd]')];
-  if (!slots.length) return;
+  if (!slots.length){ nowUrls.forEach(u => URL.revokeObjectURL(u)); nowUrls = []; return; } // 作戦図の欄が無くなったら画像を手放す
   // 今のサモランのステージのマップ（3つの潮位）を先に読んでおく（スマホに保存され、電波が弱くても作戦図がすぐ開ける）
   slots.forEach(el => { const k = el.dataset.nbd; if (k.startsWith('c:')) TIDES.forEach(([t]) => { const nk = nwKey(k + ':' + t); if (nk && !prefetched.has(nk)){ prefetched.add(nk); fetch(nwImg(nk, 'nw')).then(r => { if (!r.ok) prefetched.delete(nk); }, () => prefetched.delete(nk)); } }); });
   let boards = [];

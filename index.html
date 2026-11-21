@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-18d';</script>
+<script>window.APP_VERSION = '2026-11-21a';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -214,6 +214,7 @@ nav button.on{color:var(--salmon)}
   <button id="navNow" class="on"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9.5 2.5h5"/></svg>いまのステージ</button>
   <button id="navContest"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12c3-4.5 8-6 12-4l3-2.5v13L15 16c-4 2-9 .5-12-4z"/><circle cx="8" cy="11" r=".6" fill="currentColor"/></svg>ばちこん</button>
   <button id="navList"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h5"/></svg>メモ</button>
+  <button id="navNote"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8.5 13.5l2 2 4-4.5"/></svg>バトルメモ</button>
   <button id="navTier"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h5M4 12h5M4 19h5M12 5h8M12 12h5M12 19h3"/></svg>ティア</button>
 </nav>
 </div>
@@ -287,7 +288,7 @@ let stageImg = Object.assign({}, COOP_IMG, load('sm_stageimg', {}));     // { st
 const ui = Object.assign({ view:'now', nowSub:'salmon', listSub:'salmon', listKind:'stage', showNext:false }, load('sm_ui', {}));
 // 起動時は「いまのステージ」か「ばちこん」から始める（一番大事な使い方: 開いた瞬間に今のメモが見える）。
 // メモやティアを開いたまま閉じても、次に起動した時はそこへは戻さない
-if (ui.view !== 'now' && ui.view !== 'contest') ui.view = 'now';
+if (ui.view !== 'now' && ui.view !== 'contest' && ui.view !== 'note') ui.view = 'now'; // note（バトルのメモ帳・試作）も開いた画面として残す
 let fetchError = false, loading = false;
 
 const kCoop = id => 'coop:' + id;
@@ -565,14 +566,21 @@ function backupHTML(){
 
 function render(){
   statusText();
-  document.getElementById('main').innerHTML = ui.view === 'now' ? renderNow() : ui.view === 'contest' ? renderContest() :
-    ui.view === 'tier' ? (typeof renderTierList === 'function' ? renderTierList() : '<div class="empty">読み込み中…</div>') : renderList();
+  // バトルのメモ帳で書いている途中は描き直さない（時間帯の更新などで打ちかけが消えないように）
+  const keepNote = ui.view === 'note' && window.noteBusy && noteBusy();
+  if (keepNote){ if (window.noteDeferRender) noteDeferRender(); } else if (window.noteFlush) noteFlush(); // 描き直す前に打った分を保存
+  if (!keepNote) document.getElementById('main').innerHTML = ui.view === 'now' ? renderNow() : ui.view === 'contest' ? renderContest() :
+    ui.view === 'tier' ? (typeof renderTierList === 'function' ? renderTierList() : '<div class="empty">読み込み中…</div>') :
+    ui.view === 'note' ? (window.renderNote ? renderNote() : '<div class="empty">読み込み中…</div>') : renderList();
+  if (ui.view === 'note' && !keepNote && window.noteAfterRender) noteAfterRender();
   if (ui.view === 'list' && ui.listKind === 'weapon') filterWeapons();
-  if (ui.view === 'now'){ if (window.fillNowBoards) fillNowBoards(); } else if (window.releaseNowBoards) releaseNowBoards();
+  if ((ui.view === 'now' || ui.view === 'note') && !keepNote){ if (window.fillNowBoards) fillNowBoards(); }
+  else if (keepNote){} else if (window.releaseNowBoards) releaseNowBoards();
   document.getElementById('navNow').classList.toggle('on', ui.view === 'now');
   document.getElementById('navContest').classList.toggle('on', ui.view === 'contest');
   document.getElementById('navList').classList.toggle('on', ui.view === 'list');
   document.getElementById('navTier').classList.toggle('on', ui.view === 'tier');
+  document.getElementById('navNote').classList.toggle('on', ui.view === 'note');
   maybeAutoOpen();
 }
 
@@ -1063,7 +1071,7 @@ function importMemos(file){
       const n = Object.keys(m).length, nc = Object.keys(cs).length;
       if (!confirm(n + '件のメモ' + (nc ? 'と' + nc + '件のばちこんシナリオ' : '') + 'を読み込みます。同じものは上書きされます（それ以外は残ります）。よろしいですか？')) return;
       for (const [k0, v] of Object.entries(m)){
-        if (typeof v !== 'string' || !/^(coop|vs|cm|ct|sp|wc|wv|bs|th|dg|nb|bd):/.test(k0)) continue;
+        if (typeof v !== 'string' || !/^(coop|vs|cm|ct|sp|wc|wv|bs|th|dg|nb|bd|sb):/.test(k0)) continue;
         let k = k0;
         // 秒のメモは「64.0」などの書き方を揃える（表示側のキーと一致させるため）
         const mt = k0.match(/^(ct:\d+:\d+:)([\d.]+)$/);
@@ -1094,7 +1102,7 @@ function importMemos(file){
 document.addEventListener('click', e => {
   const t = e.target.closest('button, [data-chip]');
   if (!t) return;
-  if (t.closest('#play') || t.closest('#tier') || t.closest('.tsheet-bg') || t.closest('#bplace') || t.closest('#board') || t.closest('.bsheet-bg')) return;
+  if (t.closest('#play') || t.closest('#tier') || t.closest('.tsheet-bg') || t.closest('#bplace') || t.closest('#board') || t.closest('.bsheet-bg') || t.closest('.nbs-bg')) return;
   if (t.dataset.bplace && window.openBoardPlace){ openBoardPlace(t.dataset.bplace, null); return; }
   if (t.dataset.nbopen && window.openBoardById){ openBoardById(t.dataset.nbopen, { edit: false }); return; }
   if (t.dataset.nowmemo){ toast('このブキはメモの対象外です（ランダム枠など）'); return; }
@@ -1118,6 +1126,7 @@ document.addEventListener('change', e => { if (e.target.id === 'importFile' && e
 document.getElementById('navNow').onclick = () => { setUI({ view:'now' }); document.getElementById('main').scrollTop = 0; };
 document.getElementById('navList').onclick = () => { setUI({ view:'list' }); document.getElementById('main').scrollTop = 0; };
 document.getElementById('navTier').onclick = () => { setUI({ view:'tier' }); document.getElementById('main').scrollTop = 0; };
+document.getElementById('navNote').onclick = () => { if (window.noteFlush) noteFlush(); setUI({ view:'note' }); document.getElementById('main').scrollTop = 0; };
 document.getElementById('main').addEventListener('input', e => { if (e.target.id === 'wSearch'){ ui.wSearch = e.target.value; filterWeapons(); } });
 document.getElementById('navContest').onclick =() => { autoOpened = false; setUI({ view:'contest' }); document.getElementById('main').scrollTop = 0; };
 document.getElementById('reload').onclick = () => refresh(true);
@@ -1125,7 +1134,7 @@ document.getElementById('reload').onclick = () => refresh(true);
 document.getElementById('edBack').onclick = () => { if (history.state && history.state.editor) history.back(); else closeEditor(false); };
 document.getElementById('playBack').onclick = () => { if (history.state && history.state.play) history.back(); else closePlay(false); };
 // 戻る操作は一番上に開いている画面だけを閉じる（作戦メモ編集 → WAVE閲覧 の順）
-window.addEventListener('popstate', () => { if (ed) closeEditor(true); else if (window.boardPop && boardPop()) {} else if (window.tierPop && tierPop()) {} else if (play) closePlay(true); });
+window.addEventListener('popstate', () => { if (ed) closeEditor(true); else if (window.notePop && notePop()) {} else if (window.boardPop && boardPop()) {} else if (window.tierPop && tierPop()) {} else if (play) closePlay(true); });
 document.getElementById('memoText').addEventListener('input', () => {
   document.getElementById('edSaved').textContent = '入力中…';
   clearTimeout(saveTimer); saveTimer = setTimeout(saveMemo, 500);
@@ -1144,5 +1153,6 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.ser
 </script>
 <script src="tier.js"></script>
 <script src="board.js"></script>
+<script src="note.js"></script>
 </body>
 </html>
