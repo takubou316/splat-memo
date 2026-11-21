@@ -6,8 +6,9 @@ import json, urllib.request, hashlib, sys
 from concurrent.futures import ThreadPoolExecutor
 
 UA = {'User-Agent': 'Mozilla/5.0'}
-VER = '930'
 def get(u): return urllib.request.urlopen(urllib.request.Request(u, headers=UA), timeout=60).read()
+# ゲームデータは Leanny の data/mush の一番新しいバージョンを使う（2026-11-21: 930 のままでブキが31個足りなかった）
+VER = max((x['name'] for x in json.loads(get('https://api.github.com/repos/Leanny/splat3/contents/data/mush')) if x['name'].isdigit()), key=int)
 def ok(u):
     try: get(u); return True
     except Exception: return False
@@ -63,7 +64,7 @@ COOP = [('Q29vcFN0YWdlLTE=', 'Cop_Shakeup'), ('Q29vcFN0YWdlLTI=', 'Cop_Shakespir
 coop_stages = [{'id': i, 'name': loc['stages'].get(i, {}).get('name', n) + ('（ビッグラン）' if int(n.startswith('Cop_Shake')) == 0 else ''),
                 'img': INK + 'stage_img/icon/low_resolution/%s_1.png' % H(n)} for i, n in COOP]
 
-data = {'source': 'Leanny/splat3 (data %s) / splatoon3.ink' % VER, 'built': '2026-11-13',
+data = {'source': 'Leanny/splat3 (data %s) / splatoon3.ink' % VER, 'built': __import__('datetime').date.today().isoformat(),
         'sets': {
           'coopWeapon': {'label': 'サモランのブキ', 'items': coop_items},
           'vsWeapon': {'label': 'バトルのブキ', 'items': vs_items},
