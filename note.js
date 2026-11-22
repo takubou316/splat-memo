@@ -61,11 +61,17 @@ const css = `
 .nbs .list button small{display:block;font-size:11px;font-weight:400;color:var(--faint)}
 .nbs .list button.on{outline:2px solid var(--salmon)}
 .nbpics{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}
+.nbpics:empty{display:none}
+.nowpics{margin:-4px 14px 10px}
+#edPicWrap{margin:0 12px calc(12px + env(safe-area-inset-bottom))}
+#edPicWrap .nbpics{margin-top:0;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+#edPicWrap .nbpic,#edPicWrap .nbpic-add{flex:none}
+#edPicSt{font-size:11px;color:var(--faint);min-height:14px;margin-top:3px}
 .nbpic{width:72px;height:72px;padding:0;border-radius:8px;overflow:hidden;background:var(--card2);border:1px solid var(--line)}
 .nbpic img{width:100%;height:100%;object-fit:cover;display:block}
 .nbpic-add{position:relative;display:inline-flex;align-items:center;min-height:36px;padding:0 13px;border-radius:999px;border:1px dashed var(--line2);color:var(--sub);font-size:12px;font-weight:600;overflow:hidden}
 .nbpic-add input{position:absolute;inset:0;width:100%;height:100%;opacity:0;font-size:0}
-.nbs-bg.nbv-bg{background:#000;align-items:stretch}
+.nbs-bg.nbv-bg{z-index:40;background:#000;align-items:stretch}
 .nbv{width:100%;height:100%;display:flex;flex-direction:column;padding:calc(6px + env(safe-area-inset-top)) 8px calc(10px + env(safe-area-inset-bottom))}
 .nbv .bar{display:flex;align-items:center;gap:4px;color:var(--sub);font-size:13px}
 .nbv .bar b{font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
@@ -155,6 +161,7 @@ const timers = {}, dirty = new Map();
 let pendingRender = false; // 書いている間に見送った描き直し（時間帯の更新など）
 function autosize(ta){ ta.style.height = 'auto'; ta.style.height = Math.max(64, ta.scrollHeight + 2) + 'px'; }
 const stOf = k => main.querySelector('[data-nbst="' + CSS.escape(k) + '"]');
+const stAll = k => document.querySelectorAll('[data-nbst="' + CSS.escape(k) + '"]'); // 画像のお知らせ用（メモの編集画面の欄も含む）
 function saveDirty(keys){
   const ks = (keys || [...dirty.keys()]).filter(k => dirty.has(k)); if (!ks.length) return true;
   ks.forEach(k => { const v = dirty.get(k); if (v.trim()) memos[k] = v; else delete memos[k]; });
@@ -190,7 +197,7 @@ window.noteAfterRender = () => { pendingRender = false; main.querySelectorAll('.
 // ---- 画像（2026-11-22 ユーザー要望「それぞれ画像を載せれるようにしたい」）----
 // メモの欄ごとに画像を付けられる。画像は IndexedDB 'splat-memo-pics'（作戦図の DB とは別）に、1枚ずつ {id, key: メモのキー, blob, w, h, at} で保存。
 // 取り込む時に長い辺1600pxのJPEGに縮める。書き出し・読み込み（バックアップ）にも入る（notePics）
-const PIC_DB = 'splat-memo-pics', PIC_MAX = 12, PIC_ALL = 300, PIC_KEY_RE = /^(sb|vs|wv|rl):[A-Za-z0-9+/=:_-]{1,120}$/;
+const PIC_DB = 'splat-memo-pics', PIC_MAX = 12, PIC_ALL = 300, PIC_KEY_RE = /^(sb|vs|wv|rl|coop|wc|bs):[A-Za-z0-9+/=:_-]{1,120}$/; // coop・wc・bs はメモの編集画面から（2026-11-22b）
 const picUid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 let picP = null;
 function picDb(){
@@ -231,22 +238,31 @@ async function shrinkPic(file){
 }
 function addPicBtn(k){ return '<label class="nbpic-add">＋ 画像<input type="file" accept="image/*" multiple data-nbpicin="' + esc(k) + '"></label>'; }
 const picUrls = new Map(), picSeq = {}; // 欄ごとの表示中のURLと、読み込みの順番（古い読み込みの結果で上書きしない）
-const picSlot = k => main.querySelector('[data-nbpk="' + CSS.escape(k) + '"]');
+// 画像の欄はバトルメモのほか、いまのステージ（見るだけ、data-nbpro）とメモの編集画面（index.html の #edPics）にもある。同じキーの欄が複数あれば全部に出す
+const picSlots = k => [...document.querySelectorAll('[data-nbpk="' + CSS.escape(k) + '"]')];
 function releasePics(k){ (picUrls.get(k) || []).forEach(u => URL.revokeObjectURL(u)); picUrls.delete(k); }
+// URLは「新しい絵を入れ終えてから古い方を捨てる」。どの欄にも無くなったキーのURLは最後にまとめて捨てる（Codexレビュー 2026-11-22b）
+const slotKeys = () => new Set([...document.querySelectorAll('[data-nbpk]')].map(el => el.dataset.nbpk).filter(Boolean));
+function prunePics(){ const live = slotKeys(); [...picUrls.keys()].forEach(k => { if (!live.has(k)) releasePics(k); }); }
 async function fillPics(keys){
-  if (!keys){ [...picUrls.keys()].forEach(releasePics); keys = [...main.querySelectorAll('[data-nbpk]')].map(el => el.dataset.nbpk); } // 全部描き直した時は前の絵のURLを捨てる
+  if (!keys) keys = [...slotKeys()];
   for (const k of keys){
+    if (!k) continue;
     const my = picSeq[k] = (picSeq[k] || 0) + 1;
     let list = [];
     try { list = await picsOf(k); } catch (e){ continue; }
-    const el = picSlot(k);
-    if (my !== picSeq[k] || !el) continue;
-    releasePics(k);
+    const els = picSlots(k);
+    if (my !== picSeq[k] || !els.length) continue;
+    const old = picUrls.get(k) || [];
     const urls = list.map(p => URL.createObjectURL(p.blob)); picUrls.set(k, urls);
-    el.innerHTML = list.map((p, i) => '<button class="nbpic" data-nbpicv="' + esc(p.id) + '" data-nbpk2="' + esc(k) + '"><img src="' + urls[i] + '" alt=""></button>').join('') +
-      (list.length < PIC_MAX ? addPicBtn(k) : '');
+    const thumbs = list.map((p, i) => '<button class="nbpic" data-nbpicv="' + esc(p.id) + '" data-nbpk2="' + esc(k) + '"><img src="' + urls[i] + '" alt=""></button>').join('');
+    els.forEach(el => { el.innerHTML = thumbs + (!el.dataset.nbpro && list.length < PIC_MAX ? addPicBtn(k) : ''); });
+    old.forEach(u => URL.revokeObjectURL(u));
   }
+  prunePics();
 }
+window.fillMemoPics = fillPics;
+window.addPicBtnHtml = addPicBtn;
 // 画像の追加・読み込み・削除は1つずつ順番に（同時に走ると上限の数え方や同じIDの判定がずれるため。Codexレビュー 2026-11-22）
 let picQ = Promise.resolve();
 const picQueue = fn => { const p = picQ.then(fn, fn); picQ = p.catch(() => {}); return p; };
@@ -266,7 +282,7 @@ const picPutChecked = p => picDo('readwrite', s => {
   return out;
 });
 function addPics(k, files){
-  const say = t => { const s = stOf(k); if (s) s.textContent = t; };
+  const say = t => stAll(k).forEach(s => { s.textContent = t; });
   return picQueue(async () => {
     try {
       const have = await picDo('readonly', s => s.index('key').count(k)), all = await picCount();
@@ -284,7 +300,7 @@ function addPics(k, files){
   }).then(() => fillPics([k]));
 }
 // 選んだ画像は、その input 自身で受け取る（写真を選んでいる間に欄が描き直されて input が外れても、選んだ物を落とさないため）
-main.addEventListener('click', e => {
+document.addEventListener('click', e => {
   const inp = e.target; if (!inp.dataset || !inp.dataset.nbpicin || inp.dataset.nbhooked) return;
   inp.dataset.nbhooked = '1';
   inp.addEventListener('change', () => {
@@ -294,10 +310,11 @@ main.addEventListener('click', e => {
 }, true);
 // 画像を大きく見る（左右で同じ欄の画像を切り替え、タップで拡大、削除）
 let viewerSeq = 0;
-async function openViewer(k, id){
+async function openViewer(k, id, origin){
   const my = ++viewerSeq;
   let list; try { list = await picsOf(k); } catch (e){ toast('画像を読めませんでした'); return; }
-  if (my !== viewerSeq || ui.view !== 'note' || sheet) return; // 2回押した・タブを移った・別の画面が開いている時は開かない
+  // 2回押した・押したサムネが消えた／隠れた（編集画面を閉じた等）・別の画面が開いている時は開かない
+  if (my !== viewerSeq || sheet || !origin || !origin.isConnected || !origin.getClientRects().length) return;
   let i = Math.max(0, list.findIndex(p => p.id === id)), url = null, deleting = false;
   if (!list.length) return;
   openSheet('<div class="bar"><button data-nbclose="1">← とじる</button><b class="cnt"></b><button class="del" data-nbvdel="1">削除</button></div>' +
@@ -388,18 +405,23 @@ main.addEventListener('click', e => {
   else if (d.nbrule){ nb.rule = c.mode && d.nbrule === c.mode.s.vsRule.id ? null : { id: d.nbrule, at: c.mode ? c.mode.node.startTime : '' }; redraw(); }
   else if (d.nbpick === 'stage') openStageSheet();
   else if (d.nbpick === 'weapon') openWeaponSheet();
-  else if (d.nbpicv) openViewer(d.nbpk2, d.nbpicv);
+});
+// 画像のサムネ（バトルメモ・いまのステージ・メモの編集画面のどこからでも）
+document.addEventListener('click', e => {
+  const t = e.target.closest && e.target.closest('[data-nbpicv]'); if (!t || t.closest('.nbs-bg')) return;
+  openViewer(t.dataset.nbpk2, t.dataset.nbpicv, t);
 });
 
 // ---- 選ぶシート ----
-let sheet = null, sheetCleanup = null;
+let sheet = null, sheetCleanup = null, skipPop = false;
 function closeSheet(fromPop){
   if (!sheet) return;
   sheet.remove(); sheet = null;
   if (sheetCleanup){ sheetCleanup(); sheetCleanup = null; }
-  if (!fromPop && history.state && history.state.nbsheet) history.back();
+  // 自分で履歴を1つ戻した分の popstate は、ここで受け止める（メモの編集画面の上で画像を見ていた時に、編集画面まで閉じないように）
+  if (!fromPop && history.state && history.state.nbsheet){ skipPop = true; history.back(); }
 }
-window.notePop = () => { if (sheet){ closeSheet(true); return true; } return false; };
+window.notePop = () => { if (skipPop){ skipPop = false; return true; } if (sheet){ closeSheet(true); return true; } return false; };
 // cls: 中身の箱のクラス（既定は下から出るシート。'nbv' は画像を全画面で見る画面）、cleanup: 閉じた時の後片付け
 function openSheet(html, onClick, cls, cleanup){
   closeSheet(false);

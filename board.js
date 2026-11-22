@@ -1097,7 +1097,7 @@ const css3 = `
 .nowbd:empty{display:none}
 .bwthumb{display:block;width:100%;margin:-4px 0 12px;padding:0;background:none;border:0}
 .bwthumb:empty{display:none}
-.nowbd{margin:-2px 0 8px}
+.nowbd{margin:-2px 14px 10px} /* カードの中の文字と左をそろえる（2026-11-22、作戦図の行がカードの端にはみ出していた） */
 .nbrow{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:2px 0 2px}
 .nbrow::-webkit-scrollbar{display:none}
 .nbcard{flex:none;width:min(62vw,240px);text-align:left;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;padding:0}

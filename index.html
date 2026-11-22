@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-22a';</script>
+<script>window.APP_VERSION = '2026-11-22b';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -235,6 +235,8 @@ nav button.on{color:var(--salmon)}
   <div class="chips" id="edChips"></div>
   <div class="ehint" id="edHint"></div>
   <textarea id="memoText" placeholder="ここにメモを書く（自動で保存されます）"></textarea>
+  <!-- このメモに付けた画像（note.js が中身を入れる。ステージ・ブキ・オオモノのメモだけ） -->
+  <div id="edPicWrap"><div class="nbpics" id="edPics" data-nbpk=""></div><div id="edPicSt" data-nbst=""></div></div>
 </div>
 <div class="toast" id="toast"></div>
 <script src="contest-data.js"></script>
@@ -408,6 +410,8 @@ function stageButton(s, rule){
     '<div class="shead">' + (img ? '<img src="' + esc(img) + '" alt="" loading="lazy">' : '') +
     '<div class="sname">' + esc(stageName(s)) + '</div><span class="editbtn">✎ 編集</span></div>' +
     memoBlock(s.id, rule) + '</button>' +
+    // メモに付けた画像（見るだけ。描画の後に note.js の fillMemoPics が入れる。無ければ空で隠れる）
+    (rule ? [kVs(s.id, rule.id), kVs(s.id)] : [kCoop(s.id)]).map(k => '<div class="nbpics nowpics" data-nbpro="1" data-nbpk="' + esc(k) + '"></div>').join('') +
     // このステージの作戦図（描画の後に board.js の fillNowBoards が中身を入れる。button の中に button は置けないので外に）
     '<div class="nowbd" data-nbd="' + (rule ? 'v:' : 'c:') + esc(s.id) + '"></div>';
 }
@@ -574,6 +578,7 @@ function render(){
     ui.view === 'note' ? (window.renderNote ? renderNote() : '<div class="empty">読み込み中…</div>') : renderList();
   if (ui.view === 'note' && !keepNote && window.noteAfterRender) noteAfterRender();
   if (ui.view === 'list' && ui.listKind === 'weapon') filterWeapons();
+  if (ui.view === 'now' && window.fillMemoPics) fillMemoPics();
   if ((ui.view === 'now' || ui.view === 'note') && !keepNote){ if (window.fillNowBoards) fillNowBoards(); }
   else if (keepNote){} else if (window.releaseNowBoards) releaseNowBoards();
   document.getElementById('navNow').classList.toggle('on', ui.view === 'now');
@@ -1018,6 +1023,17 @@ function drawEditor(){
   const ta = document.getElementById('memoText');
   ta.value = memos[edKey()] || '';
   document.getElementById('edSaved').textContent = '';
+  drawEdPics();
+}
+// メモに付けた画像（2026-11-22b ユーザー要望: いまのステージのメモにも画像を付けたい）。ステージ・ブキ・オオモノのメモだけ（ばちこんのWAVE・秒のメモは対象外）
+function drawEdPics(){
+  const k = ed ? edKey() : '', ok = !!k && /^(coop|vs|wc|wv|bs):/.test(k) && !!window.fillMemoPics;
+  const wrap = document.getElementById('edPicWrap'), pe = document.getElementById('edPics'), st = document.getElementById('edPicSt');
+  wrap.style.display = ok ? '' : 'none';
+  document.getElementById('memoText').style.marginBottom = ok ? '6px' : '';
+  pe.dataset.nbpk = ok ? k : ''; st.dataset.nbst = ok ? k : ''; st.textContent = '';
+  pe.innerHTML = ok ? addPicBtnHtml(k) : '';
+  if (window.fillMemoPics) fillMemoPics(ok ? [k] : []); // 空でも呼ぶ: どの欄にも無くなった画像のURLを捨てる
 }
 let saveTimer = null;
 function saveMemo(){
@@ -1033,7 +1049,7 @@ function saveMemo(){
 function closeEditor(fromPop){
   if (!ed) return;
   clearTimeout(saveTimer); saveMemo();
-  ed = null;
+  ed = null; drawEdPics(); // 画像の欄を空にする（閉じた後の描き直しで読みにいかないように）
   document.getElementById('editor').classList.remove('open');
   document.getElementById('memoText').blur();
   if (!fromPop && history.state && history.state.editor) history.back();
@@ -1142,7 +1158,8 @@ document.getElementById('reload').onclick = () => refresh(true);
 document.getElementById('edBack').onclick = () => { if (history.state && history.state.editor) history.back(); else closeEditor(false); };
 document.getElementById('playBack').onclick = () => { if (history.state && history.state.play) history.back(); else closePlay(false); };
 // 戻る操作は一番上に開いている画面だけを閉じる（作戦メモ編集 → WAVE閲覧 の順）
-window.addEventListener('popstate', () => { if (ed) closeEditor(true); else if (window.notePop && notePop()) {} else if (window.boardPop && boardPop()) {} else if (window.tierPop && tierPop()) {} else if (play) closePlay(true); });
+// 画像を見る画面（notePop）はメモの編集画面の上にも開くので、先に閉じる
+window.addEventListener('popstate', () => { if (window.notePop && notePop()) {} else if (ed) closeEditor(true); else if (window.boardPop && boardPop()) {} else if (window.tierPop && tierPop()) {} else if (play) closePlay(true); });
 document.getElementById('memoText').addEventListener('input', () => {
   document.getElementById('edSaved').textContent = '入力中…';
   clearTimeout(saveTimer); saveTimer = setTimeout(saveMemo, 500);
