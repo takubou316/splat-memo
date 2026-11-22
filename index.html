@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-22b';</script>
+<script>window.APP_VERSION = '2026-11-22c';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -89,6 +89,12 @@ nav{flex:none;z-index:6;display:flex;background:var(--nav);border-top:1px solid 
 nav button{flex:1;padding:8px 0 10px;font-size:10px;font-weight:600;color:var(--faint);display:flex;flex-direction:column;align-items:center;gap:3px;letter-spacing:.02em}
 nav button svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 nav button.on{color:var(--salmon)}
+/* 「その他」のメニュー（下のメニューの右端の上に出る） */
+#moreMenu{position:fixed;right:8px;bottom:calc(64px + env(safe-area-inset-bottom));z-index:25;min-width:168px;background:var(--card2);border:1px solid var(--line2);border-radius:14px;padding:6px;box-shadow:0 10px 30px #000a}
+#moreMenu[hidden]{display:none}
+#moreMenu button{display:flex;align-items:center;gap:12px;width:100%;min-height:48px;padding:0 14px;border-radius:10px;font-size:15px;font-weight:600;color:var(--text);text-align:left}
+#moreMenu button svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;color:var(--sub)}
+#moreMenu button.on{color:var(--salmon)}#moreMenu button.on svg{color:var(--salmon)}
 /* editor */
 #editor{position:fixed;inset:0;z-index:20;background:var(--bg);display:none;flex-direction:column}
 #editor.open{display:flex}
@@ -211,12 +217,16 @@ nav button.on{color:var(--salmon)}
 </header>
 <main id="main"></main>
 <nav>
+  <!-- 並び（2026-11-22 ユーザー要望）: いまのステージ・バトルメモ・メモ・「その他」。ばちこんとティアは「その他」の中 -->
   <button id="navNow" class="on"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9.5 2.5h5"/></svg>いまのステージ</button>
-  <button id="navContest"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12c3-4.5 8-6 12-4l3-2.5v13L15 16c-4 2-9 .5-12-4z"/><circle cx="8" cy="11" r=".6" fill="currentColor"/></svg>ばちこん</button>
-  <button id="navList"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h5"/></svg>メモ</button>
   <button id="navNote"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8.5 13.5l2 2 4-4.5"/></svg>バトルメモ</button>
-  <button id="navTier"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h5M4 12h5M4 19h5M12 5h8M12 12h5M12 19h3"/></svg>ティア</button>
+  <button id="navList"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h5"/></svg>メモ</button>
+  <button id="navMore" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="19" cy="12" r="1.3" fill="currentColor"/></svg><span id="navMoreLbl">その他</span></button>
 </nav>
+<div id="moreMenu" hidden>
+  <button id="navContest"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12c3-4.5 8-6 12-4l3-2.5v13L15 16c-4 2-9 .5-12-4z"/><circle cx="8" cy="11" r=".6" fill="currentColor"/></svg>ばちこん</button>
+  <button id="navTier"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h5M4 12h5M4 19h5M12 5h8M12 12h5M12 19h3"/></svg>ティア</button>
+</div>
 </div>
 <div id="play">
   <div class="ehead">
@@ -586,6 +596,10 @@ function render(){
   document.getElementById('navList').classList.toggle('on', ui.view === 'list');
   document.getElementById('navTier').classList.toggle('on', ui.view === 'tier');
   document.getElementById('navNote').classList.toggle('on', ui.view === 'note');
+  // ばちこん・ティアを開いている時は「その他」を光らせ、名前もその画面にする（今どこにいるか分かるように）
+  const inMore = ui.view === 'contest' || ui.view === 'tier';
+  document.getElementById('navMore').classList.toggle('on', inMore);
+  document.getElementById('navMoreLbl').textContent = ui.view === 'contest' ? 'ばちこん' : ui.view === 'tier' ? 'ティア' : 'その他';
   maybeAutoOpen();
 }
 
@@ -1149,10 +1163,22 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => { if (e.target.id === 'importFile' && e.target.files[0]){ importMemos(e.target.files[0]); e.target.value = ''; } });
 document.getElementById('navNow').onclick = () => { setUI({ view:'now' }); document.getElementById('main').scrollTop = 0; };
 document.getElementById('navList').onclick = () => { setUI({ view:'list' }); document.getElementById('main').scrollTop = 0; };
-document.getElementById('navTier').onclick = () => { setUI({ view:'tier' }); document.getElementById('main').scrollTop = 0; };
+document.getElementById('navTier').onclick = () => { setMoreMenu(false); if (window.noteFlush) noteFlush(); setUI({ view:'tier' }); document.getElementById('main').scrollTop = 0; };
 document.getElementById('navNote').onclick = () => { if (window.noteFlush) noteFlush(); setUI({ view:'note' }); document.getElementById('main').scrollTop = 0; };
 document.getElementById('main').addEventListener('input', e => { if (e.target.id === 'wSearch'){ ui.wSearch = e.target.value; filterWeapons(); } });
-document.getElementById('navContest').onclick =() => { autoOpened = false; setUI({ view:'contest' }); document.getElementById('main').scrollTop = 0; };
+document.getElementById('navContest').onclick =() => { setMoreMenu(false); if (window.noteFlush) noteFlush(); autoOpened = false; setUI({ view:'contest' }); document.getElementById('main').scrollTop = 0; };
+// 「その他」のメニュー: 押すと開き、もう一度押す・ほかの所を押す・選ぶと閉じる
+function setMoreMenu(open){
+  document.getElementById('moreMenu').hidden = !open;
+  document.getElementById('navMore').setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+document.getElementById('navMore').onclick = e => { e.stopPropagation(); setMoreMenu(document.getElementById('moreMenu').hidden); };
+// 外を押した時は閉じるだけ（後ろのステージなどを押したことにしない）。下のメニューのほかのボタンはそのまま効く
+document.addEventListener('click', e => {
+  if (document.getElementById('moreMenu').hidden || e.target.closest('#moreMenu, #navMore')) return;
+  setMoreMenu(false);
+  if (!e.target.closest('nav')){ e.preventDefault(); e.stopPropagation(); }
+}, true);
 document.getElementById('reload').onclick = () => refresh(true);
 // 画面の「戻る」ボタンは履歴を1つ戻すだけにして、閉じる処理は popstate にまとめる（二重に閉じないため）
 document.getElementById('edBack').onclick = () => { if (history.state && history.state.editor) history.back(); else closeEditor(false); };
