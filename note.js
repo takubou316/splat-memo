@@ -60,6 +60,23 @@ const css = `
 .nbs .list button img{width:64px;height:36px;object-fit:cover;border-radius:6px;background:var(--card2)}
 .nbs .list button small{display:block;font-size:11px;font-weight:400;color:var(--faint)}
 .nbs .list button.on{outline:2px solid var(--salmon)}
+.nbpics{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}
+.nbpic{width:72px;height:72px;padding:0;border-radius:8px;overflow:hidden;background:var(--card2);border:1px solid var(--line)}
+.nbpic img{width:100%;height:100%;object-fit:cover;display:block}
+.nbpic-add{position:relative;display:inline-flex;align-items:center;min-height:36px;padding:0 13px;border-radius:999px;border:1px dashed var(--line2);color:var(--sub);font-size:12px;font-weight:600;overflow:hidden}
+.nbpic-add input{position:absolute;inset:0;width:100%;height:100%;opacity:0;font-size:0}
+.nbs-bg.nbv-bg{background:#000;align-items:stretch}
+.nbv{width:100%;height:100%;display:flex;flex-direction:column;padding:calc(6px + env(safe-area-inset-top)) 8px calc(10px + env(safe-area-inset-bottom))}
+.nbv .bar{display:flex;align-items:center;gap:4px;color:var(--sub);font-size:13px}
+.nbv .bar b{font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.nbv .bar button{flex:none;padding:10px 12px;font-size:14px;color:var(--text)}
+.nbv .bar .del{margin-left:auto;color:#ff6b6b}
+.nbv .im{flex:1;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;display:flex;align-items:center;justify-content:center}
+.nbv .im img{max-width:100%;max-height:100%;object-fit:contain}
+.nbv .im.big{display:block}.nbv .im.big img{max-width:none;max-height:none;width:220%}
+.nbv .hint{font-size:11px;color:var(--faint);text-align:center;margin:4px 0}
+.nbv .nav{display:flex;gap:8px}.nbv .nav button{flex:1;min-height:44px;border-radius:10px;background:var(--card);color:var(--text);font-size:15px}
+.nbv .nav button:disabled{opacity:.35}
 `;
 const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
 
@@ -118,7 +135,8 @@ window.renderNote = function(){
   if (!c.stageId) return h + '<div class="nb-empty">ステージを選ぶと、メモが出ます</div>';
   const sName = nameById(c.stageId), rName = RULE_NAME[c.ruleId] || '';
   const sec = (key, title, sub, ph, main) => '<div class="nb-sec' + (main ? ' main' : '') + '"><h3>' + esc(title) + '<small>' + esc(sub) + '</small></h3>' +
-    '<textarea class="nbta" data-nbkey="' + esc(key) + '" placeholder="' + esc(ph) + '" rows="2">' + esc(memos[key] || '') + '</textarea><div class="st" data-nbst="' + esc(key) + '"></div></div>';
+    '<textarea class="nbta" data-nbkey="' + esc(key) + '" placeholder="' + esc(ph) + '" rows="2">' + esc(memos[key] || '') + '</textarea>' +
+    '<div class="nbpics" data-nbpk="' + esc(key) + '">' + addPicBtn(key) + '</div><div class="st" data-nbst="' + esc(key) + '"></div></div>';
   if (w) h += sec(sbKey(c.stageId, w.id), sName + ' × ' + w.name, 'このステージでこのブキのとき', '例: 右の高台から抑える、ここの段差は登れない など', true);
   else h += '<div class="nb-sec main"><h3>' + esc(sName) + ' × ブキ<small>このステージでこのブキのとき</small></h3><div class="nb-empty" style="padding:10px">ブキを選ぶと書けます<br><button data-nbpick="weapon">ブキを選ぶ</button></div></div>';
   if (c.ruleId) h += sec(kVs(c.stageId, c.ruleId), sName + ' × ' + rName, 'このステージのこのルール', '例: ' + rName + 'のときはここを取る など', !w);
@@ -167,7 +185,197 @@ main.addEventListener('focusout', e => {
   if (pendingRender) setTimeout(() => { if (pendingRender && ui.view === 'note' && !window.noteBusy()){ pendingRender = false; render(); } }, 350);
 });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'visible') flushAll(); });
-window.noteAfterRender = () => { pendingRender = false; main.querySelectorAll('.nbta').forEach(autosize); };
+window.noteAfterRender = () => { pendingRender = false; main.querySelectorAll('.nbta').forEach(autosize); fillPics(); };
+
+// ---- 画像（2026-11-22 ユーザー要望「それぞれ画像を載せれるようにしたい」）----
+// メモの欄ごとに画像を付けられる。画像は IndexedDB 'splat-memo-pics'（作戦図の DB とは別）に、1枚ずつ {id, key: メモのキー, blob, w, h, at} で保存。
+// 取り込む時に長い辺1600pxのJPEGに縮める。書き出し・読み込み（バックアップ）にも入る（notePics）
+const PIC_DB = 'splat-memo-pics', PIC_MAX = 12, PIC_ALL = 300, PIC_KEY_RE = /^(sb|vs|wv|rl):[A-Za-z0-9+/=:_-]{1,120}$/;
+const picUid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+let picP = null;
+function picDb(){
+  if (!picP) picP = new Promise((res, rej) => {
+    if (!window.indexedDB){ rej(new Error('no idb')); return; }
+    const r = indexedDB.open(PIC_DB, 1);
+    r.onupgradeneeded = () => { const s = r.result.createObjectStore('pics', { keyPath: 'id' }); s.createIndex('key', 'key'); };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => { picP = null; rej(r.error); };
+  });
+  return picP;
+}
+async function picDo(mode, fn){
+  const db = await picDb();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('pics', mode), q = fn(tx.objectStore('pics'));
+    tx.oncomplete = () => res(q && q.result);
+    tx.onerror = tx.onabort = () => rej(tx.error || new Error('idb'));
+  });
+}
+const picsOf = k => picDo('readonly', s => s.index('key').getAll(k)).then(a => (a || []).sort((x, y) => x.at - y.at));
+const picCount = () => picDo('readonly', s => s.count());
+const picDel = id => picDo('readwrite', s => s.delete(id));
+// 長い辺1600pxまでのJPEGにする（読めない画像はここで失敗する）
+async function shrinkPic(file){
+  const url = URL.createObjectURL(file);
+  try {
+    const im = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('img')); i.src = url; });
+    const iw = im.naturalWidth, ih = im.naturalHeight; if (!iw || !ih) throw new Error('img');
+    const s = Math.min(1, 1600 / Math.max(iw, ih)), cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.round(iw * s)); cv.height = Math.max(1, Math.round(ih * s));
+    const ctx = cv.getContext('2d'); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, cv.width, cv.height); ctx.drawImage(im, 0, 0, cv.width, cv.height);
+    const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.85));
+    const out = { blob, w: cv.width, h: cv.height }; cv.width = cv.height = 0;
+    if (!blob) throw new Error('blob');
+    return out;
+  } finally { URL.revokeObjectURL(url); }
+}
+function addPicBtn(k){ return '<label class="nbpic-add">＋ 画像<input type="file" accept="image/*" multiple data-nbpicin="' + esc(k) + '"></label>'; }
+const picUrls = new Map(), picSeq = {}; // 欄ごとの表示中のURLと、読み込みの順番（古い読み込みの結果で上書きしない）
+const picSlot = k => main.querySelector('[data-nbpk="' + CSS.escape(k) + '"]');
+function releasePics(k){ (picUrls.get(k) || []).forEach(u => URL.revokeObjectURL(u)); picUrls.delete(k); }
+async function fillPics(keys){
+  if (!keys){ [...picUrls.keys()].forEach(releasePics); keys = [...main.querySelectorAll('[data-nbpk]')].map(el => el.dataset.nbpk); } // 全部描き直した時は前の絵のURLを捨てる
+  for (const k of keys){
+    const my = picSeq[k] = (picSeq[k] || 0) + 1;
+    let list = [];
+    try { list = await picsOf(k); } catch (e){ continue; }
+    const el = picSlot(k);
+    if (my !== picSeq[k] || !el) continue;
+    releasePics(k);
+    const urls = list.map(p => URL.createObjectURL(p.blob)); picUrls.set(k, urls);
+    el.innerHTML = list.map((p, i) => '<button class="nbpic" data-nbpicv="' + esc(p.id) + '" data-nbpk2="' + esc(k) + '"><img src="' + urls[i] + '" alt=""></button>').join('') +
+      (list.length < PIC_MAX ? addPicBtn(k) : '');
+  }
+}
+// 画像の追加・読み込み・削除は1つずつ順番に（同時に走ると上限の数え方や同じIDの判定がずれるため。Codexレビュー 2026-11-22）
+let picQ = Promise.resolve();
+const picQueue = fn => { const p = picQ.then(fn, fn); picQ = p.catch(() => {}); return p; };
+// 上限と同じIDの確認と書き込みを1回の書き込みトランザクションで行う（入れられなかったら false）
+const picPutChecked = p => picDo('readwrite', s => {
+  const out = { result: false };
+  const g = s.get(p.id);
+  g.onsuccess = () => {
+    if (g.result) return;
+    const ca = s.count();
+    ca.onsuccess = () => {
+      if (ca.result >= PIC_ALL) return;
+      const ck = s.index('key').count(p.key);
+      ck.onsuccess = () => { if (ck.result < PIC_MAX){ s.put(p); out.result = true; } };
+    };
+  };
+  return out;
+});
+function addPics(k, files){
+  const say = t => { const s = stOf(k); if (s) s.textContent = t; };
+  return picQueue(async () => {
+    try {
+      const have = await picDo('readonly', s => s.index('key').count(k)), all = await picCount();
+      const room = Math.min(PIC_MAX - have, PIC_ALL - all);
+      if (room <= 0){ toast(PIC_MAX - have <= 0 ? '1つの欄に付けられる画像は' + PIC_MAX + '枚までです' : '画像は全部で' + PIC_ALL + '枚までです。いらない画像を消してください'); return; }
+      if (files.length > room) toast(room + '枚だけ付けます（上限のため）');
+      let ok = 0, bad = 0;
+      for (const f of files.slice(0, room)){
+        say('画像を取り込み中…（' + (ok + bad + 1) + '/' + Math.min(files.length, room) + '）');
+        try { const im = await shrinkPic(f); if (await picPutChecked({ id: picUid(), key: k, blob: im.blob, w: im.w, h: im.h, at: Date.now() })) ok++; else bad++; }
+        catch (e){ bad++; }
+      }
+      say(bad ? (ok ? ok + '枚付けました（' + bad + '枚は付けられませんでした）' : '画像を付けられませんでした') : '画像を付けました ✓');
+    } catch (e){ say('画像を保存できませんでした'); }
+  }).then(() => fillPics([k]));
+}
+// 選んだ画像は、その input 自身で受け取る（写真を選んでいる間に欄が描き直されて input が外れても、選んだ物を落とさないため）
+main.addEventListener('click', e => {
+  const inp = e.target; if (!inp.dataset || !inp.dataset.nbpicin || inp.dataset.nbhooked) return;
+  inp.dataset.nbhooked = '1';
+  inp.addEventListener('change', () => {
+    const files = [...(inp.files || [])], k = inp.dataset.nbpicin; inp.value = '';
+    if (files.length && PIC_KEY_RE.test(k)) addPics(k, files);
+  });
+}, true);
+// 画像を大きく見る（左右で同じ欄の画像を切り替え、タップで拡大、削除）
+let viewerSeq = 0;
+async function openViewer(k, id){
+  const my = ++viewerSeq;
+  let list; try { list = await picsOf(k); } catch (e){ toast('画像を読めませんでした'); return; }
+  if (my !== viewerSeq || ui.view !== 'note' || sheet) return; // 2回押した・タブを移った・別の画面が開いている時は開かない
+  let i = Math.max(0, list.findIndex(p => p.id === id)), url = null, deleting = false;
+  if (!list.length) return;
+  openSheet('<div class="bar"><button data-nbclose="1">← とじる</button><b class="cnt"></b><button class="del" data-nbvdel="1">削除</button></div>' +
+    '<div class="im"><img alt=""></div><div class="hint">画像をタップで拡大／もう一度タップで戻す</div>' +
+    '<div class="nav"><button data-nbvgo="-1">‹ 前</button><button data-nbvgo="1">次 ›</button></div>',
+    async t => {
+      if (deleting) return; // 消している間は前後の移動もしない
+      if (t.dataset.nbvgo){ i = Math.max(0, Math.min(list.length - 1, i + +t.dataset.nbvgo)); show(); }
+      else if (t.dataset.nbvdel){
+        if (!confirm('この画像を消しますか？（元に戻せません）')) return;
+        const delId = list[i].id; deleting = true;
+        try { await picQueue(() => picDel(delId)); } catch (e){ deleting = false; toast('消せませんでした'); return; }
+        deleting = false;
+        fillPics([k]); toast('画像を消しました');
+        if (sheet !== mySheet) return; // 消している間に閉じられた
+        const j = list.findIndex(p => p.id === delId); if (j >= 0) list.splice(j, 1);
+        if (!list.length){ closeSheet(false); return; }
+        i = Math.min(i, list.length - 1); show();
+      }
+    }, 'nbv', () => { if (url) URL.revokeObjectURL(url); url = null; });
+  const mySheet = sheet, box = sheet.querySelector('.im'), img = box.querySelector('img');
+  box.addEventListener('click', () => box.classList.toggle('big'));
+  function show(){
+    if (sheet !== mySheet) return;
+    if (url) URL.revokeObjectURL(url);
+    url = URL.createObjectURL(list[i].blob); img.src = url; box.classList.remove('big'); box.scrollTop = box.scrollLeft = 0;
+    sheet.querySelector('.cnt').textContent = (i + 1) + ' / ' + list.length;
+    const nav = sheet.querySelectorAll('[data-nbvgo]'); nav[0].disabled = i <= 0; nav[1].disabled = i >= list.length - 1;
+  }
+  show();
+}
+// ---- バックアップ（index.html の書き出し・読み込みから呼ぶ） ----
+const blobToDataURL = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); });
+window.exportNotePics = async () => {
+  try {
+    const all = await picDo('readonly', s => s.getAll()), out = [];
+    for (const p of all || []) if (p && p.blob) out.push({ id: p.id, key: p.key, w: p.w, h: p.h, at: p.at, data: await blobToDataURL(p.blob) });
+    return out;
+  } catch (e){ return null; }
+};
+// 読み込み: 今ある画像は消さずに追加（同じIDの画像は入れない）。実際に読めるか確かめ、縮め直して入れる
+// 書き出したファイルの画像は必ずJPEG（shrinkPic）なので、読み込みもJPEGだけ。開く前に先頭を読んで縦横を確かめ、
+// 巨大な画像（展開するとメモリを使い切るもの）は開かない
+function jpegSize(dataUrl){
+  try {
+    const b64 = dataUrl.slice(dataUrl.indexOf(',') + 1, dataUrl.indexOf(',') + 1 + 87384); // 先頭64KBぶん
+    const bin = atob(b64.slice(0, b64.length - b64.length % 4)), n = bin.length, at = i => bin.charCodeAt(i);
+    if (at(0) !== 0xFF || at(1) !== 0xD8) return null;
+    let i = 2;
+    while (i + 9 < n){
+      if (at(i) !== 0xFF){ i++; continue; }
+      const m = at(i + 1);
+      if (m === 0xD8 || m === 0x01 || (m >= 0xD0 && m <= 0xD7) || m === 0xFF){ i += m === 0xFF ? 1 : 2; continue; }
+      const len = (at(i + 2) << 8) | at(i + 3);
+      if (m >= 0xC0 && m <= 0xCF && m !== 0xC4 && m !== 0xC8 && m !== 0xCC) return { h: (at(i + 5) << 8) | at(i + 6), w: (at(i + 7) << 8) | at(i + 8) };
+      i += 2 + len;
+    }
+  } catch (e){}
+  return null;
+}
+window.importNotePics = arr => picQueue(async () => {
+  const res = { pics: 0, err: false };
+  if (!Array.isArray(arr)) return res;
+  try {
+    for (const v of arr.slice(0, PIC_ALL)){
+      if (!v || typeof v.key !== 'string' || !PIC_KEY_RE.test(v.key) || typeof v.data !== 'string' || v.data.length > 6e6 || !/^data:image\/jpeg;base64,/.test(v.data)){ res.err = true; continue; }
+      const sz = jpegSize(v.data);
+      if (!sz || !sz.w || !sz.h || sz.w > 4096 || sz.h > 4096){ res.err = true; continue; }
+      const id = typeof v.id === 'string' && /^[a-z0-9]{1,40}$/.test(v.id) ? v.id : picUid();
+      if (await picDo('readonly', s => s.getKey(id)) !== undefined) continue; // 同じ画像はもう入っている
+      try {
+        const im = await shrinkPic(await (await fetch(v.data)).blob());
+        if (await picPutChecked({ id, key: v.key, blob: im.blob, w: im.w, h: im.h, at: Number.isFinite(v.at) ? v.at : Date.now() })) res.pics++; else res.err = true;
+      } catch (e){ res.err = true; }
+    }
+  } catch (e){ res.err = true; }
+  return res;
+});
 // ---- 上の操作 ----
 function redraw(){ flushAll(); saveNb(); render(); }
 main.addEventListener('click', e => {
@@ -180,20 +388,24 @@ main.addEventListener('click', e => {
   else if (d.nbrule){ nb.rule = c.mode && d.nbrule === c.mode.s.vsRule.id ? null : { id: d.nbrule, at: c.mode ? c.mode.node.startTime : '' }; redraw(); }
   else if (d.nbpick === 'stage') openStageSheet();
   else if (d.nbpick === 'weapon') openWeaponSheet();
+  else if (d.nbpicv) openViewer(d.nbpk2, d.nbpicv);
 });
 
 // ---- 選ぶシート ----
-let sheet = null;
+let sheet = null, sheetCleanup = null;
 function closeSheet(fromPop){
   if (!sheet) return;
   sheet.remove(); sheet = null;
+  if (sheetCleanup){ sheetCleanup(); sheetCleanup = null; }
   if (!fromPop && history.state && history.state.nbsheet) history.back();
 }
 window.notePop = () => { if (sheet){ closeSheet(true); return true; } return false; };
-function openSheet(html, onClick){
+// cls: 中身の箱のクラス（既定は下から出るシート。'nbv' は画像を全画面で見る画面）、cleanup: 閉じた時の後片付け
+function openSheet(html, onClick, cls, cleanup){
   closeSheet(false);
-  sheet = document.createElement('div'); sheet.className = 'nbs-bg';
-  sheet.innerHTML = '<div class="nbs">' + html + '</div>';
+  sheet = document.createElement('div'); sheet.className = 'nbs-bg' + (cls === 'nbv' ? ' nbv-bg' : '');
+  sheet.innerHTML = '<div class="' + (cls || 'nbs') + '">' + html + '</div>';
+  sheetCleanup = cleanup || null;
   sheet.addEventListener('click', e => {
     if (e.target === sheet || e.target.closest('[data-nbclose]')){ closeSheet(false); return; }
     const t = e.target.closest('button'); if (t) onClick(t);

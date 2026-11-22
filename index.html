@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-21c';</script>
+<script>window.APP_VERSION = '2026-11-22a';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -1049,7 +1049,10 @@ async function exportMemos(){
   // 作戦図（土台の画像を含む）はIndexedDBから読んで一緒に書き出す
   const boards = window.exportBoards ? await exportBoards() : null;
   if (window.exportBoards && !boards) toast('作戦図を読み出せなかったので、作戦図以外を書き出します');
-  const blob = new Blob([JSON.stringify({ app:'splat-stage-memo', version:4, exportedAt:d.toISOString(), memos, contests, tiers: window.getTierStore ? getTierStore() : undefined, boards: boards || undefined })], { type:'application/json' });
+  // バトルメモの欄に付けた画像（note.js）
+  const notePics = window.exportNotePics ? await exportNotePics() : null;
+  if (window.exportNotePics && !notePics) toast('メモの画像を読み出せなかったので、画像以外を書き出します');
+  const blob = new Blob([JSON.stringify({ app:'splat-stage-memo', version:4, exportedAt:d.toISOString(), memos, contests, tiers: window.getTierStore ? getTierStore() : undefined, boards: boards || undefined, notePics: notePics && notePics.length ? notePics : undefined })], { type:'application/json' });
   const name = 'stage-memo-' + stamp + '.json';
   try{
     const file = new File([blob], name, { type:'application/json' });
@@ -1092,6 +1095,11 @@ function importMemos(file){
         if (r.boards || r.bases) toast('作戦図' + r.boards + '件・土台' + r.bases + '枚を読み込みました' + (r.err ? '（一部読めないものがありました）' : ''));
         else if (r.err) toast('作戦図を読み込めませんでした');
         render();
+      });
+      // メモの画像も非同期で読み込む（今ある画像は消さずに追加）。作戦図のお知らせと重ならないよう少し後に出す
+      if (Array.isArray(j.notePics) && window.importNotePics) importNotePics(j.notePics).then(r => {
+        setTimeout(() => toast(r.pics ? 'メモの画像' + r.pics + '枚を読み込みました' + (r.err ? '（一部入れられないものがありました）' : '') : r.err ? 'メモの画像を読み込めませんでした' : 'メモの画像は読み込み済みでした'), 2500);
+        if (ui.view === 'note') render();
       });
     }catch(e){ alert('このファイルは読み込めませんでした。「書き出す」で作ったファイルを選んでください。'); }
   };
