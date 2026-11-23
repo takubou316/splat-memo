@@ -147,15 +147,20 @@ const sec = (key, title, sub, ph, main) => '<div class="nb-sec' + (main ? ' main
 const CAT = { Shooter: 'シューター', Blaster: 'ブラスター', Roller: 'ローラー', Brush: 'フデ', Charger: 'チャージャー', Slosher: 'スロッシャー',
   Spinner: 'スピナー', Maneuver: 'マニューバー', Shelter: 'シェルター', Stringer: 'ストリンガー', Saber: 'ワイパー' };
 const catName = t => CAT[t] || t;
+// 今の時間帯が分からない時の案内（読み込み中／取れなかった）。下のカードでステージを選べばメモは読める
+const noSchedNote = what => '<div class="nb-note">' + (fetchError ? '今の' + what + 'のスケジュールを取得できませんでした。下でステージを選ぶと、保存してあるメモを読めます<button data-nbretry="1">もう一度取得</button>'
+  : !sched ? '今の' + what + 'を読み込んでいます…（待たずに、下でステージを選んでもメモを読めます）'
+  : '今の時間帯の' + what + 'が見つかりません。下でステージを選ぶとメモを読めます<button data-nbretry="1">取り直す</button>') + '</div>';
+document.getElementById('main').addEventListener('click', e => { if (e.target.closest && e.target.closest('[data-nbretry]')) refresh(true); });
 // バトルメモ（view 'note'）とサモランメモ（view 'cnote'）
 window.isNoteView = v => v === 'note' || v === 'cnote';
 window.renderNote = () => ui.view === 'cnote' ? renderCoop() : renderBattle();
 
 function renderBattle(){
-  if (!sched) return '<div class="empty">読み込み中…</div>';
+  // スケジュールが無くても（初回・通信できない）、ステージを選べばメモを読めるようにする（前は「読み込み中…」のまま止まっていた。Codexの評価 2026-11-23）
   const c = current(), w = weaponById(nb.weapon);
   let h = '';
-  if (!c.modes.length) h += '<div class="nb-note">今の時間帯のバトルを取得できていません。右上の「更新」を押すか、ステージを選んでください</div>';
+  if (!c.modes.length) h += noSchedNote('バトル');
   if (c.modes.length){
     h += '<div class="nb-modes">' + c.modes.map(m => '<button data-nbmode="' + esc(m.key) + '" class="' + (c.mode && m.key === c.mode.key ? 'on' : '') + '" style="--c:var(' + m.c + ')"><b>' + esc(m.label) + '</b><small>' + esc(RULE_NAME[m.s.vsRule.id] || m.s.vsRule.name) + '</small></button>').join('') + '</div>';
     if (c.mode && c.mode.s.vsStages.length > 1) h += '<div class="nb-pair">' + c.mode.s.vsStages.map((s, i) => '<button data-nbpair="' + i + '" class="' + (!c.manual && c.pair === i ? 'on' : '') + '">' + esc(stageName(s)) + '</button>').join('') + '</div>';
@@ -215,10 +220,9 @@ function coopCurrent(){
   return { modes, mode, at, stageId, manual: !!manual, supplied, weaponId };
 }
 function renderCoop(){
-  if (!sched) return '<div class="empty">読み込み中…</div>';
   const c = coopCurrent(), w = coopWeaponById(c.weaponId);
   let h = '';
-  if (!c.modes.length) h += '<div class="nb-note">今の時間帯のサーモンランを取得できていません。右上の「更新」を押すか、ステージを選んでください</div>';
+  if (!c.modes.length) h += noSchedNote('サーモンラン');
   else h += '<div class="nb-modes">' + c.modes.map(m => '<button data-cnmode="' + m.key + '" class="' + (c.mode && m.key === c.mode.key ? 'on' : '') + '" style="--c:var(--salmon)"><b>' + esc(m.label) + '</b><small>' + esc(stageName(m.s.coopStage)) + '</small></button>').join('') + '</div>';
   h += '<div class="nb-cards cn-cards">' + (c.stageId
     ? '<button class="nb-card" data-cnpick="stage"><img src="' + esc(imgOf(c.stageId)) + '" alt=""><span class="t"><small>ステージ</small><b>' + esc(nameById(c.stageId)) + '</b></span><span class="tag' + (c.manual ? ' man' : '') + '">' + (c.manual ? '手動' : '今') + '</span></button>'
@@ -287,6 +291,8 @@ function flushAll(){
   saveDirty();
 }
 window.noteFlush = flushAll;
+// 同じメモをほかの画面（いまのステージの編集画面）で書き直した時に呼ぶ。ここに残っている古い打ちかけ（保存に失敗した物）で、新しい内容を上書きしないように（Codexの評価 2026-11-23）
+window.noteForget = k => { clearTimeout(timers[k]); delete timers[k]; dirty.delete(k); };
 // 書いている途中は画面を描き直さない（時間帯の更新などで打ちかけが消えないように）。見送った分は書き終えた後に描き直す
 // 描いてある画面（バトル／サモラン）と開こうとしている画面が違う時は「書いている途中」扱いにしない（タブを移ったのに前の画面が残らないように。Codexレビュー 2026-11-23）
 window.noteBusy = () => { const a = document.activeElement; return !!(a && a.classList && a.classList.contains('nbta')) && main.dataset.nv === ui.view; };
@@ -462,13 +468,14 @@ async function openViewer(k, id, origin){
 }
 // ---- バックアップ（index.html の書き出し・読み込みから呼ぶ） ----
 const blobToDataURL = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); });
-window.exportNotePics = async () => {
+// 取り込み中の画像も入るように、追加・削除と同じ列に並んでから読む（Codexの評価 2026-11-23）
+window.exportNotePics = () => picQueue(async () => {
   try {
     const all = await picDo('readonly', s => s.getAll()), out = [];
     for (const p of all || []) if (p && p.blob) out.push({ id: p.id, key: p.key, w: p.w, h: p.h, at: p.at, data: await blobToDataURL(p.blob) });
     return out;
   } catch (e){ return null; }
-};
+});
 // 読み込み: 今ある画像は消さずに追加（同じIDの画像は入れない）。実際に読めるか確かめ、縮め直して入れる
 // 書き出したファイルの画像は必ずJPEG（shrinkPic）なので、読み込みもJPEGだけ。開く前に先頭を読んで縦横を確かめ、
 // 巨大な画像（展開するとメモリを使い切るもの）は開かない

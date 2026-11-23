@@ -29,10 +29,13 @@ function nwKey(p){
 const nwSize = k => ({ w: NW_MAPS[k][0] * NW_K, h: NW_MAPS[k][1] * NW_K });
 const nwImg = (k, bg) => bg === 'nw3d' && NW_MAPS[k][2] ? 'maps/nw/model/' + k + '.webp' : 'maps/nw/plain/' + k + '.svg';
 const isNwBg = b => b && (b.bg === 'nw' || b.bg === 'nw3d');
+// 自分のスクショの土台のキー。普通は場所（place）。土台を登録し直した時・別の端末から読み込んだ時は、前の画像を '<場所>#<ID>' に残し、
+// その画像で描いた作戦図は b.base でそれを指す（2026-11-23 Codexの評価: 土台が場所に付いていて、差し替え・読み込みで矢印の位置がずれた）
+const baseKeyOf = b => (b && typeof b.base === 'string' && b.base) || (b && b.place);
 // 作戦図の土台の画像。{ url, own }（own=true は自分で開いた Object URL なので使い終わったら解放する）。無ければ null
 async function boardBgUrl(b){
   if (isNwBg(b)){ const k = nwKey(b.place); return k ? { url: nwImg(k, b.bg), own: false } : null; }
-  const base = await baseGet(b.place).catch(() => null);
+  const base = await baseGet(baseKeyOf(b)).catch(() => null);
   return base ? { url: URL.createObjectURL(base.blob), own: true } : null;
 }
 function creditOf(b){
@@ -312,6 +315,31 @@ async function drawPlace(){
     : '土台の画像は自分で撮ったスクショです。このスマホの中だけに保存されます。') + '</div>';
   body.innerHTML = h;
 }
+// 場所 key の今の土台を使っている作戦図があれば、その土台を '<key>#<ID>' に写して作戦図の base を付け替える。付け替えた件数を返す
+// 読み取りの失敗は「無い」と区別し、失敗したら差し替えをやめる（前の画像を上書きしないように。Codexレビュー 2026-11-23）
+async function keepOldBase(key){
+  const old = await baseGet(key); if (!old) return 0;
+  await saveQueue;
+  const unsaved = [...failedBoards.entries()].map(([id, s]) => [id, JSON.parse(s)]).filter(([, b]) => !isNwBg(b) && baseKeyOf(b) === key);
+  const users = (await allBoards()).filter(b => b && !isNwBg(b) && baseKeyOf(b) === key);
+  if (!users.length && !unsaved.length) return 0;
+  const nk = key + '#' + uid();
+  await basePut(nk, Object.assign({}, old, { updated: old.updated || Date.now() }));
+  // 保存できずに残っている写しも、前の画像を指すように直す（後で「もう一度保存」しても新しい画像に重ならないように）
+  unsaved.forEach(([id, b]) => { b.base = nk; failedBoards.set(id, JSON.stringify(b)); });
+  for (const b of users){ b.base = nk; const job = saveQueue.then(() => boardPut(b)); saveQueue = job.catch(() => {}); await job; }
+  return users.length + unsaved.length;
+}
+// 使われなくなった '<場所>#<ID>' の土台を消す（作戦図の削除・差し替え・読み込みの後。場所そのもののキーは消さない）
+async function gcBases(){
+  try {
+    await saveQueue;
+    const used = new Set((await allBoards()).filter(b => b && !isNwBg(b)).map(baseKeyOf));
+    failedBoards.forEach(s => { try { used.add(baseKeyOf(JSON.parse(s))); } catch (e){} });
+    if (B && !deletedIds.has(B.id)) used.add(baseKeyOf(B)); // 開いている作戦図（消した物は除く）
+    for (const k of await allBaseKeys()) if (String(k).includes('#') && !used.has(k)) await idbDo('bases', 'readwrite', s => s.delete(k));
+  } catch (e){}
+}
 function fmtDate(ms){ const d = new Date(ms); return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); }
 const bdKey = (sid, wave) => 'bd:' + sid + ':' + wave; // ばちこんのWAVEに割り当てた作戦図のID
 window.bdKey = bdKey;
@@ -335,7 +363,6 @@ $('bplaceBody').addEventListener('click', async e => {
   const t = e.target.closest('button'); if (!t || !pl) return;
   const d = t.dataset;
   if (d.bpick){
-    if (!d.bconfirmed && statusCache && statusCache.own[pl.place] && !confirm('この場所の「自分のスクショ」の作戦図は、今の画像に合わせて置いてあります。別の画像にすると位置がずれることがあります。登録し直しますか？')) return;
     $('bplaceFile').click();
   }
   else if (d.bsw != null){ pl.sw = d.bsw === '*' ? null : d.bsw; drawPlace(); } // 「通常」は data-bsw=""（空）なので有無で見る
@@ -347,10 +374,14 @@ $('bplaceBody').addEventListener('click', async e => {
     t.disabled = true; t.textContent = '登録しています…';
     try {
       const img = await prepareImage(pend.file, pend.rot);
+      // 前の画像で描いた作戦図は、前の画像を別のキーに残してそれを指すようにする（差し替えても矢印の位置がずれない。
+      // 前は確認を出していたが、通ってきた画面によって出ないことがあった。Codexの評価 2026-11-23）
+      const kept = await keepOldBase(key);
       await basePut(key, { blob: img.blob, w: img.w, h: img.h, src: '自分で撮ったスクショ', updated: Date.now() });
       URL.revokeObjectURL(pend.url);
       if (pl === my) pl.pending = null;
-      await loadStatus(); toast('土台を登録しました');
+      gcBases();
+      await loadStatus(); toast(kept ? '土台を登録しました（前の作戦図' + kept + '件は前の画像のまま残しました）' : '土台を登録しました');
       if (pl === my) drawPlace();
     } catch (err){ if (pl === my){ t.disabled = false; t.textContent = 'この画像で登録'; } toast('登録できませんでした（画像を読み込めないか、空き容量が足りません）'); }
   }
@@ -475,7 +506,9 @@ async function openBoard(id, opts){
   if (B) return;
   await saveQueue; // 書きかけの保存が終わってから読む（保存前のデータを開かない）
   let b = null;
-  try { b = await boardGet(id); } catch (e){}
+  // 保存できずに残っている写しがあれば、そちらを開く（DBの古い内容で上書きして、失敗した変更を失わないように）
+  if (failedBoards.has(id)){ try { b = JSON.parse(failedBoards.get(id)); } catch (e){} }
+  if (!b){ try { b = await boardGet(id); } catch (e){} }
   if (my !== openSeq || B || pl !== plAt || (play && play.wave) !== playAt) return;
   if (!b){ toast('作戦図が見つかりません（削除されたかもしれません）'); return; }
   const bgImg = await boardBgUrl(b).catch(() => null);
@@ -689,6 +722,28 @@ function commit(){
   if (bs.hist.length > 80){ bs.hist.shift(); bs.hi--; }
   persist(); drawBoard();
 }
+// 打っている途中も1秒ごとに保存する（描き直さずに保存だけ。画面ロックやアプリの終了で文字が消えないように。Codexの評価 2026-11-23）
+let persistTimer = 0;
+function persistSoon(){ clearTimeout(persistTimer); persistTimer = setTimeout(() => { if (B && inputDirty) persist(); }, 1000); }
+// アプリが隠れる時（ホームに戻る・画面ロック）は、打ちかけをすぐ保存する
+function saveOnHide(){ if (document.visibilityState === 'hidden' && B && inputDirty){ clearTimeout(persistTimer); persist(); } }
+document.addEventListener('visibilitychange', saveOnHide);
+window.addEventListener('pagehide', () => { if (B && inputDirty){ clearTimeout(persistTimer); persist(); } });
+// 保存できなかった作戦図（ID→その時点の写し）。画面を閉じても残し、index.html の「もう一度保存」から書き直す
+const failedBoards = new Map();
+window.boardFailCount = () => failedBoards.size;
+window.boardRetry = () => {
+  const items = [...failedBoards.entries()];
+  items.forEach(([id, snap]) => { saveQueue = saveQueue.then(async () => {
+    if (deletedIds.has(id)){ failedBoards.delete(id); return; }
+    if (failedBoards.get(id) !== snap) return; // 待つ間に新しい写しで保存し直された
+    try {
+      await boardPut(JSON.parse(snap)); failedBoards.delete(id);
+      if (B && bs && B.id === id && JSON.stringify(B) === snap){ bs.savedVer = bs.ver; $('bSaved').textContent = '保存済み'; }
+    } catch (e){}
+  }); });
+  return saveQueue.then(() => { if (window.drawUnsaved) drawUnsaved(); return failedBoards.size === 0; });
+};
 function persist(){
   const id = B.id, snap = JSON.stringify(B), ver = ++bs.ver, mine = bs;
   $('bSaved').textContent = '保存中…';
@@ -696,10 +751,12 @@ function persist(){
     if (deletedIds.has(id)) return;
     try {
       await boardPut(JSON.parse(snap));
+      if (failedBoards.get(id) === snap || failedBoards.has(id)){ failedBoards.delete(id); if (window.drawUnsaved) drawUnsaved(); } // 新しい写しで保存できたら、前の失敗は要らない
       if (mine.savedVer < ver) mine.savedVer = ver;
       if (bs === mine) $('bSaved').textContent = mine.savedVer === mine.ver ? '保存済み' : '保存中…';
     } catch (e){
-      if (bs === mine) $('bSaved').textContent = '保存できません（次の変更で再試行）';
+      failedBoards.set(id, snap); if (window.drawUnsaved) drawUnsaved();
+      if (bs === mine) $('bSaved').textContent = '保存できません（画面上の帯から再保存できます）';
       toast('保存できませんでした（空き容量を確認してください）');
     }
   });
@@ -748,7 +805,7 @@ $('bTop').addEventListener('click', e => {
 $('bTop').addEventListener('input', e => {
   if (e.target.id !== 'bTxt' || !B) return;
   const o = curObjs().find(x => x.id === bs.sel); if (!o) return;
-  o.s = e.target.value.slice(0, 30); inputDirty = true; drawSvg();
+  o.s = e.target.value.slice(0, 30); inputDirty = true; drawSvg(); persistSoon();
 });
 $('bTop').addEventListener('change', e => { if (e.target.id === 'bTxt') flushInputs(); });
 // ---- 下の操作（アイコンの帯・手順・メモ）----
@@ -779,7 +836,7 @@ $('bBottom').addEventListener('click', e => {
 });
 $('bBottom').addEventListener('input', e => {
   if (e.target.id !== 'bNote' || !B) return;
-  B.steps[bs.step].note = e.target.value.slice(0, 80); inputDirty = true;
+  B.steps[bs.step].note = e.target.value.slice(0, 80); inputDirty = true; persistSoon();
 });
 $('bBottom').addEventListener('change', e => { if (e.target.id === 'bNote') flushInputs(); });
 function shiftObj(o, dx, dy){
@@ -939,6 +996,7 @@ function openSwSheet(){
       deletedIds.add(id);
       await saveQueue;
       try { await boardDel(id); } catch (err){ deletedIds.delete(id); toast('削除できませんでした'); return; }
+      failedBoards.delete(id); if (window.drawUnsaved) drawUnsaved(); gcBases();
       Object.keys(memos).forEach(k => { if (k.startsWith('bd:') && memos[k] === id) delete memos[k]; });
       if (!save('sm_memos', memos)) toast('WAVEの割り当てを消せませんでした（次に開いた時に「見つかりません」と出ます）');
       // 待っている間に別の作戦図を開いていたら、その画面は閉じない
@@ -1148,7 +1206,7 @@ window.fillNowBoards = async function(){
       .sort((a, b) => (order[a.place.split(':')[2]] || 0) - (order[b.place.split(':')[2]] || 0) || b.updated - a.updated));
   });
   // 土台の画像（同じ場所は1回だけ読む）
-  const places = [...new Set([...groups.values()].flat().filter(b => !isNwBg(b)).map(b => b.place))], urls = {}; // 自分のスクショの土台だけ読む（NWのマップは同梱のファイル）
+  const places = [...new Set([...groups.values()].flat().filter(b => !isNwBg(b)).map(baseKeyOf))], urls = {}; // 自分のスクショの土台だけ読む（NWのマップは同梱のファイル）
   for (const p of places){
     try { const base = await baseGet(p); if (base) urls[p] = URL.createObjectURL(base.blob); } catch (e){}
     if (my !== nowSeq){ Object.values(urls).forEach(u => URL.revokeObjectURL(u)); return; } // 新しい描画が来たら途中でやめる
@@ -1167,7 +1225,7 @@ window.fillNowBoards = async function(){
       const tide = (b.place.startsWith('c:') ? TIDE_NAME[b.place.split(':')[2]] || '' : '') + (b.sw ? '・' + swName(b.sw) : '');
       const note = b.steps[0] && b.steps[0].note;
       return '<button class="nbcard" data-nbopen="' + esc(b.id) + '"><div class="nbthumb" style="padding-top:' + (b.h / b.w * 100).toFixed(2) + '%">' +
-        (isNwBg(b) && nwKey(b.place) ? '<img src="' + esc(nwImg(nwKey(b.place), b.bg)) + '" alt="">' : urls[b.place] ? '<img src="' + urls[b.place] + '" alt="">' : '') +
+        (isNwBg(b) && nwKey(b.place) ? '<img src="' + esc(nwImg(nwKey(b.place), b.bg)) + '" alt="">' : urls[baseKeyOf(b)] ? '<img src="' + urls[baseKeyOf(b)] + '" alt="">' : '') +
         '<svg viewBox="0 0 ' + b.w + ' ' + b.h + '" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">' + thumbSVG(b) + '</svg></div>' +
         '<div class="nbcap">' + esc(b.title) + '<small>' + esc([tide, b.steps.length > 1 ? '手順' + b.steps.length : '', note || ''].filter(Boolean).join('・')) + '</small></div></button>';
     }).join('') + '</div>';
@@ -1188,13 +1246,15 @@ window.exportBoards = async () => {
       tx.oncomplete = () => res(out); tx.onerror = tx.onabort = () => rej(tx.error);
     });
     const bases = {};
-    for (const [k, v] of Object.entries(got.bases)) if (v && v.blob) bases[k] = { data: await blobToDataURL(v.blob), w: v.w, h: v.h, src: v.src || '' };
+    for (const [k, v] of Object.entries(got.bases)) if (v && v.blob) bases[k] = { data: await blobToDataURL(v.blob), w: v.w, h: v.h, src: v.src || '', updated: v.updated };
     return { version: 1, bases, boards: got.boards };
   } catch (e){ return null; }
 };
 const PLACE_RE = /^(c:[A-Za-z0-9+/=]{1,40}:(Low|Mid|High)|v:[A-Za-z0-9+/=]{1,40})$/;
 const ID_RE = /^[a-z0-9]{1,40}$/;
-const LIM = { boards: 300, bases: 60, baseBytes: 12e6, points: 60000, objs: 400, steps: 30 }; // 編集側も同じ上限を守る（roomFor）
+const BASE_RE = /^(c:[A-Za-z0-9+/=]{1,40}:(Low|Mid|High)|v:[A-Za-z0-9+/=]{1,40})(#[a-z0-9]{1,40})?$/; // 土台のキー（場所、または 場所#ID）
+// boards・bases は読み込みの上限。作る側に上限は無いので、普通の使い方で超えない大きさにする（前は300件・60枚で、超えた分を黙って捨てていた）
+const LIM = { boards: 5000, bases: 1000, baseBytes: 12e6, points: 60000, objs: 400, steps: 30 }; // 編集側も同じ上限を守る（roomFor）
 const ICON_KEYS = () => new Set([
   ...(TIER_DATA.sets.boss.items || []).map(x => 'boss:' + x.id), ...SALMONIDS.map(s => 'sake:' + s[0]),
   ...(TIER_DATA.sets.coopWeapon.items || []).map(x => 'weapon:' + x.id), ...PLAYERS.map(p => 'player:' + p[0]), ...MARKS.map(m => 'mark:' + m[0])]);
@@ -1230,35 +1290,60 @@ function cleanBoard(b, icons){
   // NWのマップの作戦図は、同梱のマップの大きさに合わせる（無い場所なら自分のスクショ扱い）
   const nk = (b.bg === 'nw' || b.bg === 'nw3d') ? nwKey(b.place) : null;
   return { id: typeof b.id === 'string' && ID_RE.test(b.id) ? b.id : uid(), place: b.place, title: String(b.title || '作戦図').slice(0, 40),
-    bg: nk ? b.bg : 'own', sw: swFor(b.place).some(s => s[0] === b.sw) ? b.sw : '', w: nk ? nwSize(nk).w : w, h: nk ? nwSize(nk).h : h, rot: [0, 90, 180, 270].includes(b.rot) ? b.rot : 0, steps, created: Number.isFinite(b.created) ? b.created : Date.now(), updated: Number.isFinite(b.updated) ? b.updated : Date.now() };
+    bg: nk ? b.bg : 'own', sw: swFor(b.place).some(s => s[0] === b.sw) ? b.sw : '', w: nk ? nwSize(nk).w : w, h: nk ? nwSize(nk).h : h, rot: [0, 90, 180, 270].includes(b.rot) ? b.rot : 0,
+    ...(!nk && typeof b.base === 'string' && BASE_RE.test(b.base) && b.base.split('#')[0] === b.place ? { base: b.base } : {}), steps, created: Number.isFinite(b.created) ? b.created : Date.now(), updated: Number.isFinite(b.updated) ? b.updated : Date.now() };
 }
-// 読み込み: 今ある土台・作戦図は消さずに追加（同じIDがあれば新しいIDの別の作戦図として入れる）。土台は無い場所だけ入れる。
-// 画像は実際に読み込めるか確かめ、取り込みと同じく縮小し直す。戻り値の idMap（元のID→入れたID）でWAVEの割り当てを付け替える
+// 読み込み: 今ある土台・作戦図は消さずに追加（同じIDがあれば新しいIDの別の作戦図として入れる）。
+// 土台: 同じキーが端末に無ければそのキーで入れる。あれば、同じ画像（縦横と登録時刻が同じ）なら入れず、違う画像なら '<場所>#<新ID>' で入れて、
+// その土台を使う作戦図の base を付け替える（前は飛ばしていたので、端末の別のスクショの上に重なって矢印の位置がずれた。Codexの評価 2026-11-23）
+// 画像は実際に読み込めるか確かめ、取り込みと同じく縮小し直す。戻り値の idMap（元のID→入れたID）でWAVEの割り当てを付け替える。
+// 上限を超えた分・読めなかった分は黙って捨てず、skipped で数を返す
 window.importBoards = async data => {
-  const res = { boards: 0, bases: 0, idMap: {} };
+  const res = { boards: 0, bases: 0, skipped: 0, idMap: {} };
   if (!data || typeof data !== 'object') return res;
   try {
-    const haveBases = new Set(await allBaseKeys());
-    const entries = Object.entries(data.bases && typeof data.bases === 'object' ? data.bases : {}).slice(0, LIM.bases);
+    // 端末の土台は縦横・登録時刻だけ控える。読めなかったキーは「ある」扱いにして上書きしない（Codexレビュー 2026-11-23）
+    const localBases = {};
+    for (const k of await allBaseKeys()){ let v = null; try { v = await baseGet(k); } catch (e){ v = { w: -1, h: -1, updated: NaN }; } if (v) localBases[k] = { w: v.w, h: v.h, updated: v.updated }; }
+    const failedBase = new Set(); // バックアップにあったのに入れられなかった土台のキー
+    const baseMap = {}; // バックアップの土台キー → 端末で使うキー
+    const all = Object.entries(data.bases && typeof data.bases === 'object' ? data.bases : {});
+    const entries = all.slice(0, LIM.bases); res.skipped += all.length - entries.length;
+    all.slice(LIM.bases).forEach(([k]) => failedBase.add(k));
     for (const [k, v] of entries){
-      if (!PLACE_RE.test(k) || haveBases.has(k) || !v || typeof v.data !== 'string' || v.data.length > LIM.baseBytes * 1.4 || !/^data:image\/(png|jpeg|webp);base64,/.test(v.data)) continue;
+      if (!BASE_RE.test(k) || !v || typeof v.data !== 'string' || v.data.length > LIM.baseBytes * 1.4 || !/^data:image\/(png|jpeg|webp);base64,/.test(v.data)){ res.skipped++; failedBase.add(k); continue; }
+      const loc = localBases[k], pk = k.split('#')[0];
+      // 同じ画像（同じ場所の土台で、縦横と登録時刻が同じ）が端末にあれば、入れずにそれを使う（同じファイルを2回読み込んでも増えない）
+      const same = Number.isFinite(v.updated) && Object.keys(localBases).find(lk => lk.split('#')[0] === pk && localBases[lk].w === v.w && localBases[lk].h === v.h && localBases[lk].updated === v.updated);
+      if (same){ baseMap[k] = same; continue; }
+      const key = loc ? pk + '#' + uid() : k;
       try {
         const raw = await (await fetch(v.data)).blob();
         const img = await prepareImage(raw, 0); // 読めない画像はここで失敗する
-        await basePut(k, { blob: img.blob, w: img.w, h: img.h, src: String(v.src || '').slice(0, 80), updated: Date.now() }); res.bases++;
-      } catch (e){ res.err = true; }
+        await basePut(key, { blob: img.blob, w: img.w, h: img.h, src: String(v.src || '').slice(0, 80), updated: Number.isFinite(v.updated) ? v.updated : Date.now() });
+        baseMap[k] = key; res.bases++;
+        localBases[key] = { w: v.w, h: v.h, updated: Number.isFinite(v.updated) ? v.updated : NaN }; // 同じ読み込みの中で同じ画像が2つあっても1つにする
+      } catch (e){ res.skipped++; failedBase.add(k); }
     }
     const haveIds = new Set((await allBoards()).map(b => b.id)), icons = ICON_KEYS();
-    for (const raw of (Array.isArray(data.boards) ? data.boards : []).slice(0, LIM.boards)){
-      const b = cleanBoard(raw, icons); if (!b){ res.err = true; continue; }
+    const list = Array.isArray(data.boards) ? data.boards : [], boards = list.slice(0, LIM.boards); res.skipped += list.length - boards.length;
+    for (const raw of boards){
+      const b = cleanBoard(raw, icons); if (!b){ res.skipped++; continue; }
+      if (b.bg === 'own'){
+        const bk = baseKeyOf(b);
+        if (baseMap[bk]){ if (baseMap[bk] !== b.place) b.base = baseMap[bk]; else delete b.base; }
+        // 土台を入れられなかった作戦図は、端末の別の画像に重ねず、土台なし（無い '#ID' を指す）で入れて数える
+        else if (failedBase.has(bk)){ b.base = b.place + '#' + uid(); res.noBase = (res.noBase || 0) + 1; }
+      }
       const orig = raw && typeof raw.id === 'string' ? raw.id : null;
       if (haveIds.has(b.id)){ b.id = uid(); b.title = (b.title + '（読み込み）').slice(0, 40); }
-      try { await boardPut(b); } catch (e){ res.err = true; continue; }
+      try { await boardPut(b); } catch (e){ res.skipped++; continue; }
       haveIds.add(b.id); res.boards++;
       if (orig) res.idMap[orig] = b.id;
     }
   } catch (e){ res.err = true; }
+  if (res.skipped) res.err = true;
   statusCache = null;
+  gcBases();
   return res;
-};
-})();
+};})();
