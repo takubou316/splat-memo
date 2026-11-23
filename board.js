@@ -1143,7 +1143,8 @@ window.fillNowBoards = async function(){
   const groups = new Map();
   slots.forEach(el => {
     const k = el.dataset.nbd;
-    if (!groups.has(k)) groups.set(k, boards.filter(b => k.startsWith('c:') ? b.place.startsWith(k + ':') : b.place === k)
+    // 'c:<id>' はそのステージの全潮位、'c:<id>:<潮位>'（サモランメモの潮位の切り替え）と 'v:<id>' はその場所だけ
+    if (!groups.has(k)) groups.set(k, boards.filter(b => k.startsWith('c:') && k.split(':').length === 2 ? b.place.startsWith(k + ':') : b.place === k)
       .sort((a, b) => (order[a.place.split(':')[2]] || 0) - (order[b.place.split(':')[2]] || 0) || b.updated - a.updated));
   });
   // 土台の画像（同じ場所は1回だけ読む）
@@ -1157,7 +1158,7 @@ window.fillNowBoards = async function(){
     if (!el.isConnected) return;
     const k = el.dataset.nbd, list = groups.get(k) || [];
     if (!list.length){
-      el.innerHTML = '<div class="nbmk">作戦図 ' + (k.startsWith('c:')
+      el.innerHTML = '<div class="nbmk">作戦図 ' + (k.startsWith('c:') && k.split(':').length === 2
         ? TIDES.map(([t, n]) => '<button data-bplace="' + esc(k + ':' + t) + '">＋ ' + n + '</button>').join('')
         : '<button data-bplace="' + esc(k) + '">＋ 作る</button>') + '</div>';
       return;

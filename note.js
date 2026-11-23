@@ -60,6 +60,26 @@ const css = `
 .nbs .list button img{width:64px;height:36px;object-fit:cover;border-radius:6px;background:var(--card2)}
 .nbs .list button small{display:block;font-size:11px;font-weight:400;color:var(--faint)}
 .nbs .list button.on{outline:2px solid var(--salmon)}
+.cn-cards{grid-template-columns:1fr}
+/* 潮位の切り替え: 画面の下に貼り付け（片手で届くように） */
+.cn-tide{position:sticky;bottom:0;z-index:2;display:flex;align-items:center;gap:6px;margin:12px -16px 0;padding:8px 16px;background:var(--nav);border-top:1px solid var(--line)}
+.cn-tide span{font-size:11px;color:var(--faint);margin-right:2px;white-space:nowrap}
+.cn-tide button{flex:1;min-height:44px;border-radius:10px;font-size:14px;font-weight:700;color:var(--sub);background:var(--card);border:1px solid var(--line)}
+.cn-tide button.on{color:#1a1020;background:var(--salmon);border-color:var(--salmon)}
+.cn-wcard{background:var(--card2);border:1px solid var(--line2);border-radius:14px;padding:2px 8px 0;margin-bottom:12px}
+.cn-wcard .cn-whead{margin:8px 4px 6px}
+.cn-wcard .nb-sec{margin-bottom:8px}
+.cn-ws{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:12px}
+.cn-ws button{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;border-radius:10px;background:var(--card);border:1px solid var(--line);font-size:10px;line-height:1.2;color:var(--sub);text-align:center;min-height:78px;overflow:hidden}
+.cn-ws button img{width:40px;height:40px;object-fit:contain}
+.cn-ws button span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cn-ws button b{font-size:22px;line-height:40px;color:var(--sub);font-weight:400}
+.cn-ws button.on{border-color:var(--salmon);box-shadow:inset 0 0 0 1px var(--salmon);color:var(--text)}
+.cn-ws button:disabled{opacity:.4}
+.cn-whead{display:flex;align-items:center;gap:8px;margin:16px 2px 6px}
+.cn-whead img{width:34px;height:34px;object-fit:contain}
+.cn-whead b{font-size:15px;font-weight:700;color:var(--text)}
+.cn-whead small{font-size:11px;color:var(--faint)}
 .nbpics{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}
 .nbpics:empty{display:none}
 .nowpics{margin:-4px 14px 10px}
@@ -119,8 +139,19 @@ function current(){
   return { modes, mode, pair, stageId, manual: !!manual, ruleId, ruleManual: !!(mode && ruleId !== mode.s.vsRule.id) };
 }
 const imgOf = id => stageImg[id] || '';
+// メモの欄（その場で書ける。下に画像）
+const sec = (key, title, sub, ph, main) => '<div class="nb-sec' + (main ? ' main' : '') + '"><h3>' + esc(title) + '<small>' + esc(sub) + '</small></h3>' +
+  '<textarea class="nbta" data-nbkey="' + esc(key) + '" placeholder="' + esc(ph) + '" rows="2">' + esc(memos[key] || '') + '</textarea>' +
+  '<div class="nbpics" data-nbpk="' + esc(key) + '">' + addPicBtn(key) + '</div><div class="st" data-nbst="' + esc(key) + '"></div></div>';
+// ブキのカテゴリ（TIER_DATA の type）。カテゴリ共通のメモのキーは wk:vs:<type> / wk:coop:<type>（2026-11-23）
+const CAT = { Shooter: 'シューター', Blaster: 'ブラスター', Roller: 'ローラー', Brush: 'フデ', Charger: 'チャージャー', Slosher: 'スロッシャー',
+  Spinner: 'スピナー', Maneuver: 'マニューバー', Shelter: 'シェルター', Stringer: 'ストリンガー', Saber: 'ワイパー' };
+const catName = t => CAT[t] || t;
+// バトルメモ（view 'note'）とサモランメモ（view 'cnote'）
+window.isNoteView = v => v === 'note' || v === 'cnote';
+window.renderNote = () => ui.view === 'cnote' ? renderCoop() : renderBattle();
 
-window.renderNote = function(){
+function renderBattle(){
   if (!sched) return '<div class="empty">読み込み中…</div>';
   const c = current(), w = weaponById(nb.weapon);
   let h = '';
@@ -140,19 +171,101 @@ window.renderNote = function(){
   if (c.ruleManual || c.manual) h += '<div class="nb-note">' + (c.manual ? 'ステージ' : '') + (c.manual && c.ruleManual ? 'と' : '') + (c.ruleManual ? 'ルール' : '') + 'を自分で選んでいます（次の時間帯になると今のものに戻ります）<button data-nbreset="1">今に戻す</button></div>';
   if (!c.stageId) return h + '<div class="nb-empty">ステージを選ぶと、メモが出ます</div>';
   const sName = nameById(c.stageId), rName = RULE_NAME[c.ruleId] || '';
-  const sec = (key, title, sub, ph, main) => '<div class="nb-sec' + (main ? ' main' : '') + '"><h3>' + esc(title) + '<small>' + esc(sub) + '</small></h3>' +
-    '<textarea class="nbta" data-nbkey="' + esc(key) + '" placeholder="' + esc(ph) + '" rows="2">' + esc(memos[key] || '') + '</textarea>' +
-    '<div class="nbpics" data-nbpk="' + esc(key) + '">' + addPicBtn(key) + '</div><div class="st" data-nbst="' + esc(key) + '"></div></div>';
   if (w) h += sec(sbKey(c.stageId, w.id), sName + ' × ' + w.name, 'このステージでこのブキのとき', '例: 右の高台から抑える、ここの段差は登れない など', true);
   else h += '<div class="nb-sec main"><h3>' + esc(sName) + ' × ブキ<small>このステージでこのブキのとき</small></h3><div class="nb-empty" style="padding:10px">ブキを選ぶと書けます<br><button data-nbpick="weapon">ブキを選ぶ</button></div></div>';
   if (c.ruleId) h += sec(kVs(c.stageId, c.ruleId), sName + ' × ' + rName, 'このステージのこのルール', '例: ' + rName + 'のときはここを取る など', !w);
   h += '<div class="nb-sec"><h3>作戦図<small>' + esc(sName) + '</small></h3><div class="nowbd" data-nbd="v:' + esc(c.stageId) + '"></div></div>';
   if (w) h += sec('wv:' + w.id, w.name + 'のメモ', '全ステージ共通', '例: 射程、スペシャルの使いどころ など');
+  // カテゴリ共通（2026-11-23 ユーザー要望「武器のカテゴリ共通も作りたい」）
+  if (w && w.type) h += sec('wk:vs:' + w.type, catName(w.type) + 'のメモ', 'このカテゴリのブキ共通', '例: ' + catName(w.type) + 'の立ち回りの基本 など');
   // ルールのメモ（全ステージ共通。2026-11-21 ユーザー要望「ルールごと共通のメモが欲しい」）。キーは rl:<ルールID>
   if (c.ruleId) h += sec('rl:' + c.ruleId, rName + 'のメモ', '全ステージ共通', '例: ' + rName + 'の基本の立ち回り、カウントの取り方 など');
   h += sec(kVs(c.stageId), sName + 'のメモ', '全ルール共通', '例: 地形の特徴、よく通る道 など');
+  // 全ステージ共通（2026-11-23 ユーザー要望）。キーは al:vs
+  h += sec('al:vs', 'バトル全体のメモ', '全ステージ・全ルール共通', '例: いつも気をつけること、意識すること など');
   return h;
-};
+}
+
+// ---- サモランメモ（2026-11-23 ユーザー要望「バトルで作ったものをサモランのほうも作りたい」、新しいタブ） ----
+// 今の時間帯のサモラン（サーモンラン・ビッグラン・バイトチームコンテスト）→ ステージと支給ブキ。
+// ブキは「1つ選ぶ」（支給の4つ＋ほかのブキから1つ）と「4つ全部」（支給ブキのメモを全部並べる）を切り替えられる（ユーザーが両方見たいと言ったため）
+// キー: ステージ×ブキ cw:<CoopStageId>:<サモランのブキID>（新）／ブキ wc:（今あるもの）／カテゴリ wk:coop:<type>（新）／ステージ coop:<id>（今あるもの）／サモラン全体 al:coop（新）
+const cnb = Object.assign({ mode: '', stage: null, weapon: null, all: false, tide: 'Mid', recent: [] }, load('sm_cnb', {}));
+const CTIDES = [['Low', '干潮'], ['Mid', '通常'], ['High', '満潮']], CTIDE_NAME = Object.fromEntries(CTIDES);
+const saveCnb = () => save('sm_cnb', { mode: cnb.mode, stage: cnb.stage, weapon: cnb.weapon, all: cnb.all, tide: cnb.tide, recent: cnb.recent });
+const coopWeapons = () => (window.TIER_DATA && TIER_DATA.sets.coopWeapon && TIER_DATA.sets.coopWeapon.items) || [];
+const coopWeaponById = id => coopWeapons().find(w => w.id === id) || null;
+const cwKey = (sid, wid) => 'cw:' + sid + ':' + wid;
+function coopModes(){
+  if (!sched || !sched.data) return [];
+  const c = sched.data.coopGroupingSchedule || {}, now = new Date();
+  return [['rg', 'regularSchedules', 'サーモンラン'], ['br', 'bigRunSchedules', 'ビッグラン'], ['tc', 'teamContestSchedules', 'バイトチームコンテスト']].map(([key, k, label]) => {
+    const n = curAndNext((c[k] || {}).nodes, now).cur;
+    return n && n.setting && n.setting.coopStage ? { key, label, node: n, s: n.setting } : null;
+  }).filter(Boolean);
+}
+function coopCurrent(){
+  const modes = coopModes(), mode = modes.find(m => m.key === cnb.mode) || modes[0] || null, at = mode ? mode.node.startTime : '';
+  const manual = cnb.stage && cnb.stage.at === at ? cnb.stage.id : null; // 自分で選んだステージ・ブキはその時間帯の間だけ
+  const stageId = manual || (mode ? mode.s.coopStage.id : null);
+  // 支給ブキ（ランダムの「？」などサモランのブキの一覧に無いものは id が空）
+  const supplied = mode ? (mode.s.weapons || []).map(w => { const name = weaponName(w), id = coopWeaponIdByName(name); return { id, name, img: (w.image && w.image.url) || '' }; }) : [];
+  const firstId = (supplied.find(x => x.id) || {}).id || null;
+  const weaponId = cnb.weapon && cnb.weapon.at === at && coopWeaponById(cnb.weapon.id) ? cnb.weapon.id : firstId;
+  return { modes, mode, at, stageId, manual: !!manual, supplied, weaponId };
+}
+function renderCoop(){
+  if (!sched) return '<div class="empty">読み込み中…</div>';
+  const c = coopCurrent(), w = coopWeaponById(c.weaponId);
+  let h = '';
+  if (!c.modes.length) h += '<div class="nb-note">今の時間帯のサーモンランを取得できていません。右上の「更新」を押すか、ステージを選んでください</div>';
+  else h += '<div class="nb-modes">' + c.modes.map(m => '<button data-cnmode="' + m.key + '" class="' + (c.mode && m.key === c.mode.key ? 'on' : '') + '" style="--c:var(--salmon)"><b>' + esc(m.label) + '</b><small>' + esc(stageName(m.s.coopStage)) + '</small></button>').join('') + '</div>';
+  h += '<div class="nb-cards cn-cards">' + (c.stageId
+    ? '<button class="nb-card" data-cnpick="stage"><img src="' + esc(imgOf(c.stageId)) + '" alt=""><span class="t"><small>ステージ</small><b>' + esc(nameById(c.stageId)) + '</b></span><span class="tag' + (c.manual ? ' man' : '') + '">' + (c.manual ? '手動' : '今') + '</span></button>'
+    : '<button class="nb-card empty" data-cnpick="stage"><span class="t"><small>ステージ</small><b>選ぶ</b></span></button>') + '</div>';
+  if (c.manual || (cnb.weapon && cnb.weapon.at === c.at && !c.supplied.some(x => x.id === cnb.weapon.id))) h += '<div class="nb-note">自分で選んでいます（次の時間帯になると今のものに戻ります）<button data-cnreset="1">今に戻す</button></div>';
+  // ブキの出し方の切り替え（呼び方は Codex の案「ブキ別／支給ブキ一覧」。同じメモの見せる範囲の違いだと分かるように）
+  h += '<div class="nb-pair"><button data-cnall="0" class="' + (cnb.all ? '' : 'on') + '">ブキ別</button><button data-cnall="1" class="' + (cnb.all ? 'on' : '') + '">支給ブキ一覧</button></div>';
+  if (!c.stageId) return h + '<div class="nb-empty">ステージを選ぶと、メモが出ます</div>';
+  const sid = c.stageId, sName = nameById(sid), tide = CTIDES.some(x => x[0] === cnb.tide) ? cnb.tide : 'Mid', tName = CTIDE_NAME[tide];
+  // 潮位（2026-11-23 ユーザー要望「潮位ごとのメモも追加したい」）: 選んだ潮位のメモ1つと、その潮位の作戦図だけを出す（Codexの案）。
+  // 潮位の切り替えは画面の下に貼り付け（片手で届くように）。キーは td:<CoopStageId>:<Low|Mid|High>
+  const tideSec = sec('td:' + sid + ':' + tide, sName + '・' + tName, 'この潮位のとき（表示中の潮位）', '例: ' + tName + 'の時に最初に行く場所、注意すること など', true);
+  const board = '<div class="nb-sec"><h3>作戦図<small>' + esc(sName) + '・' + esc(tName) + '</small></h3><div class="nowbd" data-nbd="c:' + esc(sid) + ':' + tide + '"></div></div>';
+  const stageSec = sec(kCoop(sid), sName + 'のメモ', '全潮位・全ブキ共通', '例: 納品のしかた、気をつける場所 など');
+  const allSec = sec('al:coop', 'サモラン全体のメモ', '全ステージ・全ブキ共通', '例: いつも気をつけること、意識すること など');
+  const catSec = t => sec('wk:coop:' + t, catName(t) + 'のメモ', 'このカテゴリのブキ共通（サモラン）', '例: ' + catName(t) + 'が支給された時の動き方 など');
+  const tideBar = '<div class="cn-tide"><span>表示する潮位</span>' + CTIDES.map(([k, n]) => '<button data-cntide="' + k + '" class="' + (k === tide ? 'on' : '') + '">' + n + '</button>').join('') + '</div>';
+  // 並び（両方の表示で同じ）: 潮位 → 作戦図 → ブキ → ステージ共通 → カテゴリ → サモラン全体
+  h += tideSec + board;
+  if (!cnb.all){
+    // 支給ブキ（タップで選ぶ）＋ほかのブキ
+    h += '<div class="cn-ws">' + c.supplied.map(x => x.id
+      ? '<button data-cnw="' + esc(x.id) + '" class="' + (x.id === c.weaponId ? 'on' : '') + '"><img src="' + esc(x.img) + '" alt=""><span>' + esc(x.name) + '</span></button>'
+      : '<button disabled><img src="' + esc(x.img) + '" alt=""><span>' + esc(x.name) + '</span></button>').join('') +
+      '<button data-cnpick="weapon" class="more' + (w && !c.supplied.some(x => x.id === w.id) ? ' on' : '') + '">' + (w && !c.supplied.some(x => x.id === w.id) ? '<img src="' + esc(w.img) + '" alt=""><span>' + esc(w.name) + '</span>' : '<b>＋</b><span>ほかのブキ</span>') + '</button></div>';
+    if (w) h += sec(cwKey(sid, w.id), sName + ' × ' + w.name, 'このステージでこのブキのとき', '例: このブキの時はここで納品を守る など') +
+      sec('wc:' + w.id, w.name + 'のメモ', '全ステージ共通（サモラン）', '例: 得意なオオモノ、スペシャルの使いどころ など');
+    else h += '<div class="nb-sec"><h3>' + esc(sName) + ' × ブキ</h3><div class="nb-empty" style="padding:10px">ブキを選ぶと書けます<br><button data-cnpick="weapon">ブキを選ぶ</button></div></div>';
+    h += stageSec;
+    if (w && w.type) h += catSec(w.type);
+    return h + allSec + tideBar;
+  }
+  // 支給ブキ一覧: ブキごとに1枚のカード（このステージ・全ステージ共通）→ ステージ共通 → カテゴリ（重ならないように1回ずつ）→ 全体
+  const seen = new Set(), ws = [];
+  c.supplied.forEach(x => {
+    if (!x.id){ h += '<div class="nb-note">' + esc(x.name) + 'はメモの対象外です（ランダム枠など）。「ブキ別」の「ほかのブキ」から実際のブキを選べます</div>'; return; }
+    if (seen.has(x.id)) return; seen.add(x.id);
+    const cw = coopWeaponById(x.id); if (!cw) return; ws.push(cw);
+    h += '<div class="cn-wcard"><div class="cn-whead"><img src="' + esc(cw.img) + '" alt=""><b>' + esc(cw.name) + '</b><small>' + esc(catName(cw.type)) + '</small></div>' +
+      sec(cwKey(sid, cw.id), 'このステージで', sName, '例: このブキの時はここで納品を守る など') +
+      sec('wc:' + cw.id, 'このブキ全般', '全ステージ共通（サモラン）', '例: 得意なオオモノ、スペシャルの使いどころ など') + '</div>';
+  });
+  if (!c.mode) h += '<div class="nb-note">支給ブキが分からないので、ブキのメモは出せません。「ブキ別」から選んでください</div>';
+  h += stageSec;
+  [...new Set(ws.map(x => x.type).filter(Boolean))].forEach(t => { h += catSec(t); });
+  return h + allSec + tideBar;
+}
 
 // ---- メモをその場で書く（打つたびに少し待って保存） ----
 // 打った欄は dirty（キー→値）に入れ、端末への保存が成功するまで残す（保存に失敗しても、離れる時にもう一度保存する）。
@@ -175,7 +288,8 @@ function flushAll(){
 }
 window.noteFlush = flushAll;
 // 書いている途中は画面を描き直さない（時間帯の更新などで打ちかけが消えないように）。見送った分は書き終えた後に描き直す
-window.noteBusy = () => { const a = document.activeElement; return !!(a && a.classList && a.classList.contains('nbta')); };
+// 描いてある画面（バトル／サモラン）と開こうとしている画面が違う時は「書いている途中」扱いにしない（タブを移ったのに前の画面が残らないように。Codexレビュー 2026-11-23）
+window.noteBusy = () => { const a = document.activeElement; return !!(a && a.classList && a.classList.contains('nbta')) && main.dataset.nv === ui.view; };
 window.noteDeferRender = () => { pendingRender = true; };
 const main = document.getElementById('main');
 main.addEventListener('input', e => {
@@ -189,15 +303,15 @@ main.addEventListener('focusout', e => {
   if (!e.target.classList || !e.target.classList.contains('nbta')) return;
   const k = e.target.dataset.nbkey; clearTimeout(timers[k]); delete timers[k]; saveDirty([k]);
   // 見送った描き直しは、ボタンのタップを壊さないよう少し待ってから（別の欄に移っていたらまた見送る）
-  if (pendingRender) setTimeout(() => { if (pendingRender && ui.view === 'note' && !window.noteBusy()){ pendingRender = false; render(); } }, 350);
+  if (pendingRender) setTimeout(() => { if (pendingRender && isNoteView(ui.view) && !window.noteBusy()){ pendingRender = false; render(); } }, 350);
 });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'visible') flushAll(); });
-window.noteAfterRender = () => { pendingRender = false; main.querySelectorAll('.nbta').forEach(autosize); fillPics(); };
+window.noteAfterRender = () => { pendingRender = false; main.dataset.nv = ui.view; main.querySelectorAll('.nbta').forEach(autosize); fillPics(); };
 
 // ---- 画像（2026-11-22 ユーザー要望「それぞれ画像を載せれるようにしたい」）----
 // メモの欄ごとに画像を付けられる。画像は IndexedDB 'splat-memo-pics'（作戦図の DB とは別）に、1枚ずつ {id, key: メモのキー, blob, w, h, at} で保存。
 // 取り込む時に長い辺1600pxのJPEGに縮める。書き出し・読み込み（バックアップ）にも入る（notePics）
-const PIC_DB = 'splat-memo-pics', PIC_MAX = 12, PIC_ALL = 300, PIC_KEY_RE = /^(sb|vs|wv|rl|coop|wc|bs):[A-Za-z0-9+/=:_-]{1,120}$/; // coop・wc・bs はメモの編集画面から（2026-11-22b）
+const PIC_DB = 'splat-memo-pics', PIC_MAX = 12, PIC_ALL = 300, PIC_KEY_RE = /^(sb|vs|wv|rl|coop|wc|bs|cw|al|wk|td):[A-Za-z0-9+/=:_-]{1,120}$/; // coop・wc・bs はメモの編集画面から（2026-11-22b）
 const picUid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 let picP = null;
 function picDb(){
@@ -394,7 +508,21 @@ window.importNotePics = arr => picQueue(async () => {
   return res;
 });
 // ---- 上の操作 ----
-function redraw(){ flushAll(); saveNb(); render(); }
+function redraw(){ flushAll(); saveNb(); saveCnb(); render(); }
+main.addEventListener('click', e => {
+  if (ui.view !== 'cnote') return;
+  const t = e.target.closest('button'); if (!t) return;
+  const d = t.dataset, c = coopCurrent();
+  if (d.cnreset){ cnb.stage = null; cnb.weapon = null; redraw(); }
+  else if (d.cnmode){ cnb.mode = d.cnmode; cnb.stage = null; cnb.weapon = null; redraw(); }
+  else if (d.cnall != null){ cnb.all = d.cnall === '1'; redraw(); }
+  else if (d.cntide){ cnb.tide = d.cntide; redraw(); }
+  else if (d.cnw){ cnb.weapon = { id: d.cnw, at: c.at }; redraw(); }
+  else if (d.cnpick === 'stage') openCoopStageSheet();
+  else if (d.cnpick === 'weapon') openWeaponSheet(coopWeapons(), c.weaponId, cnb.recent, id => {
+    cnb.weapon = { id, at: coopCurrent().at }; cnb.recent = [id].concat(cnb.recent.filter(x => x !== id)).slice(0, 8);
+  });
+});
 main.addEventListener('click', e => {
   if (ui.view !== 'note') return;
   const t = e.target.closest('button'); if (!t) return;
@@ -449,15 +577,30 @@ function openStageSheet(){
       closeSheet(false); redraw();
     });
 }
-function openWeaponSheet(){
-  const ws = weapons(), recent = nb.recent.map(weaponById).filter(Boolean);
-  const btn = w => '<button data-nbw="' + esc(w.id) + '" data-name="' + esc(nfkc(w.name).toLowerCase()) + '" class="' + (w.id === nb.weapon ? 'on' : '') + '"><img src="' + esc(w.img) + '" alt="" loading="lazy"><span>' + esc(w.name) + '</span></button>';
+function openCoopStageSheet(){
+  const c = coopCurrent(), nowId = c.mode ? c.mode.s.coopStage.id : null;
+  const row = (id, sub) => '<button data-cnstage="' + esc(id) + '" class="' + (id === c.stageId ? 'on' : '') + '"><img src="' + esc(imgOf(id)) + '" alt=""><span>' + esc(nameById(id)) + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span></button>';
+  openSheet('<h3>ステージを選ぶ<button data-nbclose="1">とじる</button></h3><div class="body list">' +
+    (nowId ? '<div class="lab">今の' + esc(c.mode.label) + '</div>' + row(nowId, '') : '') +
+    '<div class="lab">すべてのステージ</div>' + allStages('coop').filter(s => s.id !== nowId).map(s => row(s.id, s.num >= 100 ? 'ビッグラン' : '')).join('') + '</div>',
+    t => {
+      const id = t.dataset.cnstage; if (!id) return;
+      const c2 = coopCurrent();
+      cnb.stage = c2.mode && id === c2.mode.s.coopStage.id ? null : { id, at: c2.at };
+      closeSheet(false); redraw();
+    });
+}
+// list: 並べるブキ、selId: 選んでいるブキ、recentIds: 最近、onPick: 選んだ時（省略するとバトルメモのブキ）
+function openWeaponSheet(list, selId, recentIds, onPick){
+  if (!list){ list = weapons(); selId = nb.weapon; recentIds = nb.recent; onPick = id => { nb.weapon = id; nb.recent = [id].concat(nb.recent.filter(x => x !== id)).slice(0, 8); }; }
+  const ws = list, recent = recentIds.map(id => list.find(w => w.id === id)).filter(Boolean);
+  const btn = w => '<button data-nbw="' + esc(w.id) + '" data-name="' + esc(nfkc(w.name).toLowerCase()) + '" class="' + (w.id === selId ? 'on' : '') + '"><img src="' + esc(w.img) + '" alt="" loading="lazy"><span>' + esc(w.name) + '</span></button>';
   openSheet('<h3>ブキを選ぶ<button data-nbclose="1">とじる</button></h3><input id="nbwq" placeholder="ブキ名で探す" autocomplete="off"><div class="body">' +
     (recent.length ? '<div class="lab nbrec">最近</div><div class="grid nbrec">' + recent.map(btn).join('') + '</div>' : '') +
     '<div class="lab">すべてのブキ</div><div class="grid" id="nbwall">' + ws.map(btn).join('') + '</div></div>',
     t => {
       const id = t.dataset.nbw; if (!id) return;
-      nb.weapon = id; nb.recent = [id].concat(nb.recent.filter(x => x !== id)).slice(0, 8);
+      onPick(id);
       closeSheet(false); redraw();
     });
   const q = sheet.querySelector('#nbwq');
@@ -468,5 +611,5 @@ function openWeaponSheet(){
   });
 }
 // 起動時の最初の描画は note.js より前に走るので、読み込まれた時点で今のメモを出す（通信を待たない）
-if (ui.view === 'note') render();
+if (isNoteView(ui.view)) render();
 })();

@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-22c';</script>
+<script>window.APP_VERSION = '2026-11-23a';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -217,9 +217,10 @@ nav button.on{color:var(--salmon)}
 </header>
 <main id="main"></main>
 <nav>
-  <!-- 並び（2026-11-22 ユーザー要望）: いまのステージ・バトルメモ・メモ・「その他」。ばちこんとティアは「その他」の中 -->
+  <!-- 並び（2026-11-22 ユーザー要望）: いまのステージ・バトルメモ・サモランメモ（2026-11-23〜）・メモ・「その他」。ばちこんとティアは「その他」の中 -->
   <button id="navNow" class="on"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9.5 2.5h5"/></svg>いまのステージ</button>
   <button id="navNote"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8.5 13.5l2 2 4-4.5"/></svg>バトルメモ</button>
+  <button id="navCoop"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12c3-4.5 8-6 12-4l3-2.5v13L15 16c-4 2-9 .5-12-4z"/><path d="M7.5 9.5v5"/></svg>サモランメモ</button>
   <button id="navList"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h5"/></svg>メモ</button>
   <button id="navMore" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="19" cy="12" r="1.3" fill="currentColor"/></svg><span id="navMoreLbl">その他</span></button>
 </nav>
@@ -300,7 +301,7 @@ let stageImg = Object.assign({}, COOP_IMG, load('sm_stageimg', {}));     // { st
 const ui = Object.assign({ view:'now', nowSub:'salmon', listSub:'salmon', listKind:'stage', showNext:false }, load('sm_ui', {}));
 // 起動時は「いまのステージ」か「ばちこん」から始める（一番大事な使い方: 開いた瞬間に今のメモが見える）。
 // メモやティアを開いたまま閉じても、次に起動した時はそこへは戻さない
-if (ui.view !== 'now' && ui.view !== 'contest' && ui.view !== 'note') ui.view = 'now'; // note（バトルのメモ帳・試作）も開いた画面として残す
+if (ui.view !== 'now' && ui.view !== 'contest' && ui.view !== 'note' && ui.view !== 'cnote') ui.view = 'now'; // note（バトルのメモ帳・試作）も開いた画面として残す
 let fetchError = false, loading = false;
 
 const kCoop = id => 'coop:' + id;
@@ -581,21 +582,23 @@ function backupHTML(){
 function render(){
   statusText();
   // バトルのメモ帳で書いている途中は描き直さない（時間帯の更新などで打ちかけが消えないように）
-  const keepNote = ui.view === 'note' && window.noteBusy && noteBusy();
+  const noteV = ui.view === 'note' || ui.view === 'cnote'; // バトルメモ・サモランメモ（note.js）
+  const keepNote = noteV && window.noteBusy && noteBusy();
   if (keepNote){ if (window.noteDeferRender) noteDeferRender(); } else if (window.noteFlush) noteFlush(); // 描き直す前に打った分を保存
   if (!keepNote) document.getElementById('main').innerHTML = ui.view === 'now' ? renderNow() : ui.view === 'contest' ? renderContest() :
     ui.view === 'tier' ? (typeof renderTierList === 'function' ? renderTierList() : '<div class="empty">読み込み中…</div>') :
-    ui.view === 'note' ? (window.renderNote ? renderNote() : '<div class="empty">読み込み中…</div>') : renderList();
-  if (ui.view === 'note' && !keepNote && window.noteAfterRender) noteAfterRender();
+    noteV ? (window.renderNote ? renderNote() : '<div class="empty">読み込み中…</div>') : renderList();
+  if (noteV && !keepNote && window.noteAfterRender) noteAfterRender();
   if (ui.view === 'list' && ui.listKind === 'weapon') filterWeapons();
   if (ui.view === 'now' && window.fillMemoPics) fillMemoPics();
-  if ((ui.view === 'now' || ui.view === 'note') && !keepNote){ if (window.fillNowBoards) fillNowBoards(); }
+  if ((ui.view === 'now' || noteV) && !keepNote){ if (window.fillNowBoards) fillNowBoards(); }
   else if (keepNote){} else if (window.releaseNowBoards) releaseNowBoards();
   document.getElementById('navNow').classList.toggle('on', ui.view === 'now');
   document.getElementById('navContest').classList.toggle('on', ui.view === 'contest');
   document.getElementById('navList').classList.toggle('on', ui.view === 'list');
   document.getElementById('navTier').classList.toggle('on', ui.view === 'tier');
   document.getElementById('navNote').classList.toggle('on', ui.view === 'note');
+  document.getElementById('navCoop').classList.toggle('on', ui.view === 'cnote');
   // ばちこん・ティアを開いている時は「その他」を光らせ、名前もその画面にする（今どこにいるか分かるように）
   const inMore = ui.view === 'contest' || ui.view === 'tier';
   document.getElementById('navMore').classList.toggle('on', inMore);
@@ -1104,7 +1107,7 @@ function importMemos(file){
       const n = Object.keys(m).length, nc = Object.keys(cs).length;
       if (!confirm(n + '件のメモ' + (nc ? 'と' + nc + '件のばちこんシナリオ' : '') + 'を読み込みます。同じものは上書きされます（それ以外は残ります）。よろしいですか？')) return;
       for (const [k0, v] of Object.entries(m)){
-        if (typeof v !== 'string' || !/^(coop|vs|cm|ct|sp|wc|wv|bs|th|dg|nb|bd|sb|rl):/.test(k0)) continue;
+        if (typeof v !== 'string' || !/^(coop|vs|cm|ct|sp|wc|wv|bs|th|dg|nb|bd|sb|rl|cw|al|wk|td):/.test(k0)) continue;
         let k = k0;
         // 秒のメモは「64.0」などの書き方を揃える（表示側のキーと一致させるため）
         const mt = k0.match(/^(ct:\d+:\d+:)([\d.]+)$/);
@@ -1129,7 +1132,7 @@ function importMemos(file){
       // メモの画像も非同期で読み込む（今ある画像は消さずに追加）。作戦図のお知らせと重ならないよう少し後に出す
       if (Array.isArray(j.notePics) && window.importNotePics) importNotePics(j.notePics).then(r => {
         setTimeout(() => toast(r.pics ? 'メモの画像' + r.pics + '枚を読み込みました' + (r.err ? '（一部入れられないものがありました）' : '') : r.err ? 'メモの画像を読み込めませんでした' : 'メモの画像は読み込み済みでした'), 2500);
-        if (ui.view === 'note') render();
+        if (ui.view === 'note' || ui.view === 'cnote') render();
       });
     }catch(e){ alert('このファイルは読み込めませんでした。「書き出す」で作ったファイルを選んでください。'); }
   };
@@ -1164,6 +1167,7 @@ document.addEventListener('change', e => { if (e.target.id === 'importFile' && e
 document.getElementById('navNow').onclick = () => { setUI({ view:'now' }); document.getElementById('main').scrollTop = 0; };
 document.getElementById('navList').onclick = () => { setUI({ view:'list' }); document.getElementById('main').scrollTop = 0; };
 document.getElementById('navTier').onclick = () => { setMoreMenu(false); if (window.noteFlush) noteFlush(); setUI({ view:'tier' }); document.getElementById('main').scrollTop = 0; };
+document.getElementById('navCoop').onclick = () => { if (window.noteFlush) noteFlush(); setUI({ view:'cnote' }); document.getElementById('main').scrollTop = 0; };
 document.getElementById('navNote').onclick = () => { if (window.noteFlush) noteFlush(); setUI({ view:'note' }); document.getElementById('main').scrollTop = 0; };
 document.getElementById('main').addEventListener('input', e => { if (e.target.id === 'wSearch'){ ui.wSearch = e.target.value; filterWeapons(); } });
 document.getElementById('navContest').onclick =() => { setMoreMenu(false); if (window.noteFlush) noteFlush(); autoOpened = false; setUI({ view:'contest' }); document.getElementById('main').scrollTop = 0; };
