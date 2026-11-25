@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-25d';</script>
+<script>window.APP_VERSION = '2026-11-25e';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -774,6 +774,7 @@ function render(){
   document.getElementById('navMore').classList.toggle('on', inMore);
   document.getElementById('navMoreLbl').textContent = ui.view === 'contest' ? 'ばちこん' : ui.view === 'tier' ? 'ティア' : 'その他';
   maybeAutoOpen();
+  armSlotTimer(); // 次の時間帯の境目で描き直す
 }
 
 // ---------- ばちこん（バイトチームコンテスト） ----------
@@ -1443,6 +1444,32 @@ document.addEventListener('visibilitychange', () => {
 });
 // 開きっぱなしでも時間帯の切り替わりに追従
 setInterval(() => { if (document.visibilityState === 'visible' && !ed && stale()) refresh(); }, 60e3);
+// 時間帯の切り替わりちょうどに描き直す（前は最大1分古いままだった。評価 D8 2026-11-25）。
+// 手元のスケジュールには次の時間帯も入っているので、取り直しを待たずにその場で次に切り替わる。
+// メモ帳で書いている途中は描き直さず（打ちかけを守る）、切り替わったことだけ知らせる。書き終えると切り替わる
+var slotTimer = 0; // var: 宣言より前に render が呼ばれても止まらないように
+function nextBoundary(){
+  if (!sched || !sched.data) return 0;
+  const d = sched.data, c = d.coopGroupingSchedule || {}, now = Date.now(); let t = Infinity;
+  const see = n => { if (!n) return; [n.startTime, n.endTime].forEach(x => { const v = new Date(x).getTime(); if (v > now && v < t) t = v; }); };
+  ['regularSchedules','bankaraSchedules','xSchedules','festSchedules'].forEach(k => ((d[k] || {}).nodes || []).forEach(see));
+  ((d.eventSchedules || {}).nodes || []).forEach(ev => (ev.timePeriods || []).forEach(see));
+  ['regularSchedules','bigRunSchedules','teamContestSchedules'].forEach(k => ((c[k] || {}).nodes || []).forEach(see));
+  return t === Infinity ? 0 : t;
+}
+function armSlotTimer(){
+  clearTimeout(slotTimer);
+  const t = nextBoundary(); if (!t) return;
+  slotTimer = setTimeout(() => {
+    if (document.visibilityState === 'visible'){
+      const noteV = ui.view === 'note' || ui.view === 'cnote';
+      if (noteV && window.noteBusy && noteBusy()) toast('時間帯が変わりました。書き終えると今のステージに切り替わります');
+      render();
+      if (stale()) refresh();
+    }
+    armSlotTimer();
+  }, Math.min(t - Date.now() + 1000, 6 * 3600e3)); // 境目の1秒後（端末の時計のずれを少し見込む）。長すぎる待ちは区切って測り直す
+}
 
 render();
 refresh();

@@ -149,17 +149,24 @@ function nowModes(){
   const rg = cur('regularSchedules'); if (rg) out.push({ key: 'rg', label: 'レギュラー', c: '--regular', node: rg, s: rg.regularMatchSetting });
   const fs = cur('festSchedules');
   if (fs){ const f = fs.festMatchSettings; (Array.isArray(f) ? f : f ? [f] : []).forEach(s => out.push({ key: 'f' + (s.festMode || ''), label: s.festMode === 'REGULAR' ? 'フェス(オープン)' : 'フェス(チャレンジ)', c: '--fest', node: fs, s })); }
+  // イベントマッチ（時間帯が飛び飛び。今開いている回だけ。node は今の回＝その回の間だけ手動の選択が効く）（評価 D9 2026-11-25）
+  ((d.eventSchedules || {}).nodes || []).forEach(ev => {
+    const p = curAndNext(ev.timePeriods, now).cur, s = ev.leagueMatchSetting;
+    if (p && s) out.push({ key: 'ev' + ((s.leagueMatchEvent && s.leagueMatchEvent.id) || ''), label: 'イベント: ' + (window.eventName && s.leagueMatchEvent ? eventName(s.leagueMatchEvent) : ''), c: '--event', node: p, s });
+  });
   return out.filter(m => m.s && Array.isArray(m.s.vsStages) && m.s.vsStages.length && m.s.vsRule);
 }
 // 今見ているステージ・ルール・モード
+// 手動の選択が効く範囲＝「そのモードのその回」。開始時刻だけだと、同じ時刻に始まったイベントが終わった後も通常モードに引き継がれていた（Codexレビュー 2026-11-25）
+const slotOf = m => m ? m.key + '@' + m.node.startTime : '';
 function current(){
   const modes = nowModes();
   const mode = modes.find(m => m.key === nb.mode) || modes[0] || null;
   // 自分で選んだステージは、その時間帯の間だけ有効
-  const manual = nb.stage && (!mode || nb.stage.at === mode.node.startTime) ? nb.stage.id : null;
+  const manual = nb.stage && (!mode || nb.stage.at === slotOf(mode)) ? nb.stage.id : null;
   const pair = mode ? Math.min(nb.pair || 0, mode.s.vsStages.length - 1) : 0;
   const stageId = manual || (mode ? mode.s.vsStages[pair].id : null);
-  const ruleId = (nb.rule && nb.rule.at === (mode ? mode.node.startTime : '') && RULE_NAME[nb.rule.id]) ? nb.rule.id : mode ? mode.s.vsRule.id : null;
+  const ruleId = (nb.rule && nb.rule.at === slotOf(mode) && RULE_NAME[nb.rule.id]) ? nb.rule.id : mode ? mode.s.vsRule.id : null;
   return { modes, mode, pair, stageId, manual: !!manual, ruleId, ruleManual: !!(mode && ruleId !== mode.s.vsRule.id) };
 }
 const imgOf = id => stageImg[id] || '';
@@ -642,7 +649,7 @@ main.addEventListener('click', e => {
   if (d.nbreset){ nb.stage = null; nb.rule = null; redraw(); }
   else if (d.nbmode){ nb.mode = d.nbmode; nb.pair = 0; nb.stage = null; nb.rule = null; redraw(); }
   else if (d.nbpair != null){ nb.pair = +d.nbpair; nb.stage = null; redraw(); }
-  else if (d.nbrule){ nb.rule = c.mode && d.nbrule === c.mode.s.vsRule.id ? null : { id: d.nbrule, at: c.mode ? c.mode.node.startTime : '' }; redraw(); }
+  else if (d.nbrule){ nb.rule = c.mode && d.nbrule === c.mode.s.vsRule.id ? null : { id: d.nbrule, at: slotOf(c.mode) }; redraw(); }
   else if (d.nbpick === 'stage') openStageSheet();
   else if (d.nbpick === 'weapon') openWeaponSheet();
 });
@@ -685,7 +692,7 @@ function openStageSheet(){
       const id = t.dataset.nbstage; if (!id) return;
       // 開いている間に時間帯が変わっていることがあるので、選んだ瞬間の時間帯で決め直す
       const c2 = current(), ids2 = c2.mode ? c2.mode.s.vsStages.map(s => s.id) : [], i = ids2.indexOf(id);
-      if (i >= 0){ nb.pair = i; nb.stage = null; } else nb.stage = { id, at: c2.mode ? c2.mode.node.startTime : '' };
+      if (i >= 0){ nb.pair = i; nb.stage = null; } else nb.stage = { id, at: slotOf(c2.mode) };
       closeSheet(false); redraw();
     });
 }
