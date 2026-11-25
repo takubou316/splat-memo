@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-25b';</script>
+<script>window.APP_VERSION = '2026-11-25d';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -228,6 +228,14 @@ nav button.on{color:var(--salmon)}
 .quick-memos{display:grid;gap:4px;margin:5px 8px 8px;padding:8px;border:1px solid var(--line);border-radius:8px}
 .quick-memo{display:flex;align-items:baseline;gap:8px;text-align:left;min-width:0;padding:5px 3px;background:transparent;border:0;color:var(--text);font:inherit}
 .quick-memo span{flex:0 0 2.4em;color:var(--salmon);font-size:12px}.quick-memo b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+/* 「試合前に見る」印のメモは、名前を上に・本文を3行まで大きめに（2026-11-25c） */
+.ptide{display:block;width:100%;text-align:left;margin:-4px 0 12px;padding:10px 12px;border-radius:12px;background:var(--card);border:1px solid var(--line2)}
+.ptide span{display:block;font-size:11px;color:var(--salmon);font-weight:700;margin-bottom:3px}
+.ptide b{display:block;font-size:15px;font-weight:500;line-height:1.55;white-space:pre-wrap;word-break:break-word;color:var(--text)}
+.quick-memo.pin{flex-direction:column;align-items:stretch;gap:2px;padding:6px 4px}
+.quick-memo.pin span{flex:none;font-weight:700}
+.quick-memo.pin b{white-space:pre-line;font-size:15px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+.stage + .quick-memos,.nowpics + .quick-memos,.nowbd + .quick-memos{margin:-2px 14px 10px}
 </style>
 </head>
 <body>
@@ -310,6 +318,25 @@ window.drawUnsaved = drawUnsaved;
 
 let memos = load('sm_memos', {});           // { key: text }
 if (!memos || typeof memos !== 'object' || Array.isArray(memos)) memos = {};
+// 「試合前に見る」印（2026-11-25c、評価の優先順位5。イカのメモの「お気に入りだけ試合前に見る」、コーチのリストバンドの考え）。印を付けたメモのキー
+let pins = new Set((Array.isArray(load('sm_pins', [])) ? load('sm_pins', []) : []).filter(k => typeof k === 'string'));
+const isPinned = k => pins.has(k);
+function togglePin(k){
+  const on = !pins.has(k); if (on) pins.add(k); else pins.delete(k);
+  if (!save('sm_pins', [...pins])){ if (on) pins.delete(k); else pins.add(k); toast('印を保存できませんでした'); return false; }
+  return true;
+}
+window.isPinned = isPinned; window.togglePin = togglePin;
+// メモを消した時に印も外す（後で同じ欄に書いた時に古い印が勝手に付かないように。Codexレビュー）
+window.dropPin = k => { if (pins.delete(k)) save('sm_pins', [...pins]); };
+// 印の付いたメモの最初の数行（いまのステージ・バトルメモ・サモランメモの「試合前に見る」で使う）
+const pinLines = (v, n) => String(v || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean).slice(0, n).join('\n');
+function pinnedQuick(keys, title){
+  const items = keys.filter(k => isPinned(k) && memoOf(k)).map(k => '<button class="quick-memo pin" data-memokey="' + esc(k) + '"><span>★ ' + esc(pinLabel(k)) + '</span><b>' + esc(pinLines(memoOf(k), 3)) + '</b></button>');
+  return items.length ? '<div class="quick-memos"><div class="quick-title">' + esc(title || '試合前に見る') + '</div>' + items.join('') + '</div>' : '';
+}
+// 印の付いたメモの短い名前
+function pinLabel(k){ const a = k.split(':'); return a[0] === 'coop' ? 'ステージ共通' : a[0] === 'al' ? (a[1] === 'coop' ? 'サモラン全体' : 'バトル全体') : a[0] === 'rl' ? ((typeof RULE_NAME !== 'undefined' && RULE_NAME[a[1]]) || 'ルール') + '共通' : a[0] === 'vs' ? (a[2] === 'all' ? 'ステージ共通' : ((typeof RULE_NAME !== 'undefined' && RULE_NAME[a[2]]) || '') + 'の時') : a[0] === 'td' ? (memoTides[a[2]] || '') + 'の時' : 'メモ'; }
 let sched = load('sm_sched', null);         // { data, fetchedAt }
 let loc = load('sm_locale', null);          // ja-JP locale
 // サモラン会場は全ステージ一覧がAPIに無いので、画像URLを持っておく。
@@ -472,7 +499,7 @@ function vsCard(label, color, node, setting, now){
   const rule = setting.vsRule;
   return '<div class="card" style="--c:var(' + color + ')"><div class="chead"><span class="mode">' + esc(label) + '</span>' +
     '<span class="rule">' + esc(ruleFull(rule)) + '</span><span class="time">' + fmtRange(node.startTime, node.endTime, now) + '</span></div>' +
-    setting.vsStages.map(s => stageButton(s, rule)).join('') + '</div>';
+    setting.vsStages.map(s => stageButton(s, rule) + (rule ? pinnedQuick([kVs(s.id, rule.id), kVs(s.id), 'rl:' + rule.id, 'al:vs'], stageName(s) + '・試合前に見る') : '')).join('') + '</div>';
 }
 function coopCard(label, node, now){
   const st = node.setting || {};
@@ -487,7 +514,7 @@ function coopCard(label, node, now){
   return '<div class="card" style="--c:var(--salmon)"><div class="chead"><span class="mode">' + esc(label) + '</span>' +
     '<span class="time">' + fmtRange(node.startTime, node.endTime, now) + '</span></div>' +
     (boss ? '<div class="extra">オカシラ: ' + esc(boss) + '</div>' : '') +
-    salmonQuickRead(st.coopStage.id) + (ws ? '<div class="weapons">' + ws + '</div>' : '') + stageButton(st.coopStage, null) +
+    salmonQuickRead(st.coopStage.id) + pinnedQuick([kCoop(st.coopStage.id), 'al:coop']) + (ws ? '<div class="weapons">' + ws + '</div>' : '') + stageButton(st.coopStage, null) +
     (label === 'バイトチームコンテスト' ? contestOpenBtn(node) : '') + '</div>';
 }
 function contestOpenBtn(node){
@@ -756,7 +783,7 @@ const CD = window.CONTEST_DATA || { scenarios: [], instances: [], source: {} };
 let contests = load('sm_contests', {}); // 旧版で手入力した記録（作戦メモへ引き継いだ後も消さずに残す）
 const COOP_INTERNAL = { 'Q29vcFN0YWdlLTE=':'Shakeup', 'Q29vcFN0YWdlLTI=':'Shakespiral', 'Q29vcFN0YWdlLTQ=':'Shakelift',
   'Q29vcFN0YWdlLTY=':'Shakeship', 'Q29vcFN0YWdlLTc=':'Shakedent', 'Q29vcFN0YWdlLTg=':'Shakehighway', 'Q29vcFN0YWdlLTk=':'Shakerail' };
-const TIDE_KEY = { '干潮':'Low', '通常潮':'Mid', '満潮':'High' };
+const TIDE_KEY = { '干潮':'Low', '通常潮':'Mid', '通常':'Mid', '満潮':'High' }; // データには「通常」と書かれていることもある
 // サモラン用スペシャル9種（wiki「前作との相違点」: 初期7種＋Ver.6.0.0でテイオウイカ・ウルトラチャクチ）。
 // 画像名は内部名のSHA256。ウルトラショットはデータ上Coop版があるがサモランでは支給されないので入れない。
 const SPECIALS = [
@@ -977,9 +1004,14 @@ function drawPlay(toTop){
         NB_LABEL.map(([v, l]) => '<option value="' + v + '"' + (nb === v ? ' selected' : '') + '>' + l + '</option>').join('') + '</select></label>' +
     '</div>' +
     '<div class="capn" style="margin:-6px 2px 12px">4人の時、ノルマの1.5倍以上で次のWAVEのキケン度+30%、2倍以上で+60%</div>';
-  // 自分の作戦（最上部）
+  // 並び（2026-11-25c、評価 F15）: WAVEの見出し → 自分の作戦 → サモランメモの潮位のメモ → 記録（キケン度など）。WAVE開始の数秒で読む物を上に
+  const recAt = h.indexOf('<div class="prec">'), recHtml = recAt >= 0 ? h.slice(recAt) : ''; if (recAt >= 0) h = h.slice(0, recAt);
   h += '<div class="pmemo"><div class="pml"><span>自分の作戦</span><button data-cm-edit="1">✎ 編集</button></div>' +
     (memo ? '<div class="pmt">' + esc(memo) + '</div>' : '<div class="pmt none">まだありません。「編集」から書けます</div>') + '</div>';
+  // サモランメモで書いた、このステージ・この潮位のメモ（同じ td: のキー。押すと書ける）
+  const tdKey = 'td:' + s.stage + ':' + (TIDE_KEY[w.tide] || ({ '通常': 'Mid' })[w.tide] || 'Mid'), tdMemo = memoOf(tdKey);
+  if (tdMemo) h += '<button class="ptide" data-memokey="' + esc(tdKey) + '"><span>' + esc(w.tide) + 'のメモ（サモランメモ）</span><b>' + esc(tdMemo) + '</b></button>';
+  h += recHtml;
   // 作戦図（このWAVEに割り当てたもの）。図は位置関係の補助で、要点は上の作戦メモに書く前提
   const bid = memoOf('bd:' + s.id + ':' + n);
   h += '<button class="bwave" data-bwave="1"><svg viewBox="0 0 24 24"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></svg>' +
@@ -1210,7 +1242,7 @@ function saveMemo(){
   // 変わっていなければ書かない。比べるのは開いた時の文ではなく今の中身（保存に失敗した後で元の文に戻した時に、失敗した途中の文が残って後から保存されないように。Codexレビュー 2026-11-25）
   if (v === (memos[edKey()] || '')) return;
   if (window.noteForget) noteForget(edKey());
-  if (v.trim()) memos[edKey()] = v; else delete memos[edKey()];
+  if (v.trim()) memos[edKey()] = v; else { delete memos[edKey()]; dropPin(edKey()); }
   const ok = save('sm_memos', memos);
   if (ok) originalMemoText = v;
   if (edKey().startsWith('coach:')) document.getElementById('coachTemplate').hidden = !!v.trim();
@@ -1237,12 +1269,16 @@ function toast(t){ clearTimeout(toastTimer); const el = document.getElementById(
 async function exportMemos(){
   const d = new Date(), stamp = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
   // 作戦図（土台の画像を含む）はIndexedDBから読んで一緒に書き出す
-  const boards = window.exportBoards ? await exportBoards() : null;
-  if (window.exportBoards && !boards) toast('作戦図を読み出せなかったので、作戦図以外を書き出します');
-  // バトルメモの欄に付けた画像（note.js）
-  const notePics = window.exportNotePics ? await exportNotePics() : null;
-  if (window.exportNotePics && !notePics) toast('メモの画像を読み出せなかったので、画像以外を書き出します');
-  const blob = new Blob([JSON.stringify({ app:'splat-stage-memo', version:4, exportedAt:d.toISOString(), memos, contests, tiers: window.getTierStore ? getTierStore() : undefined, boards: boards || undefined, notePics: notePics && notePics.length ? notePics : undefined })], { type:'application/json' });
+  const [boards, notePics] = await Promise.all([
+    window.exportBoards ? exportBoards() : null,
+    window.exportNotePics ? exportNotePics() : null
+  ]);
+  const missing = [];
+  if (!boards) missing.push('作戦図と土台');
+  else if (window.boardFailCount && boardFailCount()) missing.push('作戦図の未保存の変更');
+  if (!notePics) missing.push('メモに付けた画像');
+  if (missing.length && !confirm('このバックアップに入らない内容があります。\n' + missing.join('・') + '\n\n入れられる内容だけを書き出しますか？')) return;
+  const blob = new Blob([JSON.stringify({ app:'splat-stage-memo', version:4, exportedAt:d.toISOString(), memos, contests, tiers: window.getTierStore ? getTierStore() : undefined, boards: boards || undefined, notePics: notePics && notePics.length ? notePics : undefined, pins: [...pins] })], { type:'application/json' });
   const name = 'stage-memo-' + stamp + '.json';
   // 読み込みの上限（250MB）を超えるファイルは、作っても戻せないので先に知らせる
   if (blob.size > 250e6 && !confirm('書き出すファイルが大きすぎて（' + Math.round(blob.size / 1e6) + 'MB）、このアプリで読み込めない大きさです。使っていない作戦図や画像を消してから書き出すのがおすすめです。このまま書き出しますか？')) return;
@@ -1277,8 +1313,11 @@ function importMemos(file){
       for (const [k, v] of Object.entries(cs)) if (v && Array.isArray(v.waves) && v.stageId) contests[k] = v;
       const savedMemos = save('sm_memos', memos), savedContests = save('sm_contests', contests);
       if (nc) migrateOldContests(true);
+      // 「試合前に見る」印は足し合わせる（メモのキーの形のものだけ）
+      let pinsOk = true;
+      if (Array.isArray(j.pins)){ const before = new Set(pins); j.pins.forEach(k => { if (typeof k === 'string' && /^(coop|vs|wv|wc|bs|sb|rl|cw|al|wk|td):.+/.test(k) && k.length < 200) pins.add(k); }); if (!save('sm_pins', [...pins])){ pins = before; pinsOk = false; } }
       const nt = j.tiers && window.mergeTierStore ? mergeTierStore(j.tiers) : 0;
-      render(); toast(!savedMemos || !savedContests ? '読み込んだ内容を端末に保存できませんでした' : nt < 0 ? 'メモは読み込みましたが、ティアリストは保存できませんでした' : '読み込みました' + (nt ? '（ティアリスト' + nt + '件）' : ''));
+      render(); toast(!savedMemos || !savedContests ? '読み込んだ内容を端末に保存できませんでした' : nt < 0 ? 'メモは読み込みましたが、ティアリストは保存できませんでした' : !pinsOk ? 'メモは読み込みましたが、「試合前」の印は保存できませんでした' : '読み込みました' + (nt ? '（ティアリスト' + nt + '件）' : ''));
       // 作戦図は非同期で読み込む（今ある作戦図は消さずに追加）
       if (j.boards && window.importBoards) importBoards(j.boards).then(r => {
         // 作戦図が別のIDで入った場合は、読み込んだWAVEの割り当て（bd:）をその新しいIDに付け替える
@@ -1357,6 +1396,8 @@ document.addEventListener('change', e => { if (e.target.id === 'importFile' && e
 document.getElementById('navNow').onclick = () => { setUI({ view:'now' }); document.getElementById('main').scrollTop = 0; };
 document.getElementById('navList').onclick = () => { setUI({ view:'list', listKind:'search' }); document.getElementById('main').scrollTop = 0; };
 document.getElementById('navTier').onclick = () => { setMoreMenu(false); if (window.noteFlush) noteFlush(); setUI({ view:'tier' }); document.getElementById('main').scrollTop = 0; };
+// ばちこんのWAVE画面の「潮位のメモ」を押したら、そのメモを書く画面へ（WAVE画面のボタンは上の共通の処理を通らないため）
+document.getElementById('playBody').addEventListener('click', e => { const b = e.target.closest('[data-memokey]'); if (b) openEditor('found', b.dataset.memokey); });
 document.getElementById('unsavedRetry').onclick = async () => {
   if (window.noteFlush) noteFlush();
   const okM = !memosUnsaved || save('sm_memos', memos);
