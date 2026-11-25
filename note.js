@@ -49,6 +49,7 @@ const css = `
 .nb-more{display:block;font-size:13px;font-weight:600;color:var(--salmon);padding:8px 0 2px}
 .nb-more[hidden]{display:none}
 .nb-blank{display:block;width:100%;text-align:left;min-height:44px;padding:0 12px;border:1px dashed var(--line2);border-radius:10px;color:var(--sub);font-size:14px}
+.nb-picerr{font-size:12px;color:#ff9b9b}
 .nb-inl{display:inline-flex;align-items:center;min-height:40px;margin:0 6px 8px 0;padding:0 12px;border-radius:999px;border:1px dashed var(--line2);color:var(--sub);font-size:13px;font-weight:600}
 .nb-add{margin:4px 0 12px}
 .nb-add .lab{font-size:12px;color:var(--faint);margin:0 2px 6px}
@@ -158,18 +159,18 @@ const imgOf = id => stageImg[id] || '';
 // 何も書いていない欄（文字も画像も無い）は隠し、画面の下の「メモを追加」にまとめる（main の欄だけは「まだありません ＋ 書く」の1行で残す）。
 // 長いメモは6行まで見せて「続きを読む」
 const editing = new Set(), expanded = new Set(); // 書いている欄・全部広げた欄（キー）
-let addList = [], focusKey = null;               // 描画ごとに集める「隠した空の欄」、描画後にカーソルを置く欄
+let addList = [], focusKey = null, focusBack = null; // focusBack: 完了の後に戻す「編集」ボタンの欄               // 描画ごとに集める「隠した空の欄」、描画後にカーソルを置く欄
 // inline: 空の時に「メモを追加」へ回さず、その場に小さな「＋ 書く」を置く（支給ブキ一覧のブキのカードの中など、どのブキの欄か分かるように）
 const sec = (key, title, sub, ph, main, inline) => {
   const txt = memos[key] || '', ed = editing.has(key) || dirty.has(key), has = !!txt.trim();
   const head = btn => '<h3>' + esc(title) + '<small>' + esc(sub) + '</small>' + btn + '</h3>';
-  if (ed) return '<div class="nb-sec editing' + (main ? ' main' : '') + '">' + head('<button class="nb-ebtn done" data-nbdone="' + esc(key) + '">完了</button>') +
-    '<textarea class="nbta" data-nbkey="' + esc(key) + '" placeholder="' + esc(ph) + '" rows="2">' + esc(txt) + '</textarea>' +
+  if (ed) return '<div class="nb-sec editing' + (main ? ' main' : '') + '">' + head('<button class="nb-ebtn done" data-nbdone="' + esc(key) + '" aria-label="' + esc(title) + 'の編集を終える">完了</button>') +
+    '<textarea class="nbta" data-nbkey="' + esc(key) + '" aria-label="' + esc(title) + '" placeholder="' + esc(ph) + '" rows="2">' + esc(txt) + '</textarea>' +
     '<div class="nbpics" data-nbpk="' + esc(key) + '">' + addPicBtn(key) + '</div><div class="st" data-nbst="' + esc(key) + '"></div></div>';
   // 空の欄は隠す（画像だけある欄は、画像を読めた時に fillPics が見せる）
   const hide = !has && !main;
   if (hide && !inline) addList.push([key, title]);
-  return '<div class="nb-sec' + (main ? ' main' : '') + (hide ? ' hid' : '') + '" data-nbsec="' + esc(key) + '">' + head('<button class="nb-ebtn" data-nbedit="' + esc(key) + '">編集</button>') +
+  return '<div class="nb-sec' + (main ? ' main' : '') + (hide ? ' hid' : '') + '" data-nbsec="' + esc(key) + '">' + head('<button class="nb-ebtn" data-nbedit="' + esc(key) + '" aria-label="' + esc(title) + 'を編集">編集</button>') +
     (has ? '<div class="nb-txt' + (expanded.has(key) ? ' open' : '') + '" data-nbtxt="' + esc(key) + '">' + esc(txt) + '</div><button class="nb-more" data-nbmore="' + esc(key) + '" hidden>' + (expanded.has(key) ? '▲ たたむ' : '▼ 続きを読む') + '</button>'
       : main ? '<button class="nb-blank" data-nbedit="' + esc(key) + '">まだありません　＋ 書く</button>' : '') +
     '<div class="nbpics" data-nbpro="1" data-nbpk="' + esc(key) + '"></div></div>' +
@@ -182,6 +183,7 @@ const addBar = () => addList.length ? '<div class="nb-add"><div class="lab">メ�
 const CAT = { Shooter: 'シューター', Blaster: 'ブラスター', Roller: 'ローラー', Brush: 'フデ', Charger: 'チャージャー', Slosher: 'スロッシャー',
   Spinner: 'スピナー', Maneuver: 'マニューバー', Shelter: 'シェルター', Stringer: 'ストリンガー', Saber: 'ワイパー' };
 const catName = t => CAT[t] || t;
+window.catName = catName; // index.html の全メモ検索でもカテゴリを日本語で出す・探せるように（Codexレビュー 2026-11-25）
 // 今の時間帯が分からない時の案内（読み込み中／取れなかった）。下のカードでステージを選べばメモは読める
 const noSchedNote = what => '<div class="nb-note">' + (fetchError ? '今の' + what + 'のスケジュールを取得できませんでした。下でステージを選ぶと、保存してあるメモを読めます<button data-nbretry="1">もう一度取得</button>'
   : !sched ? '今の' + what + 'を読み込んでいます…（待たずに、下でステージを選んでもメモを読めます）'
@@ -189,7 +191,8 @@ const noSchedNote = what => '<div class="nb-note">' + (fetchError ? '今の' + w
 document.getElementById('main').addEventListener('click', e => { if (e.target.closest && e.target.closest('[data-nbretry]')) refresh(true); });
 // バトルメモ（view 'note'）とサモランメモ（view 'cnote'）
 window.isNoteView = v => v === 'note' || v === 'cnote';
-window.renderNote = () => { addList = []; return ui.view === 'cnote' ? renderCoop() : renderBattle(); };
+// 今出ている画面がこのメモ画面でなければ（別のタブから来た・バトル⇔サモラン）、書きかけの無い欄は読む表示に戻す
+window.renderNote = () => { addList = []; const m = document.getElementById('main'); if (!(m.querySelector('.nb-cards') && m.dataset.nv === ui.view)) closeEditingSecs(); return ui.view === 'cnote' ? renderCoop() : renderBattle(); };
 
 function renderBattle(){
   // スケジュールが無くても（初回・通信できない）、ステージを選べばメモを読めるようにする（前は「読み込み中…」のまま止まっていた。Codexの評価 2026-11-23）
@@ -351,6 +354,7 @@ window.noteAfterRender = () => {
   pendingRender = false; main.dataset.nv = ui.view; main.querySelectorAll('.nbta').forEach(autosize); fillPics();
   // 6行に収まらないメモにだけ「続きを読む」を出す
   main.querySelectorAll('.nb-txt').forEach(el => { const b = el.nextElementSibling; if (b && b.dataset.nbmore) b.hidden = !(el.classList.contains('open') || el.scrollHeight > el.clientHeight + 2); });
+  if (focusBack){ const b = main.querySelector('[data-nbedit="' + CSS.escape(focusBack) + '"]'); focusBack = null; if (b) b.focus({ preventScroll: true }); }
   if (focusKey){ const ta = main.querySelector('.nbta[data-nbkey="' + CSS.escape(focusKey) + '"]'); focusKey = null; if (ta){ ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); ta.scrollIntoView({ block: 'center' }); } }
 };
 
@@ -424,16 +428,20 @@ async function fillPics(keys){
     if (!k) continue;
     const my = picSeq[k] = (picSeq[k] || 0) + 1;
     let list = [];
-    try { list = await picsOf(k); } catch (e){ continue; }
+    try { list = await picsOf(k); } catch (e){
+      // 読めなかった時は「無い」と区別して知らせる（隠している欄も見せる）
+      picSlots(k).forEach(el => { el.innerHTML = '<span class="nb-picerr">画像を読み込めませんでした（アプリを開き直すと読めることがあります）</span>'; const s = el.closest('.nb-sec.hid'); if (s) s.classList.remove('hid'); });
+      continue;
+    }
     const els = picSlots(k);
     if (my !== picSeq[k] || !els.length) continue;
     const old = picUrls.get(k) || [];
     const urls = list.map(p => URL.createObjectURL(p.blob)); picUrls.set(k, urls);
-    const thumbs = list.map((p, i) => '<button class="nbpic" data-nbpicv="' + esc(p.id) + '" data-nbpk2="' + esc(k) + '"><img src="' + urls[i] + '" alt=""></button>').join('');
+    const thumbs = list.map((p, i) => '<button class="nbpic" data-nbpicv="' + esc(p.id) + '" data-nbpk2="' + esc(k) + '" aria-label="画像' + (i + 1) + 'を大きく見る"><img src="' + urls[i] + '" alt=""></button>').join('');
     els.forEach(el => {
       el.innerHTML = thumbs + (!el.dataset.nbpro && list.length < PIC_MAX ? addPicBtn(k) : '');
       // 画像だけある欄は、隠していても見せる（「メモを追加」からは外す）
-      const s = el.closest('.nb-sec.hid'); if (s && list.length){ s.classList.remove('hid'); const c = main.querySelector('[data-nbadd="' + CSS.escape(k) + '"]'); if (c) c.remove(); }
+      const s = el.closest('.nb-sec.hid'); if (s && list.length){ s.classList.remove('hid'); const c = main.querySelector('[data-nbadd="' + CSS.escape(k) + '"]'); if (c) c.remove(); const bar = main.querySelector('.nb-add'); if (bar && !bar.querySelector('[data-nbadd]')) bar.remove(); }
     });
     old.forEach(u => URL.revokeObjectURL(u));
   }
@@ -509,7 +517,7 @@ async function openViewer(k, id, origin){
         fillPics([k]); toast('画像を消しました');
         if (sheet !== mySheet) return; // 消している間に閉じられた
         const j = list.findIndex(p => p.id === delId); if (j >= 0) list.splice(j, 1);
-        if (!list.length){ closeSheet(false); return; }
+        if (!list.length){ closeSheet(false); if (isNoteView(ui.view)) render(); return; }
         i = Math.min(i, list.length - 1); show();
       }
     }, 'nbv', () => { if (url) URL.revokeObjectURL(url); url = null; });
@@ -573,7 +581,9 @@ window.importNotePics = arr => picQueue(async () => {
   return res;
 });
 // ---- 上の操作 ----
-function redraw(){ flushAll(); saveNb(); saveCnb(); render(); }
+// 選び直した時は、書きかけ（保存待ち）の無い欄を読む表示に戻す（別のステージ・ブキにまで書く欄が持ち越されないように。Codexレビュー 2026-11-25）
+function closeEditingSecs(){ [...editing].forEach(k => { if (!dirty.has(k)) editing.delete(k); }); }
+function redraw(){ flushAll(); closeEditingSecs(); saveNb(); saveCnb(); render(); }
 // 読む表示と書く欄の切り替え（バトルメモ・サモランメモ共通）
 main.addEventListener('click', e => {
   if (!isNoteView(ui.view)) return;
@@ -581,8 +591,8 @@ main.addEventListener('click', e => {
   const d = t.dataset;
   // 書いている欄にカーソルが残ったままだと描き直しが見送られるので、先に外す（iPhoneではボタンを押してもカーソルが外れないことがある）
   if ((d.nbedit || d.nbadd || d.nbdone) && document.activeElement && document.activeElement.classList.contains('nbta')) document.activeElement.blur();
-  if (d.nbedit || d.nbadd){ const k = d.nbedit || d.nbadd; editing.add(k); focusKey = k; redraw(); }
-  else if (d.nbdone){ flushAll(); if (!dirty.has(d.nbdone)){ editing.delete(d.nbdone); render(); } }
+  if (d.nbedit || d.nbadd){ const k = d.nbedit || d.nbadd; flushAll(); editing.add(k); focusKey = k; render(); }
+  else if (d.nbdone){ flushAll(); if (!dirty.has(d.nbdone)){ editing.delete(d.nbdone); focusBack = d.nbdone; render(); } }
   else if (d.nbmore){
     const k = d.nbmore, el = main.querySelector('[data-nbtxt="' + CSS.escape(k) + '"]'); if (!el) return;
     if (expanded.has(k)) expanded.delete(k); else expanded.add(k);

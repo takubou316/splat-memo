@@ -1,6 +1,6 @@
 // アプリ本体はネットワーク優先（更新がすぐ届くように）、通信できないときだけキャッシュを使う。
 // スケジュールAPIはページ側でlocalStorageに控えているので、ここでは扱わない。
-const CACHE = 'stage-memo-v20';
+const CACHE = 'stage-memo-v21';
 // 同梱のマップ（maps/）は中身が変わらないので、版を上げても消さない別のキャッシュに入れ、キャッシュ優先で出す。
 // マップを取り込み直したら MAP_CACHE の名前を変える（古い分は activate で消える）
 const MAP_CACHE = 'stage-memo-maps-v1';
