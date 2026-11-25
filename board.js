@@ -208,7 +208,7 @@ async function loadStatus(){
   try {
     const [keys, boards] = await Promise.all([allBaseKeys(), allBoards()]);
     const counts = {}, own = {}; boards.forEach(b => { counts[b.place] = (counts[b.place] || 0) + 1; if (!isNwBg(b)) own[b.place] = (own[b.place] || 0) + 1; });
-    statusCache = { bases: new Set(keys), counts, own };
+    statusCache = { bases: new Set(keys), counts, own, boards };
   } catch (e){ statusCache = { bases: new Set(), counts: {}, own: {}, err: true }; }
   return statusCache;
 }
@@ -218,7 +218,8 @@ function placeStatus(p){
   return n ? ['作戦' + n, 'has'] : nwKey(p) ? ['マップあり', 'base'] : b ? ['土台のみ', 'base'] : ['未登録', ''];
 }
 window.renderBoardList = function(kind){
-  let h = '<div class="bp-credit">' + (kind === 'coop' ? 'サーモンランのマップは<a href="' + NW_URL + '" target="_blank" rel="noopener">' + NW_NAME + '</a>のものを、作者のガンジーさんの許可を得て使っています。自分のスクショを土台にもできます。'
+  const savedId = 'saved-board-index';
+  let h = '<div id="' + savedId + '"></div><div class="sec">ステージから作戦図を作る・探す</div><div class="bp-credit">' + (kind === 'coop' ? 'サーモンランのマップは<a href="' + NW_URL + '" target="_blank" rel="noopener">' + NW_NAME + '</a>のものを、作者のガンジーさんの許可を得て使っています。自分のスクショを土台にもできます。'
     : 'バトルのマップの土台は、自分で撮ったスクショを使います。画像はこのスマホの中だけに保存されます。') + '</div>';
   if (kind === 'coop'){
     COOP_STAGES.forEach(sid => {
@@ -233,7 +234,21 @@ window.renderBoardList = function(kind){
     });
   }
   // 状態は非同期で読むので、読めたら書き換える
-  loadStatus().then(() => document.querySelectorAll('[data-bst]').forEach(el => { const [lab, cls] = placeStatus(el.dataset.bst); el.textContent = lab; el.className = cls; }));
+  queueMicrotask(() => {
+    const saved = document.getElementById(savedId);
+    loadStatus().then(status => {
+      if (!saved?.isConnected) return;
+      document.querySelectorAll('[data-bst]').forEach(el => { const [lab, cls] = placeStatus(el.dataset.bst); el.textContent = lab; el.className = cls; });
+      if (status.err){ saved.textContent = '保存した作戦図を読み込めませんでした。'; return; }
+      const prefix = kind === 'coop' ? 'c:' : 'v:';
+      const boards = status.boards.filter(b => b.place.startsWith(prefix)).sort((a, b) => b.updated - a.updated);
+      if (!boards.length) return;
+      saved.innerHTML = '<div class="sec">保存した作戦図</div><div class="list">' + boards.map(b =>
+        '<button class="row" data-nbopen="' + esc(b.id) + '"><div class="rinfo"><div class="rname">' +
+        esc(b.title || '名称未設定の作戦図') + '</div><div class="rprev">' +
+        esc(placeName(b.place) + (b.sw ? '・' + swName(b.sw) : '')) + '</div></div></button>').join('') + '</div>';
+    });
+  });
   return h;
 };
 
