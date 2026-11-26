@@ -122,13 +122,17 @@ function idb(){
   });
   return idbP;
 }
+// 書き込みのたびに進む番号。いまのステージ・サモランメモの作戦図の欄は、番号が変わっていなければ前に読んだ物を使い回す
+// （潮位を切り替えるたびに全部の作戦図と土台を読み直していた。評価 D11 2026-11-26）。書き始めと書き終わりの両方で進める（途中で読んだ物を使い回さないように）
+let idbGen = 0;
 async function idbDo(store, mode, fn){
   const db = await idb();
+  const w = mode === 'readwrite'; if (w) idbGen++;
   return new Promise((res, rej) => {
     const tx = db.transaction(store, mode), s = tx.objectStore(store);
     const req = fn(s);
-    tx.oncomplete = () => res(req && req.result);
-    tx.onerror = tx.onabort = () => rej(tx.error || new Error('idb'));
+    tx.oncomplete = () => { if (w) idbGen++; res(req && req.result); };
+    tx.onerror = tx.onabort = () => { if (w) idbGen++; rej(tx.error || new Error('idb')); };
   });
 }
 const baseGet = k => idbDo('bases', 'readonly', s => s.get(k));
@@ -314,18 +318,20 @@ async function drawPlace(){
   // 特殊WAVEの選択（サモランだけ。その潮位で起きるものだけ出す）
   if (swList.length) h += '<div class="bswrow"><span class="lbl">特殊WAVE</span>' + [['*', 'すべて']].concat(swList.map(s => [s[0], s[1]])).map(([k, n]) =>
     '<button data-bsw="' + k + '" class="' + ((k === '*' ? swSel == null : swSel === k) ? 'on' : '') + '">' + n + '</button>').join('') + '</div>';
-  if (nk){
-    h += '<div class="bpl-base"><div class="psh">マップ（' + NW_NAME + '）</div><img src="' + esc(nwImg(nk, 'nw')) + '" alt="' + esc(placeName(pl.place)) + 'のマップ">' +
-      '<button class="bbtn main" data-bnew="nw">＋ この地図で作戦図を作る' + swSuffix + '</button></div>';
-  } else h += own;
-  h += '<div class="sec">作戦図</div><div class="bpl-list">';
-  if (!boards.length) h += '<div class="empty" style="padding:14px">' + (swSel != null ? swName(swSel) + 'の作戦図はまだありません。' + (nk ? '上の「この地図で作戦図を作る」で' + swName(swSel) + 'の作戦図を作れます' : '') : nk ? 'まだありません。上の「この地図で作戦図を作る」から始められます' : base ? '土台は登録済みです。「このスクショで作戦図を作る」から始められます' : '土台を登録すると作れます') + '</div>';
+  // 作る所（NWのマップ、またはバトルの自分のスクショ）
+  const make = nk ? '<div class="bpl-base"><div class="psh">マップ（' + NW_NAME + '）</div><img src="' + esc(nwImg(nk, 'nw')) + '" alt="' + esc(placeName(pl.place)) + 'のマップ">' +
+      '<button class="bbtn' + (boards.length ? '' : ' main') + '" data-bnew="nw">＋ この地図で作戦図を作る' + swSuffix + '</button></div>' : own;
+  // 作戦図が既にあれば一覧を先に（見に来た人が大きな地図の下まで探さなくていいように。評価 F7 2026-11-26）。無ければ作る所を先に
+  if (!boards.length) h += make;
+  let list = '<div class="sec">' + (boards.length ? '作った作戦図（' + boards.length + '）' : '作戦図') + '</div><div class="bpl-list">';
+  if (!boards.length) list += '<div class="empty" style="padding:14px">' + (swSel != null ? swName(swSel) + 'の作戦図はまだありません。' + (nk ? '上の「この地図で作戦図を作る」で' + swName(swSel) + 'の作戦図を作れます' : '') : nk ? 'まだありません。上の「この地図で作戦図を作る」から始められます' : base ? '土台は登録済みです。「このスクショで作戦図を作る」から始められます' : '土台を登録すると作れます') + '</div>';
   boards.forEach(b => {
-    h += '<div class="row"><button class="rinfo" style="text-align:left;color:var(--text)" data-bopen="' + esc(b.id) + '"><div class="rname">' + esc(b.title) + '</div><div class="rprev">' +
+    list += '<div class="row"><button class="rinfo" style="text-align:left;color:var(--text)" data-bopen="' + esc(b.id) + '"><div class="rname">' + esc(b.title) + '</div><div class="rprev">' +
       (b.sw ? swName(b.sw) + '・' : '') + (isNwBg(b) ? 'NWのマップ' : '自分のスクショ') + '・手順' + b.steps.length + '・' + fmtDate(b.updated) + '</div></button>' +
       (pl.assign ? '<button class="use" data-buse="' + esc(b.id) + '">このWAVEに使う</button>' : '') + '</div>';
   });
-  h += '</div>' + (pl.assign && memoOf(bdKey(pl.assign.sid, pl.assign.wave)) ? '<button class="bbtn sub" data-bunassign="1">このWAVEの割り当てを外す</button>' : '');
+  h += list + '</div>' + (pl.assign && memoOf(bdKey(pl.assign.sid, pl.assign.wave)) ? '<button class="bbtn sub" data-bunassign="1">このWAVEの割り当てを外す</button>' : '');
+  if (boards.length) h += '<div class="sec">新しく作る</div>' + make;
   if (nk) h += '<details class="bpl-own"' + (pl.pending || base ? ' open' : '') + '><summary>自分のスクショを土台にする</summary>' + own + '</details>';
   h += '<div class="bp-credit">' + (nk ? 'マップは<a href="' + NW_URL + '" target="_blank" rel="noopener">' + NW_NAME + '</a>のものを、作者のガンジーさんの許可を得て使っています。'
     : '土台の画像は自分で撮ったスクショです。このスマホの中だけに保存されます。') + '</div>';
@@ -493,7 +499,13 @@ const css2 = `
 .bsteprow .lab{flex:none;font-size:10px;color:var(--faint);font-weight:600;margin-right:2px}
 .bmemo{margin-top:6px}
 .bmemo textarea{width:100%;min-height:38px;max-height:84px;resize:none;background:var(--card);border:1px solid var(--line);border-radius:10px;color:var(--text);font:inherit;font-size:16px;line-height:1.4;padding:7px 10px}
-.bmemo .vt{font-size:13px;color:var(--text);padding:2px 4px;white-space:pre-wrap;word-break:break-word}
+.bnav{display:flex;gap:6px;align-items:center}
+.bnav button{flex:1;height:44px;border-radius:10px;background:var(--card);border:1px solid var(--line);font-size:14px;font-weight:700;color:var(--text)}
+.bnav button:disabled{opacity:.35}
+.bnav button.play{flex:none;padding:0 12px;color:var(--salmon)}
+.bnav .bpos{flex:none;min-width:84px;text-align:center;font-size:12px;color:var(--sub)}
+.bnav .bpos b{font-size:17px;color:var(--text)}
+.bmemo .vt{font-size:14px;color:var(--text);padding:2px 4px;white-space:pre-wrap;word-break:break-word}
 .bmemo .vt.none{color:var(--faint)}
 `;
 const st2 = document.createElement('style'); st2.textContent = css2; document.head.appendChild(st2);
@@ -716,7 +728,12 @@ function drawBoard(){
       '<div class="bicons" id="bIcons">' + palItems(bs.cat).map(k => { const i = iconInfo(k);
         return '<button data-pk="' + esc(k) + '" class="' + (bs.pending === k ? 'on' : '') + '">' + (i.img ? '<span class="bimg' + (i.badge ? ' bdg' : '') + '"><img src="' + esc(i.img) + '" alt="" draggable="false" loading="lazy">' + (i.badge ? '<i>' + esc(i.badge) + '</i>' : '') + '</span>' : '<span class="mk" style="background:' + esc(i.color) + '">' + esc(i.mark) + '</span>') + '<span>' + esc(i.label) + '</span></button>'; }).join('') + '</div></div>';
   }
-  h += '<div class="bsteprow"><span class="lab">手順</span>' + B.steps.map((s, i) => '<button class="sn' + (i === bs.step ? ' on' : '') + '" data-bgo="' + i + '">' + (i + 1) + '</button>').join('') +
+  // 見る時は「前へ／手順3・全8／次へ」を同じ場所に固定（手順が多いと番号の列が横に流れ、次を探す必要があった。評価 F16 2026-11-26）
+  if (!bs.edit && n > 1) h += '<div class="bnav"><button data-bgo="' + (bs.step - 1) + '"' + (bs.step ? '' : ' disabled') + '>‹ 前へ</button>' +
+    '<span class="bpos">手順 <b>' + (bs.step + 1) + '</b> / ' + n + '</span>' +
+    '<button data-bgo="' + (bs.step + 1) + '"' + (bs.step < n - 1 ? '' : ' disabled') + '>次へ ›</button>' +
+    '<button class="play" data-bplay="1">' + (bs.playing ? '■ 止める' : '▶ 再生') + '</button></div>';
+  else h += '<div class="bsteprow"><span class="lab">手順</span>' + B.steps.map((s, i) => '<button class="sn' + (i === bs.step ? ' on' : '') + '" data-bgo="' + i + '">' + (i + 1) + '</button>').join('') +
     (bs.edit ? '<button class="sx" data-badd="1">＋ 写して追加</button>' + (n > 1 ? '<button class="sx del" data-bsdel="1">この手順を削除</button>' : '') : '') +
     (n > 1 ? '<button class="sx play" data-bplay="1">' + (bs.playing ? '■ 止める' : '▶ 再生') + '</button>' : '') +
     (bs.edit ? '<button class="sx" data-bmore="1">…</button>' : '') + '</div>';
@@ -1185,7 +1202,7 @@ const css3 = `
 .nbmk button{font-size:11px;font-weight:600;color:var(--sub);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px 10px}
 `;
 const st3 = document.createElement('style'); st3.textContent = css3; document.head.appendChild(st3);
-let nowSeq = 0, nowUrls = [];
+let nowSeq = 0;
 const prefetched = new Set();
 function thumbSVG(b){
   // objSVG は開いている作戦図（B）を基準に大きさを決めるので、一時的に差し替えて描く（同期処理の中だけ）
@@ -1204,49 +1221,62 @@ window.boardThumb = async b => {
       (bg ? '<img src="' + esc(bg.url) + '" alt="">' : '') + '<svg viewBox="0 0 ' + b.w + ' ' + b.h + '" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">' + thumbSVG(b) + '</svg></div></div>' };
 };
 // いまのステージを離れたら、読み込み中の処理を捨てて画像を手放す
-window.releaseNowBoards = () => { nowSeq++; nowUrls.forEach(u => URL.revokeObjectURL(u)); nowUrls = []; };
+// nowCache: 前に読んだ作戦図の一覧 boards・土台の画像 urls（場所→URL、無い時は null）・欄ごとの中身 html。
+// idbGen が同じ間だけ使う（書き込みが無ければ、潮位を切り替えても読み直さない。評価 D11 2026-11-26）
+let nowCache = null;
+// 別のタブ・別の窓での書き込みは idbGen に届かないので、画面に戻って来た時は読み直す（Codexレビュー 2026-11-26）
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') idbGen++; });
+const dropNowCache = () => { if (nowCache) Object.values(nowCache.urls).forEach(u => { if (u) URL.revokeObjectURL(u); }); nowCache = null; };
+window.releaseNowBoards = () => { nowSeq++; dropNowCache(); };
+function nowSlotHTML(k, list, urls){
+  if (!list.length) return '<div class="nbmk">作戦図 ' + (k.startsWith('c:') && k.split(':').length === 2
+    ? TIDES.map(([t, n]) => '<button data-bplace="' + esc(k + ':' + t) + '">＋ ' + n + '</button>').join('')
+    : '<button data-bplace="' + esc(k) + '">＋ 作る</button>') + '</div>';
+  return '<div class="nbrow">' + list.map(b => {
+    const tide = (b.place.startsWith('c:') ? TIDE_NAME[b.place.split(':')[2]] || '' : '') + (b.sw ? '・' + swName(b.sw) : '');
+    const note = b.steps[0] && b.steps[0].note;
+    return '<button class="nbcard" data-nbopen="' + esc(b.id) + '"><div class="nbthumb" style="padding-top:' + (b.h / b.w * 100).toFixed(2) + '%">' +
+      (isNwBg(b) && nwKey(b.place) ? '<img src="' + esc(nwImg(nwKey(b.place), b.bg)) + '" alt="">' : urls[baseKeyOf(b)] ? '<img src="' + urls[baseKeyOf(b)] + '" alt="">' : '') +
+      '<svg viewBox="0 0 ' + b.w + ' ' + b.h + '" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">' + thumbSVG(b) + '</svg></div>' +
+      '<div class="nbcap">' + esc(b.title) + '<small>' + esc([tide, b.steps.length > 1 ? '手順' + b.steps.length : '', note || ''].filter(Boolean).join('・')) + '</small></div></button>';
+  }).join('') + '</div>';
+}
 window.fillNowBoards = async function(){
   const my = ++nowSeq;
   const slots = [...document.querySelectorAll('[data-nbd]')];
-  if (!slots.length){ nowUrls.forEach(u => URL.revokeObjectURL(u)); nowUrls = []; return; } // 作戦図の欄が無くなったら画像を手放す
+  if (!slots.length){ dropNowCache(); return; } // 作戦図の欄が無くなったら画像を手放す
   // 今のサモランのステージのマップ（3つの潮位）を先に読んでおく（スマホに保存され、電波が弱くても作戦図がすぐ開ける）
   slots.forEach(el => { const k = el.dataset.nbd; if (k.startsWith('c:')) TIDES.forEach(([t]) => { const nk = nwKey(k + ':' + t); if (nk && !prefetched.has(nk)){ prefetched.add(nk); fetch(nwImg(nk, 'nw')).then(r => { if (!r.ok) prefetched.delete(nk); }, () => prefetched.delete(nk)); } }); });
-  let boards = [];
-  try { boards = (await allBoards()).filter(b => b && typeof b.place === 'string' && Array.isArray(b.steps) && b.w > 0 && b.h > 0); } catch (e){ return; }
-  if (my !== nowSeq) return;
-  const order = { Low: 0, Mid: 1, High: 2 };
-  const groups = new Map();
-  slots.forEach(el => {
-    const k = el.dataset.nbd;
-    // 'c:<id>' はそのステージの全潮位、'c:<id>:<潮位>'（サモランメモの潮位の切り替え）と 'v:<id>' はその場所だけ
-    if (!groups.has(k)) groups.set(k, boards.filter(b => k.startsWith('c:') && k.split(':').length === 2 ? b.place.startsWith(k + ':') : b.place === k)
-      .sort((a, b) => (order[a.place.split(':')[2]] || 0) - (order[b.place.split(':')[2]] || 0) || b.updated - a.updated));
-  });
-  // 土台の画像（同じ場所は1回だけ読む）
-  const places = [...new Set([...groups.values()].flat().filter(b => !isNwBg(b)).map(baseKeyOf))], urls = {}; // 自分のスクショの土台だけ読む（NWのマップは同梱のファイル）
-  for (const p of places){
-    try { const base = await baseGet(p); if (base) urls[p] = URL.createObjectURL(base.blob); } catch (e){}
-    if (my !== nowSeq){ Object.values(urls).forEach(u => URL.revokeObjectURL(u)); return; } // 新しい描画が来たら途中でやめる
+  let c = nowCache && nowCache.gen === idbGen ? nowCache : null;
+  const fresh = !c;
+  if (fresh){
+    const gen = idbGen; let boards;
+    try { boards = (await allBoards()).filter(b => b && typeof b.place === 'string' && Array.isArray(b.steps) && b.w > 0 && b.h > 0); } catch (e){ return; }
+    if (my !== nowSeq) return;
+    c = { gen, boards, urls: {}, html: new Map() };
   }
-  nowUrls.forEach(u => URL.revokeObjectURL(u)); nowUrls = Object.values(urls);
-  slots.forEach(el => {
-    if (!el.isConnected) return;
-    const k = el.dataset.nbd, list = groups.get(k) || [];
-    if (!list.length){
-      el.innerHTML = '<div class="nbmk">作戦図 ' + (k.startsWith('c:') && k.split(':').length === 2
-        ? TIDES.map(([t, n]) => '<button data-bplace="' + esc(k + ':' + t) + '">＋ ' + n + '</button>').join('')
-        : '<button data-bplace="' + esc(k) + '">＋ 作る</button>') + '</div>';
+  const order = { Low: 0, Mid: 1, High: 2 };
+  // まだ作っていない欄だけ作る。'c:<id>' はそのステージの全潮位、'c:<id>:<潮位>'（サモランメモの潮位の切り替え）と 'v:<id>' はその場所だけ
+  const need = [...new Set(slots.map(el => el.dataset.nbd))].filter(k => !c.html.has(k));
+  const groups = new Map(need.map(k => [k, c.boards.filter(b => k.startsWith('c:') && k.split(':').length === 2 ? b.place.startsWith(k + ':') : b.place === k)
+    .sort((a, b) => (order[a.place.split(':')[2]] || 0) - (order[b.place.split(':')[2]] || 0) || b.updated - a.updated)]));
+  // 土台の画像（自分のスクショの土台だけ。NWのマップは同梱のファイル。同じ場所は1回だけ読む）
+  const places = [...new Set([...groups.values()].flat().filter(b => !isNwBg(b)).map(baseKeyOf))].filter(p => !(p in c.urls));
+  let readFail = false;
+  for (const p of places){
+    let u = null;
+    try { const base = await baseGet(p); if (base) u = URL.createObjectURL(base.blob); } catch (e){ readFail = true; }
+    if (my !== nowSeq){ // 新しい描画が来たら途中でやめる
+      if (u) URL.revokeObjectURL(u);
+      if (fresh) Object.values(c.urls).forEach(x => { if (x) URL.revokeObjectURL(x); });
       return;
     }
-    el.innerHTML = '<div class="nbrow">' + list.map(b => {
-      const tide = (b.place.startsWith('c:') ? TIDE_NAME[b.place.split(':')[2]] || '' : '') + (b.sw ? '・' + swName(b.sw) : '');
-      const note = b.steps[0] && b.steps[0].note;
-      return '<button class="nbcard" data-nbopen="' + esc(b.id) + '"><div class="nbthumb" style="padding-top:' + (b.h / b.w * 100).toFixed(2) + '%">' +
-        (isNwBg(b) && nwKey(b.place) ? '<img src="' + esc(nwImg(nwKey(b.place), b.bg)) + '" alt="">' : urls[baseKeyOf(b)] ? '<img src="' + urls[baseKeyOf(b)] + '" alt="">' : '') +
-        '<svg viewBox="0 0 ' + b.w + ' ' + b.h + '" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">' + thumbSVG(b) + '</svg></div>' +
-        '<div class="nbcap">' + esc(b.title) + '<small>' + esc([tide, b.steps.length > 1 ? '手順' + b.steps.length : '', note || ''].filter(Boolean).join('・')) + '</small></div></button>';
-    }).join('') + '</div>';
-  });
+    if (u || !readFail) c.urls[p] = u;
+  }
+  if (readFail) c.gen = -1; // 読めなかった土台があれば、この中身は使い回さない（次の描画で読み直す。Codexレビュー）
+  need.forEach(k => c.html.set(k, nowSlotHTML(k, groups.get(k), c.urls)));
+  if (fresh){ dropNowCache(); nowCache = c; } // 前の画像はここで手放す（欄はこのすぐ後に全部入れ替える）
+  slots.forEach(el => { if (el.isConnected) el.innerHTML = c.html.get(el.dataset.nbd); });
 };
 // ---------- バックアップ（index.html の書き出し・読み込みから呼ぶ） ----------
 const blobToDataURL = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); });
