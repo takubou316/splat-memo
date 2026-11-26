@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-25e';</script>
+<script>window.APP_VERSION = '2026-11-26a';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -99,6 +99,18 @@ nav button.on{color:var(--salmon)}
 #moreMenu[hidden]{display:none}
 #moreMenu button{display:flex;align-items:center;gap:12px;width:100%;min-height:48px;padding:0 14px;border-radius:10px;font-size:15px;font-weight:600;color:var(--text);text-align:left}
 #moreMenu button svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;color:var(--sub)}
+/* 初回だけの案内（2026-11-26、評価 F11・優先順位8） */
+#intro{position:fixed;inset:0;z-index:60;background:#000b;display:flex;align-items:flex-end;justify-content:center;padding:16px 12px calc(16px + env(safe-area-inset-bottom))}
+#intro[hidden]{display:none}
+#intro .ib{width:100%;max-width:440px;background:var(--card2);border:1px solid var(--line2);border-radius:18px;padding:20px 18px 14px}
+#intro .ip{font-size:12px;color:var(--sub);margin-bottom:6px}
+#intro h2{font-size:19px;margin:0 0 10px}
+#intro .it{font-size:15px;line-height:1.7;color:var(--text);min-height:7.5em}
+#intro .it b{color:var(--salmon);font-weight:700}
+#intro .ibtn{display:flex;gap:8px;margin-top:14px}
+#intro .ibtn button{flex:1;min-height:48px;border-radius:12px;font-size:15px;font-weight:600;background:var(--card);border:1px solid var(--line2);color:var(--text)}
+#intro .ibtn button.pri{background:var(--salmon);border-color:var(--salmon);color:#111}
+#moreMenu .mm{display:flex;flex-direction:column;gap:1px;line-height:1.25}#moreMenu .mm small{font-size:12px;font-weight:400;color:var(--sub)}
 #moreMenu button.on{color:var(--salmon)}#moreMenu button.on svg{color:var(--salmon)}
 /* editor */
 #editor{position:fixed;inset:0;z-index:20;background:var(--bg);display:none;flex-direction:column}
@@ -241,7 +253,7 @@ nav button.on{color:var(--salmon)}
 <body>
 <div id="app">
 <header>
-  <div class="hrow"><h1>ステージメモ</h1><button class="reload" id="reload">↻ 更新</button></div>
+  <div class="hrow"><h1 id="title">ステージメモ</h1><button class="reload" id="reload">↻ 更新</button></div>
   <div class="status" id="status">読み込み中…</div>
 </header>
 <!-- 保存できていない変更がある時の帯（2026-11-23 Codexの評価: 保存に失敗しても画面を閉じると保存できたように見えた） -->
@@ -256,10 +268,12 @@ nav button.on{color:var(--salmon)}
   <button id="navMore" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="19" cy="12" r="1.3" fill="currentColor"/></svg><span id="navMoreLbl">その他</span></button>
 </nav>
 <div id="moreMenu" hidden>
-  <button id="navContest"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12c3-4.5 8-6 12-4l3-2.5v13L15 16c-4 2-9 .5-12-4z"/><circle cx="8" cy="11" r=".6" fill="currentColor"/></svg>ばちこん</button>
-  <button id="navTier"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h5M4 12h5M4 19h5M12 5h8M12 12h5M12 19h3"/></svg>ティア</button>
+  <button id="navContest"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12c3-4.5 8-6 12-4l3-2.5v13L15 16c-4 2-9 .5-12-4z"/><circle cx="8" cy="11" r=".6" fill="currentColor"/></svg><span class="mm">ばちこん<small>バイトチームコンテストの作戦</small></span></button>
+  <button id="navTier"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h5M4 12h5M4 19h5M12 5h8M12 12h5M12 19h3"/></svg><span class="mm">ティア<small>ブキの強さの表を作る</small></span></button>
+  <button id="navHelp"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg><span class="mm">使い方<small>どのタブに何を書くか</small></span></button>
 </div>
 </div>
+<div id="intro" hidden role="dialog" aria-modal="true" aria-labelledby="introH"><div class="ib"><div class="ip" id="introP"></div><h2 id="introH"></h2><div class="it" id="introT"></div><div class="ibtn"><button id="introBack">戻る</button><button class="pri" id="introNext">次へ</button></div></div></div>
 <div id="play">
   <div class="ehead">
     <button class="back" id="playBack">‹ 一覧</button>
@@ -772,6 +786,8 @@ function render(){
   // ばちこん・ティアを開いている時は「その他」を光らせ、名前もその画面にする（今どこにいるか分かるように）
   const inMore = ui.view === 'contest' || ui.view === 'tier';
   document.getElementById('navMore').classList.toggle('on', inMore);
+  // 上の題名は今の画面の名前（前はどの画面でも「ステージメモ」で、今どこか分からなかった。評価 F11）
+  document.getElementById('title').textContent = ({ now:'いまのステージ', note:'バトルメモ', cnote:'サモランメモ', list:'メモ', contest:'ばちこん', tier:'ティア' })[ui.view] || 'ステージメモ';
   document.getElementById('navMoreLbl').textContent = ui.view === 'contest' ? 'ばちこん' : ui.view === 'tier' ? 'ティア' : 'その他';
   maybeAutoOpen();
   armSlotTimer(); // 次の時間帯の境目で描き直す
@@ -1414,6 +1430,42 @@ document.getElementById('main').addEventListener('input', e => {
 });
 document.getElementById('navContest').onclick =() => { setMoreMenu(false); if (window.noteFlush) noteFlush(); autoOpened = false; setUI({ view:'contest' }); document.getElementById('main').scrollTop = 0; };
 // 「その他」のメニュー: 押すと開き、もう一度押す・ほかの所を押す・選ぶと閉じる
+// ---------- 初回だけの案内（2026-11-26、評価 F11・優先順位8）----------
+// どのタブに何を書くかを3枚で。メモがまだ無い人に最初の1回だけ出す（「その他 → 使い方」でいつでも見られる）
+const INTRO = [
+  ['いまのステージ', '今の時間帯の<b>ステージ</b>と、そこに書いた<b>メモ</b>が出ます。試合の前にここを開けば、ぱっと確認できます。'],
+  ['バトルメモ・サモランメモ', 'ステージ・ブキ・ルール（サモランは<b>潮位</b>）ごとにメモを書く場所です。大事なメモは「<b>☆ 試合前</b>」を押すと、画面の上と「いまのステージ」にまとまって出ます。'],
+  ['メモ', '書いたメモを<b>全部まとめて探せます</b>。メモはこのスマホの中だけに保存されるので、機種変更の前は「メモ」の下の「バックアップ」で<b>書き出す</b>を押して、控えを取ってください。']
+];
+let introAt = 0;
+function drawIntro(){
+  const [h, t] = INTRO[introAt];
+  document.getElementById('introP').textContent = '使い方 ' + (introAt + 1) + ' / ' + INTRO.length;
+  document.getElementById('introH').textContent = h;
+  document.getElementById('introT').innerHTML = t; // 中身は上の決まった文だけ
+  document.getElementById('introBack').textContent = introAt ? '戻る' : 'とばす';
+  document.getElementById('introNext').textContent = introAt === INTRO.length - 1 ? 'はじめる' : '次へ';
+}
+// 案内は一番上の画面: 戻る操作では案内だけを閉じる（自分の履歴を1つ積む）。出ている間は後ろを操作できないようにし（inert）、閉じたら元の所へフォーカスを戻す（Codexレビュー 2026-11-26）
+let introSkipPop = false, introFrom = null;
+const introOpen = () => !document.getElementById('intro').hidden;
+const introBehind = on => [...document.body.children].forEach(el => { if (el.id !== 'intro' && el.tagName !== 'SCRIPT') el.inert = on; });
+function openIntro(){
+  introAt = 0; drawIntro(); introFrom = document.activeElement;
+  document.getElementById('intro').hidden = false; introBehind(true);
+  if (!(history.state && history.state.intro)) history.pushState({ intro:true }, '');
+  document.getElementById('introNext').focus();
+}
+function closeIntro(fromPop){
+  if (!introOpen()) return;
+  document.getElementById('intro').hidden = true; introBehind(false); save('sm_intro', 1);
+  if (!fromPop && history.state && history.state.intro){ introSkipPop = true; history.back(); } // この戻るで後ろの画面を閉じないように
+  const f = introFrom && introFrom.isConnected && introFrom !== document.body ? introFrom : document.getElementById('navMore'); introFrom = null;
+  if (f && f.focus) f.focus({ preventScroll: true });
+}
+document.getElementById('introNext').onclick = () => { if (introAt < INTRO.length - 1){ introAt++; drawIntro(); } else closeIntro(); };
+document.getElementById('introBack').onclick = () => { if (introAt){ introAt--; drawIntro(); } else closeIntro(); };
+document.getElementById('navHelp').onclick = () => { setMoreMenu(false); openIntro(); };
 function setMoreMenu(open){
   document.getElementById('moreMenu').hidden = !open;
   document.getElementById('navMore').setAttribute('aria-expanded', open ? 'true' : 'false');
@@ -1431,7 +1483,7 @@ document.getElementById('edBack').onclick = () => { if (history.state && history
 document.getElementById('playBack').onclick = () => { if (history.state && history.state.play) history.back(); else closePlay(false); };
 // 戻る操作は一番上に開いている画面だけを閉じる（作戦メモ編集 → WAVE閲覧 の順）
 // 画像を見る画面（notePop）はメモの編集画面の上にも開くので、先に閉じる
-window.addEventListener('popstate', () => { if (window.notePop && notePop()) {} else if (ed) closeEditor(true); else if (window.boardPop && boardPop()) {} else if (window.tierPop && tierPop()) {} else if (play) closePlay(true); });
+window.addEventListener('popstate', () => { if (introSkipPop){ introSkipPop = false; return; } if (introOpen()){ closeIntro(true); return; } if (window.notePop && notePop()) {} else if (ed) closeEditor(true); else if (window.boardPop && boardPop()) {} else if (window.tierPop && tierPop()) {} else if (play) closePlay(true); });
 document.getElementById('memoText').addEventListener('input', () => {
   document.getElementById('edSaved').textContent = '入力中…';
   clearTimeout(saveTimer); saveTimer = setTimeout(saveMemo, 500);
@@ -1473,6 +1525,7 @@ function armSlotTimer(){
 
 render();
 refresh();
+if (!load('sm_intro', 0) && !Object.keys(memos).some(k => memoOf(k))) openIntro(); // 初めての人だけ（もう書いている人には出さない）
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 <script src="tier.js"></script>

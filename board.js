@@ -7,7 +7,7 @@
 'use strict';
 (function(){
 const LEANNY = 'https://raw.githubusercontent.com/Leanny/splat3/main/images/';
-const TIDES = [['Low', '干潮'], ['Mid', '普通'], ['High', '満潮']];
+const TIDES = [['Low', '干潮'], ['Mid', '通常'], ['High', '満潮']];
 const TIDE_NAME = Object.fromEntries(TIDES);
 const COOP_STAGES = ['Q29vcFN0YWdlLTE=', 'Q29vcFN0YWdlLTI=', 'Q29vcFN0YWdlLTc=', 'Q29vcFN0YWdlLTY=', 'Q29vcFN0YWdlLTg=', 'Q29vcFN0YWdlLTQ=', 'Q29vcFN0YWdlLTk='];
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -143,7 +143,8 @@ const allBoards = () => idbDo('boards', 'readonly', s => s.getAll());
 // 特殊WAVE（2026-11-18 ユーザー要望「特殊WAVEを選択できるようにしたい」→ 作戦図ごとに付ける）。作戦図の sw に [0] を入れる（'' = 通常）。
 // [2] は起きる潮位（攻略＆検証wiki「特殊な状況」で確認: ドスコイ大量発生・巨大タツマキは干潮のみ、ラッシュ・グリル発進・キンシャケ探し・ドロシャケ噴出は干潮では起きない）。
 // [1] の名前は contest-data.js の event と同じ（ばちこんのWAVEから作る時に自動で選ぶ）
-const SW = [['', '通常', 'Low Mid High'], ['rush', 'ラッシュ', 'Mid High'], ['fog', '霧', 'Low Mid High'], ['griller', 'グリル発進', 'Mid High'],
+// 特殊WAVEなしは「昼（特殊なし）」（潮位の「通常」と同じ言葉にならないように。評価 F12 2026-11-26）
+const SW = [['', '昼（特殊なし）', 'Low Mid High'], ['rush', 'ラッシュ', 'Mid High'], ['fog', '霧', 'Low Mid High'], ['griller', 'グリル発進', 'Mid High'],
   ['goldie', 'キンシャケ探し', 'Mid High'], ['mudmouth', 'ドロシャケ噴出', 'Mid High'], ['mothership', 'ハコビヤ襲来', 'Low Mid High'],
   ['cohock', 'ドスコイ大量発生', 'Low'], ['tornado', '巨大タツマキ', 'Low']];
 const swName = k => (SW.find(s => s[0] === (k || '')) || SW[0])[1];
@@ -983,8 +984,9 @@ function openSwSheet(){
     const t = e.target.closest('button'); if (!t || !B) return;
     if (t.dataset.swpick != null){
       // 名前が作った時の自動の名前（場所＋特殊WAVE＋番号）のままなら、名前の特殊WAVEも付け替える
-      const auto = sw => placeName(B.place) + (sw ? ' ' + swName(sw) : '') + ' ', m = B.autoTitle !== false && B.title.startsWith(auto(B.sw)) && /^\d+$/.test(B.title.slice(auto(B.sw).length)); // 自分で付けた名前（autoTitle=false）は変えない
-      if (m) B.title = auto(t.dataset.swpick) + B.title.slice(auto(B.sw).length);
+      // 潮位の名前を「普通」→「通常」に変えた（2026-11-26）ので、前の名前で作った自動の名前も同じ扱いにする（Codexレビュー）
+      const auto = sw => placeName(B.place) + (sw ? ' ' + swName(sw) : '') + ' ', pre = B.autoTitle === false ? null : [auto(B.sw), auto(B.sw).replace('通常', '普通')].find(p => B.title.startsWith(p) && /^\d+$/.test(B.title.slice(p.length))); // 自分で付けた名前（autoTitle=false）は変えない
+      if (pre) B.title = auto(t.dataset.swpick) + B.title.slice(pre.length);
       B.sw = t.dataset.swpick; B.updated = Date.now(); persist(); drawBoard(); toast('特殊WAVEを「' + swName(B.sw) + '」にしました'); }
     closeBSheet();
   });

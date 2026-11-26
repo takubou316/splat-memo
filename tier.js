@@ -24,6 +24,7 @@ const css = `
 #tier .ehead{gap:5px}
 #tier .ehead .back{padding:8px 4px}
 #tier .ehead button.hb{padding:6px 7px;border-radius:10px;background:var(--card);font-size:13px;font-weight:700;min-width:38px;min-height:40px;flex:none}
+#tier .ehead button.hb.w2{font-size:11px;line-height:1.2;padding:4px 6px} /* 「段を編集」「画像にする」は2行で（320pxでも題名が見えるように） */
 #tier .ehead button.hb:disabled{opacity:.35}
 #tierTitle{flex:1;min-width:0;text-align:left;font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:6px 4px}
 #tierBoard{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:8px 8px 16px}
@@ -215,7 +216,7 @@ document.getElementById('main').addEventListener('change', e => {
 const ov = document.createElement('div');
 ov.id = 'tier';
 ov.innerHTML = '<div class="ehead"><button class="back" id="tierBack">‹ 一覧</button><button id="tierTitle"></button>' +
-  '<button class="hb" id="tierUndo" aria-label="取り消し">↶</button><button class="hb" id="tierRedo" aria-label="やり直し">↷</button><button class="hb" id="tierEditRows">段</button><button class="hb" id="tierShot">画像</button></div>' +
+  '<button class="hb" id="tierUndo" aria-label="取り消し">↶</button><button class="hb" id="tierRedo" aria-label="やり直し">↷</button><button class="hb w2" id="tierEditRows">段を<br>編集</button><button class="hb w2" id="tierShot">画像に<br>する</button></div>' +
   '<div id="tierBoard"></div>' +
   '<div id="tierTray"><div class="trayh"><span class="cnt" id="trayCnt"></span><button id="trayToggle"></button></div>' +
   '<input class="traysearch" id="traySearch" placeholder="名前で探す" style="display:none"><div id="trayItems"></div></div>';

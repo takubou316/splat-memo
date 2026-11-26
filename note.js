@@ -293,7 +293,7 @@ function renderCoop(){
     : '<button class="nb-card empty" data-cnpick="stage"><span class="t"><small>ステージ</small><b>選ぶ</b></span></button>') + '</div>';
   if (c.manual || (cnb.weapon && cnb.weapon.at === c.at && !c.supplied.some(x => x.id === cnb.weapon.id))) h += '<div class="nb-note">自分で選んでいます（次の時間帯になると今のものに戻ります）<button data-cnreset="1">今に戻す</button></div>';
   // ブキの出し方の切り替え（呼び方は Codex の案「ブキ別／支給ブキ一覧」。同じメモの見せる範囲の違いだと分かるように）
-  h += '<div class="nb-pair"><button data-cnall="0" class="' + (cnb.all ? '' : 'on') + '">ブキ別</button><button data-cnall="1" class="' + (cnb.all ? 'on' : '') + '">支給ブキ一覧</button></div>';
+  h += '<div class="nb-pair"><button data-cnall="0" class="' + (cnb.all ? '' : 'on') + '">選んだブキ</button><button data-cnall="1" class="' + (cnb.all ? 'on' : '') + '">4ブキまとめて</button></div>';
   if (!c.stageId) return h + '<div class="nb-empty">ステージを選ぶと、メモが出ます</div>';
   const sid = c.stageId, sName = nameById(sid), tide = CTIDES.some(x => x[0] === cnb.tide) ? cnb.tide : 'Mid', tName = CTIDE_NAME[tide];
   // 潮位（2026-11-23 ユーザー要望「潮位ごとのメモも追加したい」）: 選んだ潮位のメモ1つと、その潮位の作戦図だけを出す（Codexの案）。
@@ -322,14 +322,14 @@ function renderCoop(){
   // 支給ブキ一覧: ブキごとに1枚のカード（このステージ・全ステージ共通）→ ステージ共通 → カテゴリ（重ならないように1回ずつ）→ 全体
   const seen = new Set(), ws = [];
   c.supplied.forEach(x => {
-    if (!x.id){ h += '<div class="nb-note">' + esc(x.name) + 'はメモの対象外です（ランダム枠など）。「ブキ別」の「ほかのブキ」から実際のブキを選べます</div>'; return; }
+    if (!x.id){ h += '<div class="nb-note">' + esc(x.name) + 'はメモの対象外です（ランダム枠など）。「選んだブキ」の「ほかのブキ」から実際のブキを選べます</div>'; return; }
     if (seen.has(x.id)) return; seen.add(x.id);
     const cw = coopWeaponById(x.id); if (!cw) return; ws.push(cw);
     h += '<div class="cn-wcard"><div class="cn-whead"><img src="' + esc(cw.img) + '" alt=""><b>' + esc(cw.name) + '</b><small>' + esc(catName(cw.type)) + '</small></div>' +
       sec(cwKey(sid, cw.id), 'このステージで', sName, '例: このブキの時はここで納品を守る など', false, true, cw.name + '（このステージ）') +
       sec('wc:' + cw.id, 'このブキ全般', '全ステージ共通（サモラン）', '例: 得意なオオモノ、スペシャルの使いどころ など', false, true, cw.name + '（全般）') + '</div>';
   });
-  if (!c.mode) h += '<div class="nb-note">支給ブキが分からないので、ブキのメモは出せません。「ブキ別」から選んでください</div>';
+  if (!c.mode) h += '<div class="nb-note">支給ブキが分からないので、ブキのメモは出せません。「選んだブキ」から選んでください</div>';
   h += stageSec;
   [...new Set(ws.map(x => x.type).filter(Boolean))].forEach(t => { h += catSec(t); });
   return h + allSec + addBar() + tideBar;
