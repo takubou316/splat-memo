@@ -1206,19 +1206,29 @@ let nowSeq = 0;
 const prefetched = new Set();
 function thumbSVG(b){
   // objSVG は開いている作戦図（B）を基準に大きさを決めるので、一時的に差し替えて描く（同期処理の中だけ）
-  const keep = B; B = Object.assign({}, b, { rot: 0 }); thumbMode = true;
+  const keep = B; B = Object.assign({}, b, { rot: thumbRot(b) }); thumbMode = true;
   try { return (b.steps[0] ? b.steps[0].objs : []).map(o => objSVG(o, false)).join(''); }
   catch (e){ return ''; }
   finally { B = keep; thumbMode = false; }
 }
+// 2026-11-26 ユーザー「干潮の作戦図を作ったけど全然見えない」「編集時はこんな感じで回転もしてた」: 小さな絵は向きを0°に戻して
+// 描いていたので、回した画面に合わせて置いた文字が横にはみ出し、重なっていた。見る画面と同じ向き（B.rot）で描く。
+// 土台の画像も SVG の中に入れて、線・文字と一緒に回す。{ vw, vh } は回した後の縦横
+const thumbRot = b => [90, 180, 270].includes(b.rot) ? b.rot : 0;
+function thumbBox(b, bgUrl, style){
+  const r = thumbRot(b), side = r % 180 !== 0, vw = side ? b.h : b.w, vh = side ? b.w : b.h;
+  const tf = r ? ' transform="translate(' + vw / 2 + ' ' + vh / 2 + ') rotate(' + r + ') translate(' + (-b.w / 2) + ' ' + (-b.h / 2) + ')"' : '';
+  return '<div class="nbthumb" style="padding-top:' + (vh / vw * 100).toFixed(2) + '%' + (style || '') + '"><svg viewBox="0 0 ' + vw + ' ' + vh + '" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><g' + tf + '>' +
+    (bgUrl ? '<image href="' + esc(bgUrl) + '" width="' + b.w + '" height="' + b.h + '" preserveAspectRatio="none"/>' : '') + thumbSVG(b) + '</g></svg></div>';
+}
+const thumbAspect = b => thumbRot(b) % 180 ? b.h / b.w : b.w / b.h;
 // ばちこんのWAVE画面に出す、割り当てた作戦図の小さな絵（手順1）。{ html, url }（url は自分のスクショの時だけ。使い終わったら解放する）
 // 縦長のマップでも画面を埋めないよう、高さは画面の38%まで
 window.boardThumb = async b => {
   if (!b || !Array.isArray(b.steps) || !(b.w > 0 && b.h > 0)) return { html: '', url: null };
   const bg = await boardBgUrl(b).catch(() => null);
   return { url: bg && bg.own ? bg.url : null,
-    html: '<div style="width:min(100%,calc(38vh * ' + (b.w / b.h).toFixed(4) + '));margin:0 auto"><div class="nbthumb" style="padding-top:' + (b.h / b.w * 100).toFixed(2) + '%;border-radius:10px;overflow:hidden">' +
-      (bg ? '<img src="' + esc(bg.url) + '" alt="">' : '') + '<svg viewBox="0 0 ' + b.w + ' ' + b.h + '" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">' + thumbSVG(b) + '</svg></div></div>' };
+    html: '<div style="width:min(100%,calc(38vh * ' + thumbAspect(b).toFixed(4) + '));margin:0 auto">' + thumbBox(b, bg ? bg.url : '', ';border-radius:10px;overflow:hidden') + '</div>' };
 };
 // いまのステージを離れたら、読み込み中の処理を捨てて画像を手放す
 // nowCache: 前に読んだ作戦図の一覧 boards・土台の画像 urls（場所→URL、無い時は null）・欄ごとの中身 html。
@@ -1235,9 +1245,8 @@ function nowSlotHTML(k, list, urls){
   return '<div class="nbrow">' + list.map(b => {
     const tide = (b.place.startsWith('c:') ? TIDE_NAME[b.place.split(':')[2]] || '' : '') + (b.sw ? '・' + swName(b.sw) : '');
     const note = b.steps[0] && b.steps[0].note;
-    return '<button class="nbcard" data-nbopen="' + esc(b.id) + '"><div class="nbthumb" style="padding-top:' + (b.h / b.w * 100).toFixed(2) + '%">' +
-      (isNwBg(b) && nwKey(b.place) ? '<img src="' + esc(nwImg(nwKey(b.place), b.bg)) + '" alt="">' : urls[baseKeyOf(b)] ? '<img src="' + urls[baseKeyOf(b)] + '" alt="">' : '') +
-      '<svg viewBox="0 0 ' + b.w + ' ' + b.h + '" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">' + thumbSVG(b) + '</svg></div>' +
+    return '<button class="nbcard" data-nbopen="' + esc(b.id) + '">' +
+      thumbBox(b, isNwBg(b) && nwKey(b.place) ? nwImg(nwKey(b.place), b.bg) : urls[baseKeyOf(b)] || '') +
       '<div class="nbcap">' + esc(b.title) + '<small>' + esc([tide, b.steps.length > 1 ? '手順' + b.steps.length : '', note || ''].filter(Boolean).join('・')) + '</small></div></button>';
   }).join('') + '</div>';
 }
