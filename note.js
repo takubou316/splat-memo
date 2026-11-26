@@ -347,6 +347,7 @@ function saveDirty(keys){
   const ks = (keys || [...dirty.keys()]).filter(k => dirty.has(k)); if (!ks.length) return true;
   ks.forEach(k => { const v = dirty.get(k); if (v.trim()) memos[k] = v; else { delete memos[k]; if (window.dropPin) dropPin(k); } }); // 消したメモの「試合前」の印も外す
   const ok = save('sm_memos', memos);
+  if (ok && window.touchMemo){ const w = ks.filter(k => memos[k]); if (w.length) touchMemo(w); ks.filter(k => !memos[k]).forEach(settleMemoAt); }
   ks.forEach(k => { if (ok) dirty.delete(k); const el = stOf(k); if (el) el.textContent = ok ? '保存しました ✓' : '保存できませんでした（もう一度保存します）'; });
   return ok;
 }
@@ -411,6 +412,11 @@ async function picDo(mode, fn){
 }
 const picsOf = k => picDo('readonly', s => s.index('key').getAll(k)).then(a => (a || []).sort((x, y) => x.at - y.at));
 window.memoAcceptsPics = key => PIC_KEY_RE.test(key);
+// 文字を消した・画像を消した後の更新日: まだ文字か画像が残っていれば今の日時、何も無ければ日時を消す（Codexレビュー 2026-11-26）
+window.settleMemoAt = async k => {
+  let n = 0; try { n = await picDo('readonly', s => s.index('key').count(k)); } catch (e){ n = 1; } // 数えられない時は残っている扱い
+  if (memos[k] || n) touchMemo(k); else dropMemoAt(k);
+};
 window.memoPicKeys = async () => {
   const db = await picDb();
   return new Promise((resolve, reject) => {
@@ -508,6 +514,7 @@ function addPics(k, files){
         try { const im = await shrinkPic(f); if (await picPutChecked({ id: picUid(), key: k, blob: im.blob, w: im.w, h: im.h, at: Date.now() })) ok++; else bad++; }
         catch (e){ bad++; }
       }
+      if (ok && window.touchMemo) touchMemo(k);
       say(bad ? (ok ? ok + '枚付けました（' + bad + '枚は付けられませんでした）' : '画像を付けられませんでした') : '画像を付けました ✓');
     } catch (e){ say('画像を保存できませんでした'); }
   }).then(() => fillPics([k]));
@@ -541,7 +548,7 @@ async function openViewer(k, id, origin){
         const delId = list[i].id; deleting = true;
         try { await picQueue(() => picDel(delId)); } catch (e){ deleting = false; toast('消せませんでした'); return; }
         deleting = false;
-        fillPics([k]); toast('画像を消しました');
+        fillPics([k]); toast('画像を消しました'); settleMemoAt(k);
         if (sheet !== mySheet) return; // 消している間に閉じられた
         const j = list.findIndex(p => p.id === delId); if (j >= 0) list.splice(j, 1);
         if (!list.length){ closeSheet(false); if (isNoteView(ui.view)) render(); return; }

@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-26a';</script>
+<script>window.APP_VERSION = '2026-11-26b';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -232,6 +232,8 @@ nav button.on{color:var(--salmon)}
 .memo-scope{display:flex;flex-wrap:wrap;gap:5px;margin:0 8px 8px}
 .memo-scope button{padding:5px 8px;border:1px solid var(--line2);border-radius:8px;background:var(--card);color:var(--text);font:inherit;font-size:12px}
 .memo-scope button[aria-pressed="true"]{border-color:var(--salmon);color:var(--salmon)}
+.memo-found .mf-at{margin-top:3px;font-size:12px;color:var(--sub)}
+.memo-found .mf-pin{color:var(--salmon);margin-right:4px}
 .memo-options{margin:0 8px 8px}.memo-options summary{padding:7px 0;color:var(--sub);font-size:13px;cursor:pointer}
 .coach-link{display:grid;gap:3px;text-align:left;width:100%;margin:0 0 8px;padding:9px 12px;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--text);font:inherit}
 .coach-link strong{font-size:13px}.coach-link span{color:var(--sub);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -319,20 +321,31 @@ const FALLBACK_STAGES = {"VnNTdGFnZS0x":"ユノハナ大渓谷","VnNTdGFnZS0y":"
 // ---------- 保存 ----------
 function load(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } }
 // メモ（sm_memos）の保存に失敗したら覚えておき、画面上の帯で知らせる（画面を閉じても消えない。成功したら消える）
-let memosUnsaved = false;
+let memosUnsaved = false, atUnsaved = false; // atUnsaved: メモの更新日（sm_memo_at）を保存できていない
 function save(k, v){
-  try{ localStorage.setItem(k, JSON.stringify(v)); if (k === 'sm_memos' && memosUnsaved){ memosUnsaved = false; drawUnsaved(); } return true; }
-  catch(e){ if (k === 'sm_memos'){ memosUnsaved = true; drawUnsaved(); } return false; }
+  try{ localStorage.setItem(k, JSON.stringify(v));
+    if (k === 'sm_memos' && memosUnsaved){ memosUnsaved = false; drawUnsaved(); }
+    if (k === 'sm_memo_at' && atUnsaved){ atUnsaved = false; drawUnsaved(); }
+    return true; }
+  catch(e){ if (k === 'sm_memos'){ memosUnsaved = true; drawUnsaved(); } if (k === 'sm_memo_at'){ atUnsaved = true; drawUnsaved(); } return false; }
 }
 function drawUnsaved(){
   const el = document.getElementById('unsaved'); if (!el) return;
-  el.hidden = !(memosUnsaved || (window.boardFailCount && boardFailCount() > 0));
+  el.hidden = !(memosUnsaved || atUnsaved || (window.boardFailCount && boardFailCount() > 0));
 }
 window.drawUnsaved = drawUnsaved;
 
 let memos = load('sm_memos', {});           // { key: text }
 if (!memos || typeof memos !== 'object' || Array.isArray(memos)) memos = {};
 // 「試合前に見る」印（2026-11-25c、評価の優先順位5。イカのメモの「お気に入りだけ試合前に見る」、コーチのリストバンドの考え）。印を付けたメモのキー
+// メモを最後に書いた日時（2026-11-26、評価 F8・優先順位9「すべてのメモ」の更新日・並べ替え）。{ key: ミリ秒 }。
+// 文字の保存に成功した時と、画像を付けた時に記録する。これより前に書いたメモは日時なし（「日付なし」として最後に並ぶ）
+let memoAt = load('sm_memo_at', {}); if (!memoAt || typeof memoAt !== 'object' || Array.isArray(memoAt)) memoAt = {};
+// 消したメモ（文字も画像も無い）の日時は残さない（後で日時の無い古いバックアップを読んだ時に「消した日」が更新日にならないように。Codexレビュー）。
+// 文字も画像も残っているかは note.js の settleMemoAt が画像を数えて決める
+window.touchMemo = ks => { const t = Date.now(); [].concat(ks).forEach(k => { memoAt[k] = t; }); return save('sm_memo_at', memoAt); };
+window.dropMemoAt = k => { if (k in memoAt){ delete memoAt[k]; save('sm_memo_at', memoAt); } };
+const validAt = v => typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= Date.now() + 864e5; // バックアップの日時の確かめ（数値だけ）
 let pins = new Set((Array.isArray(load('sm_pins', [])) ? load('sm_pins', []) : []).filter(k => typeof k === 'string'));
 const isPinned = k => pins.has(k);
 function togglePin(k){
@@ -674,9 +687,18 @@ function renderMemoSearch(){
     '<div class="memo-scope" aria-label="表示するメモ">' +
     [['all', 'すべて'], ['coop', 'サーモンラン'], ['vs', 'バトル'], ['contest', 'ばちこん']].map(([key, name]) =>
       '<button data-memoscope="' + key + '" aria-pressed="' + ((ui.memoScope || 'all') === key) + '">' + name + '</button>').join('') +
+    '</div><div class="memo-scope" aria-label="並べ方">' +
+    [['new', '新しい順'], ['place', '場所の順']].map(([key, name]) =>
+      '<button data-memosort="' + key + '" aria-pressed="' + ((ui.memoSort || 'new') === key) + '">' + name + '</button>').join('') +
     '</div><details class="memo-options"><summary>コーチング・バックアップ</summary>' +
     coachingLink('coop') + coachingLink('vs') + backupHTML() + '</details>' +
     '<div id="memoSearchResults" class="list" aria-live="polite"></div>';
+}
+// 一覧の日付: 今日は時刻、今年は月/日、それより前は年/月/日
+function memoDate(t){
+  const d = new Date(t), now = new Date();
+  if (sameDay(d, now)) return '今日 ' + hm(d);
+  return (d.getFullYear() === now.getFullYear() ? '' : d.getFullYear() + '/') + (d.getMonth() + 1) + '/' + d.getDate();
 }
 let memoSearchRequest = 0;
 async function fillMemoSearch(){
@@ -698,12 +720,13 @@ async function fillMemoSearch(){
     if (!terms.every(term => normalized.includes(term))) continue;
     const lines = value.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
     const excerpt = lines.find(line => terms.some(term => memoFindText(line).includes(term))) || lines[0] || '画像のみ';
-    matches.push({ key, label, excerpt, hasPic });
+    matches.push({ key, label, excerpt, hasPic, at: Number(memoAt[key]) || 0 });
   }
-  matches.sort((a, b) => a.label.localeCompare(b.label, 'ja'));
-  results.innerHTML = (matches.length ? '<div class="sec">' + matches.length + '件</div>' + matches.map(({key, label, excerpt, hasPic}) =>
+  // 新しい順（既定）: 書いた日時の新しい物から。日時の無い古いメモは最後に場所の順で
+  matches.sort((a, b) => (ui.memoSort === 'place' ? 0 : b.at - a.at) || a.label.localeCompare(b.label, 'ja'));
+  results.innerHTML = (matches.length ? '<div class="sec">' + matches.length + '件</div>' + matches.map(({key, label, excerpt, hasPic, at}) =>
     '<button class="row memo-found" data-memokey="' + esc(key) + '"><div class="rinfo"><div class="rname">' +
-    esc(label) + '</div><div class="rprev">' + esc(excerpt.slice(0, 240)) + (hasPic && excerpt !== '画像のみ' ? ' ｜ 画像あり' : '') + '</div></div></button>').join('') :
+    (pins.has(key) ? '<span class="mf-pin" aria-label="試合前に見る">★</span>' : '') + esc(label) + '</div><div class="rprev">' + esc(excerpt.slice(0, 240)) + (hasPic && excerpt !== '画像のみ' ? ' ｜ 画像あり' : '') + '</div>' + (at ? '<div class="mf-at">' + esc(memoDate(at)) + ' に更新</div>' : '') + '</div></button>').join('') :
     '<div class="empty">' + (terms.length ? '該当するメモがありません。作戦図は「作戦図」から探せます。' :
       '保存したメモはここに並びます。「ステージ」「ブキ」から対象を選ぶか、「コーチング・バックアップ」から書き始められます。') + '</div>') +
     (picsFailed ? '<div class="empty">画像の一覧を読み込めませんでした。</div>' : '');
@@ -1261,7 +1284,7 @@ function saveMemo(){
   if (window.noteForget) noteForget(edKey());
   if (v.trim()) memos[edKey()] = v; else { delete memos[edKey()]; dropPin(edKey()); }
   const ok = save('sm_memos', memos);
-  if (ok) originalMemoText = v;
+  if (ok){ originalMemoText = v; if (v.trim()) touchMemo(edKey()); else if (window.settleMemoAt) settleMemoAt(edKey()); }
   if (edKey().startsWith('coach:')) document.getElementById('coachTemplate').hidden = !!v.trim();
   document.getElementById('edSaved').textContent = ok ? '保存しました ✓' : '保存に失敗しました';
   if (ed.kind === 'vs'){
@@ -1295,7 +1318,7 @@ async function exportMemos(){
   else if (window.boardFailCount && boardFailCount()) missing.push('作戦図の未保存の変更');
   if (!notePics) missing.push('メモに付けた画像');
   if (missing.length && !confirm('このバックアップに入らない内容があります。\n' + missing.join('・') + '\n\n入れられる内容だけを書き出しますか？')) return;
-  const blob = new Blob([JSON.stringify({ app:'splat-stage-memo', version:4, exportedAt:d.toISOString(), memos, contests, tiers: window.getTierStore ? getTierStore() : undefined, boards: boards || undefined, notePics: notePics && notePics.length ? notePics : undefined, pins: [...pins] })], { type:'application/json' });
+  const blob = new Blob([JSON.stringify({ app:'splat-stage-memo', version:4, exportedAt:d.toISOString(), memos, contests, tiers: window.getTierStore ? getTierStore() : undefined, boards: boards || undefined, notePics: notePics && notePics.length ? notePics : undefined, pins: [...pins], memoAt })], { type:'application/json' });
   const name = 'stage-memo-' + stamp + '.json';
   // 読み込みの上限（250MB）を超えるファイルは、作っても戻せないので先に知らせる
   if (blob.size > 250e6 && !confirm('書き出すファイルが大きすぎて（' + Math.round(blob.size / 1e6) + 'MB）、このアプリで読み込めない大きさです。使っていない作戦図や画像を消してから書き出すのがおすすめです。このまま書き出しますか？')) return;
@@ -1325,10 +1348,17 @@ function importMemos(file){
         const mt = k0.match(/^(ct:\d+:\d+:)([\d.]+)$/);
         if (mt){ if (isNaN(parseFloat(mt[2]))) continue; k = mt[1] + fmtT(parseFloat(mt[2])); }
         if (window.noteForget) noteForget(k);
-        memos[k] = memos[k] && memos[k] !== v && k !== k0 ? memos[k] + '\n' + v : v;
+        const prev = memos[k], join = prev && prev !== v && k !== k0;
+        memos[k] = join ? prev + '\n' + v : v;
+        // 更新日（Codexレビュー）: 本文を置き換えた時は、採用した本文（バックアップ）の日時。無ければ日時なし。
+        // つなげた時・同じ本文の時は、両方の新しい方
+        const ta = j.memoAt && typeof j.memoAt === 'object' ? j.memoAt[k0] : undefined;
+        if (join || prev === v){ if (validAt(ta) && !(memoAt[k] >= ta)) memoAt[k] = ta; }
+        else if (validAt(ta)) memoAt[k] = ta; else delete memoAt[k];
       }
       for (const [k, v] of Object.entries(cs)) if (v && Array.isArray(v.waves) && v.stageId) contests[k] = v;
       const savedMemos = save('sm_memos', memos), savedContests = save('sm_contests', contests);
+      if (savedMemos) save('sm_memo_at', memoAt); else atUnsaved = true; // 更新日は本文を保存できてから（本文だけ失敗して日時だけ新しくならないように）
       if (nc) migrateOldContests(true);
       // 「試合前に見る」印は足し合わせる（メモのキーの形のものだけ）
       let pinsOk = true;
@@ -1348,6 +1378,11 @@ function importMemos(file){
       // メモの画像も非同期で読み込む（今ある画像は消さずに追加）。作戦図のお知らせと重ならないよう少し後に出す
       if (Array.isArray(j.notePics) && window.importNotePics) importNotePics(j.notePics).then(r => {
         setTimeout(() => toast(r.pics ? 'メモの画像' + r.pics + '枚を読み込みました' + (r.err ? '（一部入れられないものがありました）' : '') : r.err ? 'メモの画像を読み込めませんでした' : 'メモの画像は読み込み済みでした'), 2500);
+        // 画像だけのメモ（本文が無いので上で日時を入れていない）も、バックアップの日時を手元より新しければ使う
+        if (r.pics && j.memoAt && typeof j.memoAt === 'object' && window.memoPicKeys) memoPicKeys().then(keys => {
+          let ch = false; keys.forEach(k => { const ta = j.memoAt[k]; if (!(k in m) && validAt(ta) && !(memoAt[k] >= ta)){ memoAt[k] = ta; ch = true; } });
+          if (ch){ save('sm_memo_at', memoAt); if (ui.view === 'list' && ui.listKind === 'search') fillMemoSearch(); }
+        }).catch(() => {});
         if (ui.view === 'list' && ui.listKind === 'search') fillMemoSearch();
         else if (ui.view === 'note' || ui.view === 'cnote') render();
       });
@@ -1366,6 +1401,11 @@ document.addEventListener('click', e => {
   if (t.dataset.nowmemo){ toast('このブキはメモの対象外です（ランダム枠など）'); return; }
   if (t.dataset.lkind){ setUI({ listKind:t.dataset.lkind }); document.getElementById('main').scrollTop = 0; return; }
   if (t.id === 'wOnly'){ ui.wOnlyMemo = !ui.wOnlyMemo; t.classList.toggle('on', ui.wOnlyMemo); save('sm_ui', Object.assign(load('sm_ui', {}), { wOnlyMemo: ui.wOnlyMemo })); filterWeapons(); return; }
+  if (t.dataset.memosort){
+    ui.memoSort = t.dataset.memosort;
+    document.querySelectorAll('[data-memosort]').forEach(button => button.setAttribute('aria-pressed', String(button === t)));
+    fillMemoSearch(); return;
+  }
   if (t.dataset.memoscope){
     ui.memoScope = t.dataset.memoscope;
     document.querySelectorAll('[data-memoscope]').forEach(button => button.setAttribute('aria-pressed', String(button === t)));
@@ -1417,7 +1457,7 @@ document.getElementById('navTier').onclick = () => { setMoreMenu(false); if (win
 document.getElementById('playBody').addEventListener('click', e => { const b = e.target.closest('[data-memokey]'); if (b) openEditor('found', b.dataset.memokey); });
 document.getElementById('unsavedRetry').onclick = async () => {
   if (window.noteFlush) noteFlush();
-  const okM = !memosUnsaved || save('sm_memos', memos);
+  const okM = (!memosUnsaved || save('sm_memos', memos)) && (!atUnsaved || save('sm_memo_at', memoAt)); // 更新日は本文の後に
   const okB = window.boardRetry ? await boardRetry() : true;
   drawUnsaved();
   toast(okM && okB ? '保存しました' : '保存できませんでした。写真などを消して空き容量を増やしてから、もう一度押してください');
@@ -1492,7 +1532,8 @@ document.getElementById('memoText').addEventListener('input', () => {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible'){ if (stale()) refresh(); else render(); }
   else if (ed){ clearTimeout(saveTimer); saveMemo(); }
-  if (document.visibilityState !== 'visible' && memosUnsaved) save('sm_memos', memos); // 隠れる前にもう一度だけ試す
+  if (document.visibilityState !== 'visible' && memosUnsaved) save('sm_memos', memos);
+  if (document.visibilityState !== 'visible' && atUnsaved && !memosUnsaved) save('sm_memo_at', memoAt); // 隠れる前にもう一度だけ試す
 });
 // 開きっぱなしでも時間帯の切り替わりに追従
 setInterval(() => { if (document.visibilityState === 'visible' && !ed && stale()) refresh(); }, 60e3);
