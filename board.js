@@ -505,8 +505,16 @@ const css2 = `
 .bnav button.play{flex:none;padding:0 12px;color:var(--salmon)}
 .bnav .bpos{flex:none;min-width:84px;text-align:center;font-size:12px;color:var(--sub)}
 .bnav .bpos b{font-size:17px;color:var(--text)}
-.bmemo .vt{font-size:14px;color:var(--text);padding:2px 4px;white-space:pre-wrap;word-break:break-word}
-.bmemo .vt.none{color:var(--faint)}
+.bmemo .vt{font-size:16px;font-weight:600;line-height:1.45;color:var(--text);background:var(--card);border-left:3px solid var(--salmon);border-radius:8px;padding:8px 12px;white-space:pre-wrap;word-break:break-word}
+.bmemo .vt.none{font-size:13px;font-weight:400;color:var(--faint);background:none;border:0;padding:2px 4px}
+#bFrame{display:none;position:absolute;z-index:1;pointer-events:none;border:2px solid var(--salmon);border-radius:6px;box-shadow:0 0 0 9999px rgba(0,0,0,.55)}
+#board.framing #bFrame{display:block}
+#board.framing #bRot,#board.framing #bStyle,#board.framing #bSaved{display:none!important}
+.bfrm b{display:block;font-size:15px;color:var(--text)}
+.bfrm p{margin:4px 0 8px;font-size:12px;line-height:1.5;color:var(--sub)}
+.bfrmb{display:flex;gap:8px}
+.bfrmb button{flex:1;height:46px;border-radius:10px;background:var(--card);border:1px solid var(--line);font-size:14px;font-weight:700;color:var(--text)}
+.bfrmb button.main{background:var(--salmon);border-color:var(--salmon);color:#1a1020}
 `;
 const st2 = document.createElement('style'); st2.textContent = css2; document.head.appendChild(st2);
 
@@ -519,7 +527,7 @@ bv.innerHTML = '<div class="ehead"><button class="back" id="bBack">‹ 戻る</b
   '<div id="bTop"></div>' +
   '<div id="bView"><div id="bStage"><img id="bImg" alt=""><svg id="bSvg" xmlns="http://www.w3.org/2000/svg"></svg></div>' +
   '<div class="bvbtns"><button id="bFitBtn">全体を表示</button><button id="bRot">⟳ 向きを回す</button><button id="bStyle"></button></div>' +
-  '<div id="bHint"></div><div id="bSaved"></div><div id="bCredit"></div></div>' +
+  '<div id="bFrame"></div><div id="bHint"></div><div id="bSaved"></div><div id="bCredit"></div></div>' +
   '<div id="bBottom"></div>';
 document.body.appendChild(bv);
 
@@ -587,13 +595,65 @@ function applyView(){
   const v = bs.view, cx = B.w / 2, cy = B.h / 2;
   $('bStage').style.transform = 'translate(' + v.tx + 'px,' + v.ty + 'px) scale(' + v.s + ') translate(' + cx + 'px,' + cy + 'px) rotate(' + (B.rot || 0) + 'deg) translate(' + (-cx) + 'px,' + (-cy) + 'px)';
 }
-function fitView(){
+// whole: 全体を出す（「全体を表示」・編集中）。それ以外で「見せる範囲」（B.frame）が決めてあれば、その範囲を出す
+function fitView(whole){
   if (!B) return;
   const r = $('bView').getBoundingClientRect(), side = (B.rot || 0) % 180 !== 0;
   const rw = side ? B.h : B.w, rh = side ? B.w : B.h;
   const s = Math.min(r.width / rw, r.height / rh) * 0.96;
-  bs.view = { s, tx: r.width / 2 - s * B.w / 2, ty: r.height / 2 - s * B.h / 2, fit: s, fitted: true }; // fitted: 全体表示のまま（動かしたら false）
-  applyView(); redrawSoon();
+  const f = whole !== true && !bs.edit && frameOf(B);
+  if (f){
+    // 範囲の中心が画面の中心に来るように（画面の点 = T + s*(C + R(p - C))）
+    const fs = Math.min(r.width / f.w, r.height / (f.w * rh / rw)) * (bs.framing ? 1 : 0.96), a = rad(), dx = f.cx - B.w / 2, dy = f.cy - B.h / 2;
+    const sx = B.w / 2 + dx * Math.cos(a) - dy * Math.sin(a), sy = B.h / 2 + dx * Math.sin(a) + dy * Math.cos(a);
+    bs.view = { s: fs, tx: r.width / 2 - fs * sx, ty: r.height / 2 - fs * sy, fit: s, fitted: true, whole: false };
+  } else bs.view = { s, tx: r.width / 2 - s * B.w / 2, ty: r.height / 2 - s * B.h / 2, fit: s, fitted: true, whole: whole === true }; // fitted: 全体表示のまま（動かしたら false）
+  applyView(); redrawSoon(); if (bs.framing) drawFrameBox();
+}
+// ---- 見せる範囲（2026-11-26 ユーザー「編集時、完了を押したあとどの幅を見せるかを選ぶ画面を作って」）----
+// 完了を押すと、地図の上に枠を出し、指で地図を動かして見せたい所を枠に入れる。決めた範囲は B.frame = { cx, cy（土台の座標の中心）,
+// w（回した向きでの横幅）, rot（決めた時の向き）}。開いた時の最初の表示と、いまのステージの小さな絵がこの範囲になる。
+// 向きを回すと枠の形が変わるので、rot が違う範囲は使わない（全体を出す）。枠の縦横は回した後の地図と同じ比率（小さな絵の形を変えない）
+function frameOf(b){
+  const f = b && b.frame, side = thumbRot(b) % 180 !== 0;
+  if (!f || f.rot !== thumbRot(b) || !(f.w > 0) || !Number.isFinite(f.cx) || !Number.isFinite(f.cy)) return null;
+  const near = Math.hypot(f.cx - b.w / 2, f.cy - b.h / 2) < Math.max(b.w, b.h) * .02; // 幅がほぼ全体でも、ずらしてあれば範囲として残す（Codexレビュー）
+  return f.w >= (side ? b.h : b.w) * .98 && near ? null : f;
+}
+function frameBoxPx(){ // 画面（#bView）の中の枠の位置
+  const r = $('bView').getBoundingClientRect(), side = (B.rot || 0) % 180 !== 0, ar = side ? B.w / B.h : B.h / B.w;
+  const pad = 16, top = 52, bot = 16, aw = r.width - pad * 2, ah = r.height - top - bot;
+  const w = Math.min(aw, ah / ar), h = w * ar;
+  return { x: (r.width - w) / 2, y: top + (ah - h) / 2, w, h };
+}
+function drawFrameBox(){
+  const el = $('bFrame'), p = frameBoxPx();
+  Object.assign(el.style, { left: p.x + 'px', top: p.y + 'px', width: p.w + 'px', height: p.h + 'px' });
+}
+function startFraming(whole){
+  bs.framing = true; bs.sel = null; drawBoard();
+  requestAnimationFrame(() => {
+    if (!B || !bs.framing) return;
+    drawFrameBox();
+    // 前に決めた範囲があれば、その範囲を枠に合わせて出す。無ければ全体を枠に合わせる
+    const p = frameBoxPx(), r = $('bView').getBoundingClientRect(), f = whole ? null : frameOf(B), side = (B.rot || 0) % 180 !== 0, rw = side ? B.h : B.w;
+    const s = p.w / (f ? f.w : rw), cx = f ? f.cx : B.w / 2, cy = f ? f.cy : B.h / 2, a = rad(), dx = cx - B.w / 2, dy = cy - B.h / 2;
+    const sx = B.w / 2 + dx * Math.cos(a) - dy * Math.sin(a), sy = B.h / 2 + dx * Math.sin(a) + dy * Math.cos(a);
+    const fit = Math.min(r.width / rw, r.height / (side ? B.w : B.h)) * .96;
+    bs.view = { s, tx: p.x + p.w / 2 - s * sx, ty: p.y + p.h / 2 - s * sy, fit, fitted: false }; applyView(); redrawSoon();
+  });
+}
+function endFraming(mode){ // mode: 'set' 枠の範囲にする / 'whole' 全体を見せる
+  if (!B || !bs.framing) return;
+  cancelGesture();
+  if (mode === 'set'){
+    const p = frameBoxPx(), r = $('bView').getBoundingClientRect(), [cx, cy] = toImg(r.left + p.x + p.w / 2, r.top + p.y + p.h / 2);
+    B.frame = { cx: Math.round(cx), cy: Math.round(cy), w: Math.round(p.w / bs.view.s), rot: B.rot || 0 };
+    if (!frameOf(B)) delete B.frame; // ほぼ全体なら範囲は持たない
+  } else delete B.frame;
+  B.updated = Date.now(); persist();
+  bs.framing = false; drawBoard(); requestAnimationFrame(() => fitView());
+  toast(B.frame ? '見せる範囲を決めました' : '全体を見せます');
 }
 function toImg(px, py){
   const r = $('bView').getBoundingClientRect(), v = bs.view, a = -rad();
@@ -671,7 +731,20 @@ function iconR(o){
   }
   return '';
 }
-function drawSvg(){ $('bSvg').innerHTML = curObjs().map(o => objSVG(o, bs.sel === o.id)).join('') + (bs.draft ? objSVG(bs.draft, false) : ''); }
+function drawSvg(){ $('bSvg').innerHTML = curObjs().map(o => objSVG(o, bs.sel === o.id)).join('') + (bs.draft ? objSVG(bs.draft, false) : '') + handlesSVG(); }
+// 大きさを変えるつまみ（2026-11-26 ユーザー「マルや四角の大きさを変更したいけどつまみがない」）。選んでいる四角は四隅、丸は上下左右に
+// 白い丸を出し、引っぱると大きさが変わる（四角は反対の角を止めたまま、丸は中心を止めたまま）。拡大しても画面上は同じ大きさ
+function handlePts(o){
+  if (o.t === 'rect') return [['nw', o.x, o.y], ['ne', o.x + o.w, o.y], ['sw', o.x, o.y + o.h], ['se', o.x + o.w, o.y + o.h]];
+  if (o.t === 'circle') return [['e', o.x + o.r, o.y], ['w', o.x - o.r, o.y], ['s', o.x, o.y + o.r], ['n', o.x, o.y - o.r]];
+  return [];
+}
+function handlesSVG(){
+  if (!bs.edit || bs.playing || !bs.sel || !bs.view) return '';
+  const o = curObjs().find(x => x.id === bs.sel); if (!o) return '';
+  const r = 8 / bs.view.s;
+  return handlePts(o).map(([k, x, y]) => '<g data-hdl="' + k + '"><circle cx="' + x + '" cy="' + y + '" r="' + (r * 2.8) + '" fill="transparent"/><circle cx="' + x + '" cy="' + y + '" r="' + r + '" fill="#fff" stroke="#ff7a3d" stroke-width="' + (r * .35) + '"/></g>').join('');
+}
 // 打ちかけの文字（選んだ文字・手順のメモ）は打つたびに中身へ入れ、確定（change）を待たずに、
 // 描き直し・手順の切り替え・閉じる前などに flushInputs() で1回の変更として保存する（入力欄が消えても失わない）
 let inputDirty = false;
@@ -684,12 +757,13 @@ function flushInputs(){
 function drawBoard(){
   if (!B) return;
   bv.classList.toggle('editing', !!bs.edit);
+  bv.classList.toggle('framing', !!bs.framing);
   drawSvg();
   $('bCredit').textContent = creditOf(B);
   { const k = isNwBg(B) && nwKey(B.place), sb = $('bStyle'); sb.style.display = k && NW_MAPS[k][2] ? '' : 'none'; sb.textContent = B.bg === 'nw3d' ? '線画で見る' : '立体で見る'; }
   const waveLab = bs.wave ? 'WAVE ' + bs.wave + '・' : '';
   $('bTitle').innerHTML = esc(B.title) + '<small>' + esc(waveLab + placeName(B.place) + (B.sw ? '・' + swName(B.sw) : '')) + (bs.edit ? '・名前はここをタップ' : '') + '</small>';
-  $('bMode').textContent = bs.edit ? '完了' : '編集';
+  $('bMode').textContent = bs.framing ? '決定' : bs.edit ? '完了' : '編集';
   $('bUndo').style.display = $('bRedo').style.display = bs.edit ? '' : 'none';
   $('bUndo').disabled = bs.hi <= 0; $('bRedo').disabled = bs.hi >= bs.hist.length - 1;
   const hint = $('bHint');
@@ -720,6 +794,11 @@ function drawBoard(){
   // 下: アイコンの帯（編集中）、手順、手順のメモ
   const st = B.steps[bs.step], n = B.steps.length;
   let h = '';
+  if (bs.framing){
+    $('bBottom').innerHTML = '<div class="bfrm"><b>見せる範囲を決める</b><p>指で地図を動かし、2本指で拡大して、見せたい所を枠に入れてください。開いた時の最初の表示と、いまのステージの小さな絵がこの範囲になります。</p>' +
+      '<div class="bfrmb"><button data-bfrm="whole">全体を見せる</button><button class="main" data-bfrm="set">この範囲にする</button></div></div>';
+    return;
+  }
   if (bs.edit){
     const cats = [['boss', 'オオモノ'], ['sake', 'シャケ'], ['player', 'プレイヤー・印'], ['weapon', 'ブキ']];
     if (bs.lastIcons.length) cats.unshift(['recent', '最近']);
@@ -798,8 +877,14 @@ function goHist(i){ stopPlay(); cancelGesture(); endStripDrag(true); bs.hi = i; 
 $('bUndo').onclick = () => { if (!bs) return; flushInputs(); if (bs.hi > 0) goHist(bs.hi - 1); };
 $('bRedo').onclick = () => { if (!bs) return; flushInputs(); if (bs.hi < bs.hist.length - 1) goHist(bs.hi + 1); };
 $('bBack').onclick = () => { if (history.state && history.state.board) history.back(); else closeBoard(false); };
-$('bMode').onclick = () => { if (!bs) return; flushInputs(); stopPlay(); cancelGesture(); endStripDrag(true); bs.edit = !bs.edit; bs.pending = null; bs.sel = null; bs.tool = 'select'; drawBoard(); requestAnimationFrame(fitView); };
-$('bFitBtn').onclick = () => fitView();
+$('bMode').onclick = () => {
+  if (!bs) return;
+  if (bs.framing){ endFraming('set'); return; }
+  flushInputs(); stopPlay(); cancelGesture(); endStripDrag(true); const wasEdit = bs.edit; bs.edit = !bs.edit; bs.pending = null; bs.sel = null; bs.tool = 'select';
+  if (wasEdit){ startFraming(); return; } // 完了 → 見せる範囲を決める
+  drawBoard(); requestAnimationFrame(() => fitView());
+};
+$('bFitBtn').onclick = () => { if (bs && bs.framing) startFraming(true); else fitView(true); };
 // NWのマップは線画と立体風を切り替えられる（同じ範囲で重なるので、置いた物の位置はそのまま）
 $('bStyle').onclick = () => {
   if (!B || !isNwBg(B)) return;
@@ -846,6 +931,7 @@ $('bBottom').addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t || !B) return;
   const d = t.dataset;
   flushInputs();
+  if (d.bfrm){ endFraming(d.bfrm); return; }
   if (d.bplay){ if (bs.playing) stopPlay(); else startPlay(); return; }
   stopPlay(); cancelGesture();
   if (d.bcat){ bs.cat = d.bcat; drawBoard(); }
@@ -1048,7 +1134,7 @@ const ptrs = new Map();
 let g = null;
 const TAP = 6;
 function restoreDrag(){
-  if (g && g.kind === 'drag' && g.orig && B && B.steps[g.step]){ const o = B.steps[g.step].objs.find(x => x.id === g.oid); if (o) Object.assign(o, JSON.parse(g.orig)); }
+  if (g && (g.kind === 'drag' || g.kind === 'resize') && g.orig && B && B.steps[g.step]){ const o = B.steps[g.step].objs.find(x => x.id === g.oid); if (o) Object.assign(o, JSON.parse(g.orig)); }
   if (g && g.kind === 'erase' && g.removed && g.removed.length && B && B.steps[g.step]) B.steps[g.step].objs = g.before;
 }
 function cancelGesture(){
@@ -1076,8 +1162,11 @@ view.addEventListener('pointerdown', e => {
   }
   const [ix, iy] = toImg(e.clientX, e.clientY);
   const hit = e.target.closest && e.target.closest('[data-oid]');
+  const hdl = e.target.closest && e.target.closest('[data-hdl]');
   const x0 = e.clientX, y0 = e.clientY, step = bs.step;
-  if (!bs.edit) startPan({ x: x0, y: y0 });
+  const selO = bs.edit && bs.sel && curObjs().find(x => x.id === bs.sel);
+  if (hdl && selO){ const hp = handlePts(selO).find(q => q[0] === hdl.dataset.hdl); g = { kind: 'resize', step, oid: selO.id, hdl: hdl.dataset.hdl, x0, y0, ox: hp ? hp[1] - ix : 0, oy: hp ? hp[2] - iy : 0, orig: JSON.stringify(selO), moved: false }; } // ox/oy: 指とつまみの中心のずれ（掴んだ瞬間に跳ねないように。Codexレビュー）
+  else if (!bs.edit) startPan({ x: x0, y: y0 });
   else if (bs.pending || bs.tool === 'text') startPan({ x: x0, y: y0 }, { place: bs.pending ? 'icon' : 'text' });
   else if (DRAW_TOOLS.includes(bs.tool)){
     const base = { id: 'draft', c: bs.color, wd: bs.wd };
@@ -1143,6 +1232,18 @@ view.addEventListener('pointermove', e => {
     Object.assign(o, JSON.parse(g.orig)); shiftObj(o, ix - g.ix, iy - g.iy);
     drawSvg();
   }
+  else if (g.kind === 'resize'){
+    if (!g.moved && Math.hypot(e.clientX - g.x0, e.clientY - g.y0) < 2) return;
+    g.moved = true;
+    const o = curObjs().find(x => x.id === g.oid); if (!o) return;
+    const s0 = JSON.parse(g.orig), min = D() * .01, hx = ix + g.ox, hy = iy + g.oy;
+    if (o.t === 'rect'){
+      const fx = g.hdl.includes('w') ? s0.x + s0.w : s0.x, fy = g.hdl.includes('n') ? s0.y + s0.h : s0.y; // 反対の角（動かさない）
+      const sg = v => v < 0 ? -1 : 1, dx = hx - fx, dy = hy - fy, w = Math.max(min, Math.abs(dx)), h = Math.max(min, Math.abs(dy));
+      o.x = sg(dx) < 0 ? fx - w : fx; o.y = sg(dy) < 0 ? fy - h : fy; o.w = w; o.h = h;
+    } else if (o.t === 'circle') o.r = Math.max(min / 2, Math.hypot(hx - s0.x, hy - s0.y));
+    drawSvg();
+  }
 });
 function endPtr(e){
   if (!B || !ptrs.has(e.pointerId)) return;
@@ -1169,7 +1270,7 @@ function endPtr(e){
     if (ok && roomFor(1, d.t === 'pen' ? d.pts.length : 0)){ d.id = uid(); curObjs().push(d); commit(); } else drawSvg();
   }
   else if (g.kind === 'erase'){ if (g.removed.length){ bs.sel = null; commit(); } }
-  else if (g.kind === 'drag'){ if (g.moved) commit(); else drawBoard(); }
+  else if (g.kind === 'drag' || g.kind === 'resize'){ if (g.moved) commit(); else drawBoard(); }
   else if (g.kind === 'pan' && g.selTap && !g.far && bs.sel){ bs.sel = null; drawBoard(); }
   g = null;
 }
@@ -1177,9 +1278,9 @@ view.addEventListener('pointerup', endPtr);
 // 指の取り消し・指を追えなくなった時: 描きかけ・動かしかけ・消しかけは元に戻す
 view.addEventListener('pointercancel', e => { if (ptrs.has(e.pointerId)) cancelGesture(); });
 view.addEventListener('lostpointercapture', e => { if (ptrs.has(e.pointerId) && g && g.kind !== 'pinch') { ptrs.delete(e.pointerId); if (!ptrs.size){ if (g.kind === 'pan') g = null; else cancelGesture(); } } });
-window.addEventListener('resize', () => { if (B && bs && !g && !ptrs.size) fitView(); });
+window.addEventListener('resize', () => { if (B && bs && bs.framing){ drawFrameBox(); return; } if (B && bs && !g && !ptrs.size) fitView(bs.view && bs.view.whole); });
 // 上下の帯の高さが変わって地図の枠が変わった時、全体表示のままなら合わせ直す（拡大・移動していたらそのまま）
-if (window.ResizeObserver) new ResizeObserver(() => { if (B && bs && bs.view && bs.view.fitted && !g && !ptrs.size) fitView(); }).observe(view);
+if (window.ResizeObserver) new ResizeObserver(() => { if (B && bs && bs.framing){ drawFrameBox(); return; } if (B && bs && bs.view && bs.view.fitted && !g && !ptrs.size) fitView(bs.view.whole); }).observe(view); // 範囲を決める画面では、いつでも枠を合わせ直す（決めた時の枠と見えている枠をずらさない。Codexレビュー）
 
 // ---------- いまのステージに作戦図を出す ----------
 // 2026-11-17 ユーザー要望:「メモの部分を開いたら、このマップも簡単に確認出来て作戦をすぐに思い出せたり注意点を振り返れる」。
@@ -1197,6 +1298,7 @@ const css3 = `
 .nbthumb img,.nbthumb svg{position:absolute;inset:0;width:100%;height:100%}
 .nbthumb img{object-fit:fill}
 .nbcap{padding:6px 9px 7px;font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nbnote{padding:0 9px 8px;font-size:13px;line-height:1.45;color:var(--text);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;word-break:break-word}
 .nbcap small{display:block;font-size:11px;font-weight:400;color:var(--sub);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .nbmk{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px;color:var(--faint)}
 .nbmk button{font-size:11px;font-weight:600;color:var(--sub);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px 10px}
@@ -1218,7 +1320,11 @@ const thumbRot = b => [90, 180, 270].includes(b.rot) ? b.rot : 0;
 function thumbBox(b, bgUrl, style){
   const r = thumbRot(b), side = r % 180 !== 0, vw = side ? b.h : b.w, vh = side ? b.w : b.h;
   const tf = r ? ' transform="translate(' + vw / 2 + ' ' + vh / 2 + ') rotate(' + r + ') translate(' + (-b.w / 2) + ' ' + (-b.h / 2) + ')"' : '';
-  return '<div class="nbthumb" style="padding-top:' + (vh / vw * 100).toFixed(2) + '%' + (style || '') + '"><svg viewBox="0 0 ' + vw + ' ' + vh + '" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><g' + tf + '>' +
+  // 見せる範囲（B.frame）があれば、その範囲だけを出す（形は全体と同じ比率）
+  const f = frameOf(b); let vb = '0 0 ' + vw + ' ' + vh;
+  if (f){ const a = r * Math.PI / 180, dx = f.cx - b.w / 2, dy = f.cy - b.h / 2, fh = f.w * vh / vw;
+    vb = (vw / 2 + dx * Math.cos(a) - dy * Math.sin(a) - f.w / 2) + ' ' + (vh / 2 + dx * Math.sin(a) + dy * Math.cos(a) - fh / 2) + ' ' + f.w + ' ' + fh; }
+  return '<div class="nbthumb" style="padding-top:' + (vh / vw * 100).toFixed(2) + '%' + (style || '') + '"><svg viewBox="' + vb + '" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><g' + tf + '>' +
     (bgUrl ? '<image href="' + esc(bgUrl) + '" width="' + b.w + '" height="' + b.h + '" preserveAspectRatio="none"/>' : '') + thumbSVG(b) + '</g></svg></div>';
 }
 const thumbAspect = b => thumbRot(b) % 180 ? b.h / b.w : b.w / b.h;
@@ -1247,7 +1353,7 @@ function nowSlotHTML(k, list, urls){
     const note = b.steps[0] && b.steps[0].note;
     return '<button class="nbcard" data-nbopen="' + esc(b.id) + '">' +
       thumbBox(b, isNwBg(b) && nwKey(b.place) ? nwImg(nwKey(b.place), b.bg) : urls[baseKeyOf(b)] || '') +
-      '<div class="nbcap">' + esc(b.title) + '<small>' + esc([tide, b.steps.length > 1 ? '手順' + b.steps.length : '', note || ''].filter(Boolean).join('・')) + '</small></div></button>';
+      '<div class="nbcap">' + esc(b.title) + '<small>' + esc([tide, b.steps.length > 1 ? '手順' + b.steps.length : ''].filter(Boolean).join('・')) + '</small></div>' + (note ? '<div class="nbnote">' + esc(note) + '</div>' : '') + '</button>';
   }).join('') + '</div>';
 }
 window.fillNowBoards = async function(){
@@ -1347,6 +1453,7 @@ function cleanBoard(b, icons){
   const nk = (b.bg === 'nw' || b.bg === 'nw3d') ? nwKey(b.place) : null;
   return { id: typeof b.id === 'string' && ID_RE.test(b.id) ? b.id : uid(), place: b.place, title: String(b.title || '作戦図').slice(0, 40),
     bg: nk ? b.bg : 'own', sw: swFor(b.place).some(s => s[0] === b.sw) ? b.sw : '', w: nk ? nwSize(nk).w : w, h: nk ? nwSize(nk).h : h, rot: [0, 90, 180, 270].includes(b.rot) ? b.rot : 0,
+    ...(b.frame && [b.frame.cx, b.frame.cy, b.frame.w].every(Number.isFinite) && b.frame.w > 0 && [0, 90, 180, 270].includes(b.frame.rot) ? { frame: { cx: b.frame.cx, cy: b.frame.cy, w: b.frame.w, rot: b.frame.rot } } : {}),
     ...(!nk && typeof b.base === 'string' && BASE_RE.test(b.base) && b.base.split('#')[0] === b.place ? { base: b.base } : {}), steps, created: Number.isFinite(b.created) ? b.created : Date.now(), updated: Number.isFinite(b.updated) ? b.updated : Date.now() };
 }
 // 読み込み: 今ある土台・作戦図は消さずに追加（同じIDがあれば新しいIDの別の作戦図として入れる）。
