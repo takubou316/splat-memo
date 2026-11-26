@@ -86,6 +86,8 @@ const css = `
 .nbs .list button.on{outline:2px solid var(--salmon)}
 .cn-cards{grid-template-columns:1fr}
 /* 潮位の切り替え: 画面の下に貼り付け（片手で届くように） */
+/* 下に貼る潮位の切り替え。main の下の余白(28px)があると、その分だけ浮いて下に本文が透けて見えた（iPhone 2026-11-26）ので、この画面だけ余白を消す */
+main:has(.cn-tide){padding-bottom:0}
 .cn-tide{position:sticky;bottom:0;z-index:2;display:flex;align-items:center;gap:6px;margin:12px -16px 0;padding:8px 16px;background:var(--nav);border-top:1px solid var(--line)}
 .cn-tide span{font-size:11px;color:var(--faint);margin-right:2px;white-space:nowrap}
 .cn-tide button{flex:1;min-height:44px;border-radius:10px;font-size:14px;font-weight:700;color:var(--sub);background:var(--card);border:1px solid var(--line)}

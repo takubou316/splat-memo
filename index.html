@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-26c';</script>
+<script>window.APP_VERSION = '2026-11-26d';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -224,6 +224,10 @@ nav button.on{color:var(--salmon)}
 .wtools button.on{background:var(--salmon);color:#1a1020;border-color:var(--salmon)}
 .list .row img.wimg{width:40px;height:40px;object-fit:contain;background:var(--card2)}
 .wbtn{position:relative;padding:0;border-radius:9px}
+.weapons{flex-wrap:wrap} /* 幅の狭い端末では潮位のボタンが次の行へ回る */
+.ctides{display:flex;gap:5px;margin-left:auto}
+.ctide{min-width:40px;height:38px;padding:0 6px;border-radius:9px;background:var(--card2);border:1px solid var(--salmon);color:var(--salmon);font-size:12px;font-weight:700}
+.ctide.none{border-color:var(--line);color:var(--faint);opacity:.55}
 .wbtn.has::after{content:"";position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:50%;background:var(--salmon);border:2px solid var(--card)}
 .toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:rgba(20,18,28,.94);border:1px solid var(--line2);color:#fff;
   padding:8px 14px;border-radius:999px;font-size:12px;z-index:30;opacity:0;transition:opacity .2s;pointer-events:none}
@@ -545,8 +549,15 @@ function coopCard(label, node, now){
   return '<div class="card" style="--c:var(--salmon)"><div class="chead"><span class="mode">' + esc(label) + '</span>' +
     '<span class="time">' + fmtRange(node.startTime, node.endTime, now) + '</span></div>' +
     (boss ? '<div class="extra">オカシラ: ' + esc(boss) + '</div>' : '') +
-    salmonQuickRead(st.coopStage.id) + pinnedQuick([kCoop(st.coopStage.id), 'al:coop']) + (ws ? '<div class="weapons">' + ws + '</div>' : '') + stageButton(st.coopStage, null) +
+    salmonQuickRead(st.coopStage.id) + pinnedQuick([kCoop(st.coopStage.id), 'al:coop']) + '<div class="weapons">' + ws + tideBtns(st.coopStage.id) + '</div>' + stageButton(st.coopStage, null) +
     (label === 'バイトチームコンテスト' ? contestOpenBtn(node) : '') + '</div>';
+}
+// 支給ブキの右の空きに、潮位ごとのメモ（干潮・通常・満潮）を開くボタン。メモが無い潮位は暗く（押せば書ける）（2026-11-26 ユーザー要望）
+function tideBtns(sid){
+  return '<span class="ctides">' + [['Low','干潮'], ['Mid','通常'], ['High','満潮']].map(([k, n]) => {
+    const v = memoOf('td:' + sid + ':' + k), has = typeof v === 'string' && !!v.trim();
+    return '<button class="ctide' + (has ? '' : ' none') + '" data-memokey="' + esc('td:' + sid + ':' + k) + '" aria-label="' + n + 'のメモ' + (has ? '' : '（まだ無し）') + '">' + n + '</button>';
+  }).join('') + '</span>';
 }
 function contestOpenBtn(node){
   const m = matchContest(node);
