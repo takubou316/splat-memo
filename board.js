@@ -1316,7 +1316,7 @@ function cleanBoard(b, icons){
 // 画像は実際に読み込めるか確かめ、取り込みと同じく縮小し直す。戻り値の idMap（元のID→入れたID）でWAVEの割り当てを付け替える。
 // 上限を超えた分・読めなかった分は黙って捨てず、skipped で数を返す
 window.importBoards = async data => {
-  const res = { boards: 0, bases: 0, skipped: 0, idMap: {} };
+  const res = { boards: 0, bases: 0, skipped: 0, skipBoards: 0, skipBases: 0, idMap: {} }; // skipBoards/skipBases: 結果の内訳用に作戦図と土台の失敗を分ける
   if (!data || typeof data !== 'object') return res;
   try {
     // 端末の土台は縦横・登録時刻だけ控える。読めなかったキーは「ある」扱いにして上書きしない（Codexレビュー 2026-11-23）
@@ -1325,10 +1325,10 @@ window.importBoards = async data => {
     const failedBase = new Set(); // バックアップにあったのに入れられなかった土台のキー
     const baseMap = {}; // バックアップの土台キー → 端末で使うキー
     const all = Object.entries(data.bases && typeof data.bases === 'object' ? data.bases : {});
-    const entries = all.slice(0, LIM.bases); res.skipped += all.length - entries.length;
+    const entries = all.slice(0, LIM.bases); res.skipped += all.length - entries.length; res.skipBases += all.length - entries.length;
     all.slice(LIM.bases).forEach(([k]) => failedBase.add(k));
     for (const [k, v] of entries){
-      if (!BASE_RE.test(k) || !v || typeof v.data !== 'string' || v.data.length > LIM.baseBytes * 1.4 || !/^data:image\/(png|jpeg|webp);base64,/.test(v.data)){ res.skipped++; failedBase.add(k); continue; }
+      if (!BASE_RE.test(k) || !v || typeof v.data !== 'string' || v.data.length > LIM.baseBytes * 1.4 || !/^data:image\/(png|jpeg|webp);base64,/.test(v.data)){ res.skipped++; res.skipBases++; failedBase.add(k); continue; }
       const loc = localBases[k], pk = k.split('#')[0];
       // 同じ画像（同じ場所の土台で、縦横と登録時刻が同じ）が端末にあれば、入れずにそれを使う（同じファイルを2回読み込んでも増えない）
       const same = Number.isFinite(v.updated) && Object.keys(localBases).find(lk => lk.split('#')[0] === pk && localBases[lk].w === v.w && localBases[lk].h === v.h && localBases[lk].updated === v.updated);
@@ -1340,22 +1340,23 @@ window.importBoards = async data => {
         await basePut(key, { blob: img.blob, w: img.w, h: img.h, src: String(v.src || '').slice(0, 80), updated: Number.isFinite(v.updated) ? v.updated : Date.now() });
         baseMap[k] = key; res.bases++;
         localBases[key] = { w: v.w, h: v.h, updated: Number.isFinite(v.updated) ? v.updated : NaN }; // 同じ読み込みの中で同じ画像が2つあっても1つにする
-      } catch (e){ res.skipped++; failedBase.add(k); }
+      } catch (e){ res.skipped++; res.skipBases++; failedBase.add(k); }
     }
     const haveIds = new Set((await allBoards()).map(b => b.id)), icons = ICON_KEYS();
-    const list = Array.isArray(data.boards) ? data.boards : [], boards = list.slice(0, LIM.boards); res.skipped += list.length - boards.length;
+    const list = Array.isArray(data.boards) ? data.boards : [], boards = list.slice(0, LIM.boards); res.skipped += list.length - boards.length; res.skipBoards += list.length - boards.length;
     for (const raw of boards){
-      const b = cleanBoard(raw, icons); if (!b){ res.skipped++; continue; }
+      const b = cleanBoard(raw, icons); if (!b){ res.skipped++; res.skipBoards++; continue; }
+      let noBase = false;
       if (b.bg === 'own'){
         const bk = baseKeyOf(b);
         if (baseMap[bk]){ if (baseMap[bk] !== b.place) b.base = baseMap[bk]; else delete b.base; }
         // 土台を入れられなかった作戦図は、端末の別の画像に重ねず、土台なし（無い '#ID' を指す）で入れて数える
-        else if (failedBase.has(bk)){ b.base = b.place + '#' + uid(); res.noBase = (res.noBase || 0) + 1; }
+        else if (failedBase.has(bk)){ b.base = b.place + '#' + uid(); noBase = true; } // 数えるのは作戦図を保存できてから
       }
       const orig = raw && typeof raw.id === 'string' ? raw.id : null;
       if (haveIds.has(b.id)){ b.id = uid(); b.title = (b.title + '（読み込み）').slice(0, 40); }
-      try { await boardPut(b); } catch (e){ res.skipped++; continue; }
-      haveIds.add(b.id); res.boards++;
+      try { await boardPut(b); } catch (e){ res.skipped++; res.skipBoards++; continue; }
+      haveIds.add(b.id); res.boards++; if (noBase) res.noBase = (res.noBase || 0) + 1;
       if (orig) res.idMap[orig] = b.id;
     }
   } catch (e){ res.err = true; }

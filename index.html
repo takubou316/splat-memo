@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-26b';</script>
+<script>window.APP_VERSION = '2026-11-26c';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -135,6 +135,10 @@ nav button.on{color:var(--salmon)}
 .badge.has{background:rgba(255,122,61,.15);color:var(--salmon)}
 .badge.new{background:var(--card2);color:var(--sub)}
 .openbtn{display:block;width:calc(100% - 28px);margin:0 14px 14px;padding:11px;border-radius:10px;background:var(--salmon);color:#1a1020;font-weight:600;text-align:center;font-size:14px}
+.blog{margin-top:10px;padding:8px 10px;border-radius:10px;background:var(--card);border:1px solid var(--line2);font-size:13px;line-height:1.6;color:var(--text)}
+.blog b{display:block;font-size:12px;color:var(--sub);font-weight:600}
+.blog.bad{border-color:var(--salmon)}.blog .miss{color:var(--salmon);margin-top:2px}
+.blog.warn{border-color:var(--salmon);color:var(--salmon)}
 .srcnote{font-size:10px;color:var(--faint);margin:14px 2px}
 .srcnote a,.plinks a{color:var(--sub)}
 #play{position:fixed;inset:0;z-index:20;background:var(--bg);display:none;flex-direction:column}
@@ -690,7 +694,7 @@ function renderMemoSearch(){
     '</div><div class="memo-scope" aria-label="並べ方">' +
     [['new', '新しい順'], ['place', '場所の順']].map(([key, name]) =>
       '<button data-memosort="' + key + '" aria-pressed="' + ((ui.memoSort || 'new') === key) + '">' + name + '</button>').join('') +
-    '</div><details class="memo-options"><summary>コーチング・バックアップ</summary>' +
+    '</div><details class="memo-options"' + (ui.showBackup ? ' open' : '') + '><summary>コーチング・バックアップ</summary>' +
     coachingLink('coop') + coachingLink('vs') + backupHTML() + '</details>' +
     '<div id="memoSearchResults" class="list" aria-live="polite"></div>';
 }
@@ -773,9 +777,37 @@ function renderList(){
   }
   return h + '</div>' + backupHTML();
 }
+// ---------- バックアップの結果の内訳（2026-11-26、評価 F2・優先順位10）----------
+// 前はお知らせ（2秒）だけで、何が入って何が入らなかったか後から分からなかった。前回の書き出し・読み込みの内訳をバックアップの欄に残す
+let backupLog = load('sm_backup_log', {}); if (!backupLog || typeof backupLog !== 'object' || Array.isArray(backupLog)) backupLog = {};
+// 作戦図・画像の読み込み中にアプリが閉じられた時は「読み込み中」のまま残るので、起動時に「確認できていない」に変える（Codexレビュー）
+if (backupLog.imp && backupLog.imp.pending){ backupLog.imp.pending = false; (backupLog.imp.miss = backupLog.imp.miss || []).push('作戦図・画像（読み込みの途中でアプリが閉じられたため、入ったか確認できていません）'); save('sm_backup_log', backupLog); }
+const logDate = t => { const d = new Date(t); return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + hm(d); };
+const cnt = (n, unit, name) => n ? name + n + unit : '';
+function backupLogHTML(){
+  const e = backupLog.exp, i = backupLog.imp, h = [];
+  const hasMemo = Object.keys(memos).some(k => memoOf(k));
+  // しばらく書き出していない時は目立たせる（メモがある人だけ）
+  const days = e ? Math.floor((Date.now() - e.at) / 864e5) : null;
+  if (hasMemo && (!e || days >= 14)) h.push('<div class="blog warn">' + (e ? '前回の書き出しから' + days + '日たっています。' : 'まだ一度も書き出していません。') + '機種変更などに備えて書き出しておくと安心です</div>');
+  const part = (title, x, items) => '<div class="blog' + (x.miss && x.miss.length ? ' bad' : '') + '"><b>' + title + '（' + esc(logDate(x.at)) + '）</b>' +
+    (items.filter(Boolean).join('・') || '中身なし') +
+    (x.miss && x.miss.length ? '<div class="miss">入らなかった物: ' + x.miss.map(esc).join('、') + '</div>' : '') + '</div>';
+  if (e) h.push(part(e.how === 'download' ? '前回の書き出し・ダウンロードを開始' : '前回の書き出し', e, [cnt(e.memos, '件', 'メモ'), cnt(e.pics, '枚', '画像'), cnt(e.boards, '件', '作戦図'), cnt(e.bases, '枚', '土台'), cnt(e.tiers, '件', 'ティア'), e.kb != null ? (e.kb < 1024 ? e.kb + 'KB' : (e.kb / 1024).toFixed(1) + 'MB') : '']));
+  if (i) h.push(part('前回の読み込み', i, [cnt(i.memos, '件', 'メモ'), cnt(i.contests, '件', 'ばちこん'), cnt(i.tiers, '件', 'ティア'), cnt(i.boards, '件', '作戦図'), cnt(i.bases, '枚', '土台'), cnt(i.pics, '枚', '画像'), i.pending ? '作戦図・画像を読み込み中…' : '']));
+  return h.join('');
+}
+// 保存して、出ている欄をその場で書き換える（保存済みの一覧は検索欄を守るため描き直さないので）
+function saveBackupLog(kind, x){
+  backupLog[kind] = x; ui.showBackup = true;
+  if (!save('sm_backup_log', backupLog)) toast('結果の記録を保存できませんでした（空き容量を確かめてください）');
+  const box = document.querySelector('#main .backup'); if (!box) return;
+  box.querySelectorAll('.blog').forEach(el => el.remove()); box.insertAdjacentHTML('beforeend', backupLogHTML());
+  const det = box.closest('details'); if (det) det.open = true;
+}
 function backupHTML(){
   return '<div class="sec">バックアップ</div><div class="backup">バックアップにはメモ・画像・作戦図・ばちこんの記録・ティアリストが含まれます。データはこの端末に保存されます。機種変更やデータ消去に備えて、ときどき書き出しておくと安心です。' +
-    '<div class="btns"><button id="exportBtn">書き出す</button><label>読み込む<input type="file" id="importFile" accept=".json,application/json" hidden></label></div></div>' +
+    '<div class="btns"><button id="exportBtn">書き出す</button><label>読み込む<input type="file" id="importFile" accept=".json,application/json" hidden></label></div>' + backupLogHTML() + '</div>' +
     // 表示の不具合を調べるための情報（画面の高さと、アプリが使えている高さの差＝下の空き）
     '<div class="srcnote">版 ' + esc(window.APP_VERSION || '?') + '・画面 ' + screen.height + ' / 表示 ' + innerHeight +
     (navigator.standalone ? '・ホーム画面アプリ' : '') + '</div>';
@@ -1320,13 +1352,17 @@ async function exportMemos(){
   if (missing.length && !confirm('このバックアップに入らない内容があります。\n' + missing.join('・') + '\n\n入れられる内容だけを書き出しますか？')) return;
   const blob = new Blob([JSON.stringify({ app:'splat-stage-memo', version:4, exportedAt:d.toISOString(), memos, contests, tiers: window.getTierStore ? getTierStore() : undefined, boards: boards || undefined, notePics: notePics && notePics.length ? notePics : undefined, pins: [...pins], memoAt })], { type:'application/json' });
   const name = 'stage-memo-' + stamp + '.json';
+  // 書き出せた時だけ記録する（共有シートを閉じた時は記録しない）
+  const logExp = how => saveBackupLog('exp', { at: Date.now(), how, memos: Object.keys(memos).filter(k => memoOf(k)).length, pics: notePics ? notePics.length : 0,
+    boards: boards && Array.isArray(boards.boards) ? boards.boards.length : 0, bases: boards && boards.bases ? Object.keys(boards.bases).length : 0,
+    tiers: window.getTierStore ? Object.keys((getTierStore() || {}).lists || {}).length : 0, kb: Math.max(1, Math.round(blob.size / 1024)), miss: missing });
   // 読み込みの上限（250MB）を超えるファイルは、作っても戻せないので先に知らせる
   if (blob.size > 250e6 && !confirm('書き出すファイルが大きすぎて（' + Math.round(blob.size / 1e6) + 'MB）、このアプリで読み込めない大きさです。使っていない作戦図や画像を消してから書き出すのがおすすめです。このまま書き出しますか？')) return;
   try{
     const file = new File([blob], name, { type:'application/json' });
-    if (navigator.canShare && navigator.canShare({ files:[file] })){ await navigator.share({ files:[file], title:name }); return; }
+    if (navigator.canShare && navigator.canShare({ files:[file] })){ await navigator.share({ files:[file], title:name }); logExp('share'); return; }
   }catch(e){ if (e && e.name === 'AbortError') return; }
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); logExp('download'); // ダウンロードは始めた所までしか分からない（保存できたかは確かめられない）
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 function importMemos(file){
@@ -1341,12 +1377,14 @@ function importMemos(file){
       const cs = (j.contests && typeof j.contests === 'object') ? j.contests : {};
       const n = Object.keys(m).length, nc = Object.keys(cs).length;
       if (!confirm(n + '件のメモ' + (nc ? 'と' + nc + '件のばちこんシナリオ' : '') + 'を読み込みます。同じものは上書きされます（それ以外は残ります）。よろしいですか？')) return;
+      let nImp = 0, nBad = 0; // 結果の内訳用: 入れたメモ・入れられなかったメモ
       for (const [k0, v] of Object.entries(m)){
-        if (typeof v !== 'string' || !/^(coop|vs|cm|ct|sp|wc|wv|bs|th|dg|nb|bd|sb|rl|cw|al|wk|td|coach):/.test(k0)) continue;
+        if (typeof v !== 'string' || !/^(coop|vs|cm|ct|sp|wc|wv|bs|th|dg|nb|bd|sb|rl|cw|al|wk|td|coach):/.test(k0)){ nBad++; continue; }
         let k = k0;
         // 秒のメモは「64.0」などの書き方を揃える（表示側のキーと一致させるため）
         const mt = k0.match(/^(ct:\d+:\d+:)([\d.]+)$/);
-        if (mt){ if (isNaN(parseFloat(mt[2]))) continue; k = mt[1] + fmtT(parseFloat(mt[2])); }
+        if (mt){ if (isNaN(parseFloat(mt[2]))){ nBad++; continue; } k = mt[1] + fmtT(parseFloat(mt[2])); }
+        nImp++;
         if (window.noteForget) noteForget(k);
         const prev = memos[k], join = prev && prev !== v && k !== k0;
         memos[k] = join ? prev + '\n' + v : v;
@@ -1356,7 +1394,7 @@ function importMemos(file){
         if (join || prev === v){ if (validAt(ta) && !(memoAt[k] >= ta)) memoAt[k] = ta; }
         else if (validAt(ta)) memoAt[k] = ta; else delete memoAt[k];
       }
-      for (const [k, v] of Object.entries(cs)) if (v && Array.isArray(v.waves) && v.stageId) contests[k] = v;
+      let ncOk = 0; for (const [k, v] of Object.entries(cs)) if (v && Array.isArray(v.waves) && v.stageId){ contests[k] = v; ncOk++; }
       const savedMemos = save('sm_memos', memos), savedContests = save('sm_contests', contests);
       if (savedMemos) save('sm_memo_at', memoAt); else atUnsaved = true; // 更新日は本文を保存できてから（本文だけ失敗して日時だけ新しくならないように）
       if (nc) migrateOldContests(true);
@@ -1365,18 +1403,36 @@ function importMemos(file){
       if (Array.isArray(j.pins)){ const before = new Set(pins); j.pins.forEach(k => { if (typeof k === 'string' && /^(coop|vs|wv|wc|bs|sb|rl|cw|al|wk|td):.+/.test(k) && k.length < 200) pins.add(k); }); if (!save('sm_pins', [...pins])){ pins = before; pinsOk = false; } }
       const nt = j.tiers && window.mergeTierStore ? mergeTierStore(j.tiers) : 0;
       render(); toast(!savedMemos || !savedContests ? '読み込んだ内容を端末に保存できませんでした' : nt < 0 ? 'メモは読み込みましたが、ティアリストは保存できませんでした' : !pinsOk ? 'メモは読み込みましたが、「試合前」の印は保存できませんでした' : '読み込みました' + (nt ? '（ティアリスト' + nt + '件）' : ''));
+      // 結果の内訳（作戦図・画像は後から足す）
+      const imp = { at: Date.now(), memos: savedMemos ? nImp : 0, contests: savedContests ? ncOk : 0, tiers: nt > 0 ? nt : 0, boards: 0, bases: 0, pics: 0, miss: [] };
+      if (!savedMemos) imp.miss.push('メモ' + nImp + '件（端末に保存できませんでした）');
+      if (ncOk && !savedContests) imp.miss.push('ばちこんの記録');
+      if (nc > ncOk) imp.miss.push('ばちこんの記録' + (nc - ncOk) + '件（形が違って使えない）');
+      if (nt < 0) imp.miss.push('ティアリスト');
+      if (!pinsOk) imp.miss.push('「試合前」の印');
+      if (nBad) imp.miss.push('このアプリで使えない項目' + nBad + '件');
+      const pB = j.boards && window.importBoards, pP = Array.isArray(j.notePics) && window.importNotePics;
+      imp.pending = !!(pB || pP); saveBackupLog('imp', imp);
+      const waits = [];
       // 作戦図は非同期で読み込む（今ある作戦図は消さずに追加）
-      if (j.boards && window.importBoards) importBoards(j.boards).then(r => {
+      if (pB) waits.push(importBoards(j.boards).then(r => {
+        imp.boards = r.boards || 0; imp.bases = r.bases || 0;
+        if (r.skipBoards) imp.miss.push('作戦図' + r.skipBoards + '件');
+        if (r.skipBases) imp.miss.push('土台の画像' + r.skipBases + '枚' + (r.noBase ? '（それを使う作戦図' + r.noBase + '件は土台なしで入れました）' : ''));
+        if (r.err && !r.skipped) imp.miss.push('作戦図の一部');
+        return r;
+      }).then(r => {
         // 作戦図が別のIDで入った場合は、読み込んだWAVEの割り当て（bd:）をその新しいIDに付け替える
         let fixed = false;
         for (const [k, v] of Object.entries(m)) if (/^bd:/.test(k) && typeof v === 'string' && r.idMap[v] && r.idMap[v] !== v){ memos[k] = r.idMap[v]; fixed = true; }
-        if (fixed && !save('sm_memos', memos)) toast('WAVEの割り当てを保存できませんでした');
+        if (fixed && !save('sm_memos', memos)){ toast('WAVEの割り当てを保存できませんでした'); imp.miss.push('作戦図のWAVEの割り当て'); }
         if (r.boards || r.bases) toast('作戦図' + r.boards + '件・土台' + r.bases + '枚を読み込みました' + (r.skipped ? '（' + r.skipped + '件は読み込めませんでした' + (r.noBase ? '。作戦図' + r.noBase + '件は土台の画像なしで入れました' : '') + '）' : r.err ? '（一部読めないものがありました）' : ''));
         else if (r.err) toast('作戦図を読み込めませんでした');
         render();
-      });
+      }).catch(() => { imp.miss.push('作戦図'); }));
       // メモの画像も非同期で読み込む（今ある画像は消さずに追加）。作戦図のお知らせと重ならないよう少し後に出す
-      if (Array.isArray(j.notePics) && window.importNotePics) importNotePics(j.notePics).then(r => {
+      if (pP) waits.push(importNotePics(j.notePics).then(r => {
+        imp.pics = r.pics || 0; if (r.err) imp.miss.push(r.pics ? 'メモの画像の一部' : 'メモの画像');
         setTimeout(() => toast(r.pics ? 'メモの画像' + r.pics + '枚を読み込みました' + (r.err ? '（一部入れられないものがありました）' : '') : r.err ? 'メモの画像を読み込めませんでした' : 'メモの画像は読み込み済みでした'), 2500);
         // 画像だけのメモ（本文が無いので上で日時を入れていない）も、バックアップの日時を手元より新しければ使う
         if (r.pics && j.memoAt && typeof j.memoAt === 'object' && window.memoPicKeys) memoPicKeys().then(keys => {
@@ -1385,13 +1441,16 @@ function importMemos(file){
         }).catch(() => {});
         if (ui.view === 'list' && ui.listKind === 'search') fillMemoSearch();
         else if (ui.view === 'note' || ui.view === 'cnote') render();
-      });
+      }).catch(() => { imp.miss.push('メモの画像'); }));
+      if (waits.length) Promise.all(waits).then(() => { imp.pending = false; if (backupLog.imp === imp) saveBackupLog('imp', imp); }); // 途中で別のファイルを読み込んでいたら、そちらの記録を消さない
     }catch(e){ alert('このファイルは読み込めませんでした。「書き出す」で作ったファイルを選んでください。'); }
   };
   r.readAsText(file);
 }
 
 // ---------- イベント ----------
+// 「コーチング・バックアップ」を自分で閉じたら、描き直しても閉じたままにする（結果を出す時だけ開く）
+document.addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('memo-options')) ui.showBackup = e.target.open; }, true);
 document.addEventListener('click', e => {
   const t = e.target.closest('button, [data-chip]');
   if (!t) return;
