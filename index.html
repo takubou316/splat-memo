@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-26j';</script>
+<script>window.APP_VERSION = '2026-11-26l';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -102,6 +102,25 @@ nav button.on{color:var(--salmon)}
 /* 初回だけの案内（2026-11-26、評価 F11・優先順位8） */
 #intro{position:fixed;inset:0;z-index:60;background:#000b;display:flex;align-items:flex-end;justify-content:center;padding:16px 12px calc(16px + env(safe-area-inset-bottom))}
 #intro[hidden]{display:none}
+#impSheet{position:fixed;inset:0;z-index:61;background:#000b;display:flex;align-items:flex-end;justify-content:center;padding:16px 12px calc(16px + env(safe-area-inset-bottom))}
+#impSheet .ib{width:100%;max-width:440px;max-height:calc(100dvh - 40px);overflow-y:auto;background:var(--card2);border:1px solid var(--line2);border-radius:18px;padding:18px 16px 14px}
+#impSheet h2{font-size:18px;margin:0 0 10px}
+#impSheet .iline{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px;color:var(--text)}
+#impSheet .iline b{white-space:nowrap}
+#impSheet .iline small{display:block;color:var(--sub);font-size:12px}
+#impSheet .iq{margin:12px 0 6px;font-size:14px;font-weight:700;color:var(--salmon)}
+#impSheet .idiff{font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;padding:8px 10px;background:var(--card);border-radius:10px}
+#impSheet .idiff div{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+#impSheet .idiff b{color:var(--text)}
+#impSheet .idiff hr{border:0;border-top:1px solid var(--line);margin:6px 0}
+#impSheet .ichoice{display:flex;flex-direction:column;gap:6px}
+#impSheet .ichoice button{min-height:46px;border-radius:12px;font-size:14px;font-weight:600;text-align:left;padding:8px 12px;background:var(--card);border:1px solid var(--line2);color:var(--text)}
+#impSheet .ichoice button[aria-pressed=true]{border:2px solid var(--salmon);background:rgba(255,122,61,.14)}
+#impSheet .ichoice small{display:block;font-size:11px;font-weight:400;color:var(--sub)}
+#impSheet .inote{font-size:12px;color:var(--sub);line-height:1.5;margin:12px 0 0}
+#impSheet .ibtn{display:flex;gap:8px;margin-top:14px}
+#impSheet .ibtn button{flex:1;min-height:48px;border-radius:12px;font-size:15px;font-weight:600;background:var(--card);border:1px solid var(--line2);color:var(--text)}
+#impSheet .ibtn button.pri{background:var(--salmon);border-color:var(--salmon);color:#111}
 #intro .ib{width:100%;max-width:440px;background:var(--card2);border:1px solid var(--line2);border-radius:18px;padding:20px 18px 14px}
 #intro .ip{font-size:12px;color:var(--sub);margin-bottom:6px}
 #intro h2{font-size:19px;margin:0 0 10px}
@@ -805,7 +824,8 @@ function backupLogHTML(){
     (items.filter(Boolean).join('・') || '中身なし') +
     (x.miss && x.miss.length ? '<div class="miss">入らなかった物: ' + x.miss.map(esc).join('、') + '</div>' : '') + '</div>';
   if (e) h.push(part(e.how === 'download' ? '前回の書き出し・ダウンロードを開始' : '前回の書き出し', e, [cnt(e.memos, '件', 'メモ'), cnt(e.pics, '枚', '画像'), cnt(e.boards, '件', '作戦図'), cnt(e.bases, '枚', '土台'), cnt(e.tiers, '件', 'ティア'), e.kb != null ? (e.kb < 1024 ? e.kb + 'KB' : (e.kb / 1024).toFixed(1) + 'MB') : '']));
-  if (i) h.push(part('前回の読み込み', i, [cnt(i.memos, '件', 'メモ'), cnt(i.contests, '件', 'ばちこん'), cnt(i.tiers, '件', 'ティア'), cnt(i.boards, '件', '作戦図'), cnt(i.bases, '枚', '土台'), cnt(i.pics, '枚', '画像'), i.pending ? '作戦図・画像を読み込み中…' : '']));
+  if (i) h.push(part('前回の読み込み', i, [cnt(i.memos, '件', 'メモ'), cnt(i.kept, '件', 'このスマホの方を残した物'), i.undone ? '読み込む前に戻しました' : '', cnt(i.contests, '件', 'ばちこん'), cnt(i.tiers, '件', 'ティア'), cnt(i.boards, '件', '作戦図'), cnt(i.bases, '枚', '土台'), cnt(i.pics, '枚', '画像'), i.pending ? '作戦図・画像を読み込み中…' : '']));
+  const uz = load('sm_imp_undo', null); if (uz && uz.memos && validAt(uz.at)) h.push('<div class="btns improw"><button data-impundo="1">読み込む前に戻す（' + esc(logDate(uz.at)) + ' の読み込み）</button></div>');
   return h.join('');
 }
 // 保存して、出ている欄をその場で書き換える（保存済みの一覧は検索欄を守るため描き直さないので）
@@ -813,7 +833,7 @@ function saveBackupLog(kind, x){
   backupLog[kind] = x; ui.showBackup = true;
   if (!save('sm_backup_log', backupLog)) toast('結果の記録を保存できませんでした（空き容量を確かめてください）');
   const box = document.querySelector('#main .backup'); if (!box) return;
-  box.querySelectorAll('.blog').forEach(el => el.remove()); box.insertAdjacentHTML('beforeend', backupLogHTML());
+  box.querySelectorAll('.blog, .improw').forEach(el => el.remove()); box.insertAdjacentHTML('beforeend', backupLogHTML());
   const det = box.closest('details'); if (det) det.open = true;
 }
 function backupHTML(){
@@ -1230,9 +1250,9 @@ function maybeAutoOpen(){
 }
 // 旧版で手入力したシナリオ記録を、作戦メモに一度だけ書き写す（元の記録は残す）
 // 壊れた記録は1件ずつ飛ばし、内蔵データが読めて保存に成功した時だけ「移行済み」にする。バックアップ読み込み後にも呼ぶ
-function migrateOldContests(force){
+function migrateOldContests(force, noSave){ // noSave: 書き換えるだけで保存しない（読み込みで、控えを取ってからまとめて保存する時）
   if (!force && load('sm_contests_migrated', false)) return;
-  if (!CD.scenarios.length || !CD.instances.length) return;
+  if (!CD.scenarios.length || !CD.instances.length) return false;
   Object.values(contests || {}).forEach(c => {
     try{
       if (!c || !Array.isArray(c.waves)) return;
@@ -1248,7 +1268,9 @@ function migrateOldContests(force){
       });
     }catch(e){ /* この記録だけ飛ばす */ }
   });
+  if (noSave) return true;
   if (save('sm_memos', memos)) save('sm_contests_migrated', true);
+  return true;
 }
 migrateOldContests(false);
 function setUI(p){ Object.assign(ui, p); save('sm_ui', { view:ui.view, nowSub:ui.nowSub, listSub:ui.listSub, listKind:ui.listKind, wOnlyMemo:ui.wOnlyMemo }); render(); }
@@ -1376,85 +1398,220 @@ async function exportMemos(){
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); logExp('download'); // ダウンロードは始めた所までしか分からない（保存できたかは確かめられない）
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
+// ---------- バックアップの読み込み（2026-11-26 評価2回目の優先順位1）----------
+// 前は件数だけの確認だった。読み込む前に「足す／同じ／違う」の内訳を出し、違う物はどちらを使うか選ぶ。
+// 読み込みで変わったメモ・ばちこんの記録・足した「試合前」の印は sm_imp_undo に「前と後」を取っておき、「読み込む前に戻す」で戻せる（最後の1回だけ）。
+// 作戦図・画像・ティアは足すだけなので対象外。Codexレビュー（2026-11-26）を受けて:
+//  ・中身は importPlan で1回だけ読み解き、表示・書き込み・結果の数で同じ物を使う（秒のメモの書き方の違いで同じキーにまとまる物はファイルの順につなげる）
+//  ・控えを保存できてから端末のデータを書き換える（控えが保存できない時は元に戻し、控え無しで読み込むか聞く）
+//  ・戻す時は、読み込んだ後に書き直したメモ・記録には触らない
+const IMP_KEY_RE = /^(coop|vs|cm|ct|sp|wc|wv|bs|th|dg|nb|bd|sb|rl|cw|al|wk|td|coach):/;
+const PIN_KEY_RE = /^(coop|vs|wv|wc|bs|sb|rl|cw|al|wk|td):.+/;
+function importPlan(j){
+  const m = j.memos, cs = (j.contests && typeof j.contests === 'object') ? j.contests : {}, mAt = j.memoAt && typeof j.memoAt === 'object' ? j.memoAt : {};
+  const inc = new Map(), at = {}; let bad = 0;
+  for (const [k0, v] of Object.entries(m)){
+    if (typeof v !== 'string' || !IMP_KEY_RE.test(k0)){ bad++; continue; }
+    let k = k0; const mt = k0.match(/^(ct:\d+:\d+:)([\d.]+)$/); // 秒のメモは「64.0」などの書き方を揃える（表示側のキーと一致させるため）
+    if (mt){ if (isNaN(parseFloat(mt[2]))){ bad++; continue; } k = mt[1] + fmtT(parseFloat(mt[2])); }
+    const was = inc.get(k); inc.set(k, was == null || was === v ? v : was + '\n' + v);
+    const ta = mAt[k0]; if (validAt(ta) && !(at[k] >= ta)) at[k] = ta;
+  }
+  const p = { inc, at, bad, add: [], same: 0, diff: [], cs, cAdd: [], cSame: 0, cDiff: [], cBad: 0 };
+  for (const [k, v] of inc){ const cur = memos[k]; if (typeof cur !== 'string' || !cur.trim()) p.add.push(k); else if (cur === v) p.same++; else p.diff.push([k, cur, v]); }
+  for (const [k, v] of Object.entries(cs)){
+    if (!(v && Array.isArray(v.waves) && v.stageId)){ p.cBad++; continue; }
+    if (!(k in contests)) p.cAdd.push(k); else if (JSON.stringify(contests[k]) === JSON.stringify(v)) p.cSame++; else p.cDiff.push(k);
+  }
+  p.pins = Array.isArray(j.pins) ? j.pins.filter(k => typeof k === 'string' && PIN_KEY_RE.test(k) && k.length < 200) : [];
+  p.boards = j.boards && Array.isArray(j.boards.boards) ? j.boards.boards.length : 0;
+  p.pics = Array.isArray(j.notePics) ? j.notePics.length : 0;
+  p.tiers = j.tiers && typeof j.tiers === 'object' ? 1 : 0;
+  return p;
+}
+function showImportSheet(p, onGo){
+  const old = document.getElementById('impSheet'); if (old) old.remove(); // 画面は1つだけ（古い内訳のまま読み込まないように）
+  const nDiff = p.diff.length + p.cDiff.length; let keepMine = true; // 違う物は、まず「このスマホの方を残す」（今の内容を失わない方）
+  const el = document.createElement('div'); el.id = 'impSheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', '読み込む内容');
+  const line = (name, n, note) => '<div class="iline"><span>' + name + (note ? '<small>' + note + '</small>' : '') + '</span><b>' + n + '</b></div>';
+  const short = t => esc(String(t).replace(/\s+/g, ' ').slice(0, 60));
+  const nC = p.cAdd.length + p.cSame + p.cDiff.length;
+  const draw = () => {
+    el.innerHTML = '<div class="ib"><h2>読み込む内容</h2>' +
+      line('新しく足すメモ', p.add.length + '件') + line('このスマホと同じメモ', p.same + '件', 'そのまま') + line('内容が違うメモ', p.diff.length + '件') +
+      (nC ? line('ばちこんの記録', '足す' + p.cAdd.length + '・同じ' + p.cSame + '・違う' + p.cDiff.length) : '') +
+      (p.boards ? line('作戦図', p.boards + '件', '今ある作戦図は消さず、写しとして足します') : '') +
+      (p.pics ? line('メモの画像', p.pics + '枚', '今ある画像は消さず、足します') : '') +
+      (p.tiers ? line('ティアリスト', 'あり', '今あるティアと合わせます') : '') +
+      (p.bad + p.cBad ? line('このアプリで使えない項目', (p.bad + p.cBad) + '件', '読み込みません') : '') +
+      (nDiff ? '<div class="iq">内容が違う物は、どちらを使いますか？</div>' +
+        (p.diff.length ? '<div class="idiff">' + p.diff.slice(0, 3).map(([k, a, b]) => '<div><b>' + esc(memoLocation(k)) + '</b></div><div>このスマホ: ' + short(a) + '</div><div>控え: ' + short(b) + '</div>').join('<hr>') + (p.diff.length > 3 ? '<div>ほか' + (p.diff.length - 3) + '件</div>' : '') + '</div>' : '') +
+        '<div class="ichoice"><button data-imk="1" aria-pressed="' + keepMine + '">このスマホの方を残す<small>違う物は読み込みません（足す物だけ入ります）</small></button>' +
+        '<button data-imk="0" aria-pressed="' + !keepMine + '">控えの方にする<small>このスマホの内容を、控えの内容に置き換えます</small></button></div>' : '') +
+      '<p class="inote">読み込みで変わったメモ・ばちこんの記録・「試合前」の印は、あとから「メモ」タブのバックアップの「読み込む前に戻す」で戻せます（最後の1回の読み込みだけ。作戦図・画像・ティアは足すだけなので対象外）。</p>' +
+      '<div class="ibtn"><button data-imgo="0">やめる</button><button class="pri" data-imgo="1">読み込む</button></div></div>';
+  };
+  draw(); document.body.appendChild(el);
+  el.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.imk != null){ keepMine = b.dataset.imk === '1'; draw(); return; }
+    if (b.dataset.imgo != null){ el.remove(); if (b.dataset.imgo === '1') onGo(keepMine); }
+  });
+}
+// オブジェクトの中身だけを入れ替える（ほかの所が同じオブジェクトを見ているので、作り直さない）
+const refill = (o, src) => { Object.keys(o).forEach(k => delete o[k]); Object.assign(o, src); };
+function undoImport(){
+  const u = load('sm_imp_undo', null);
+  if (!u || typeof u !== 'object' || !u.memos || typeof u.memos !== 'object'){ toast('戻せる控えがありません'); return; }
+  if (!confirm(logDate(u.at) + ' の読み込みで変わったメモ・ばちこんの記録・「試合前」の印を、読み込む前に戻します。読み込んだ後に書き直したメモは、そのまま残します。作戦図・画像・ティアは残ります。よろしいですか？')) return;
+  if (window.noteFlush) noteFlush(); // 打ちかけを先に保存（書き直した物として数える）
+  let kept = 0;
+  Object.entries(u.memos).forEach(([k, ab]) => {
+    if (!Array.isArray(ab)) return;
+    const [a, b] = ab, cur = typeof memos[k] === 'string' ? memos[k] : null;
+    if (cur !== b && cur !== a){ kept++; return; } // 読み込んだ後に書き直した（「前」のままの物は、前に戻しかけた物なので続きを戻す。Codexレビュー）
+    if (window.noteForget) noteForget(k);
+    if (typeof a === 'string') memos[k] = a; else delete memos[k];
+    const t = u.memoAt && u.memoAt[k]; if (validAt(t)) memoAt[k] = t; else delete memoAt[k];
+  });
+  Object.entries(u.contests || {}).forEach(([k, ab]) => {
+    if (!Array.isArray(ab)) return;
+    const [a, b] = ab;
+    const cj = JSON.stringify(contests[k] == null ? null : contests[k]); if (cj !== JSON.stringify(b) && cj !== JSON.stringify(a == null ? null : a)){ kept++; return; }
+    if (a && typeof a === 'object') contests[k] = a; else delete contests[k];
+  });
+  (Array.isArray(u.pins) ? u.pins : []).forEach(k => pins.delete(k)); // 読み込みで足した印だけ外す
+  // 1つずつ保存して、どれが失敗したかを分かるようにする（途中で止めない）
+  const r = [save('sm_memos', memos), save('sm_memo_at', memoAt), save('sm_contests', contests), save('sm_pins', [...pins])];
+  if (r.includes(false)){
+    toast('一部を保存できませんでした（' + ['メモ', '更新日', 'ばちこんの記録', '「試合前」の印'].filter((n, i) => !r[i]).join('・') + '）。空き容量を確かめて、もう一度押してください');
+    render(); return; // 控えは残す（もう一度押せる）
+  }
+  try { localStorage.removeItem('sm_imp_undo'); } catch (e){}
+  if (backupLog.imp){ backupLog.imp.undone = Date.now(); backupLog.imp.undo = false; saveBackupLog('imp', backupLog.imp); } // 出ている欄も書き換える（保存済みの一覧は描き直さないので）
+  render(); toast('読み込む前に戻しました' + (kept ? '（読み込んだ後に書き直した' + kept + '件はそのまま）' : ''));
+}
+// 選んだ後に読み込む。内訳は選んだ時点でもう一度作る（画面を出している間に書き直した・別のファイルを読み込んだ時に、古い内訳で上書きしないように）
+function runImport(j, keepMine, noUndo){
+  if (window.noteFlush) noteFlush();
+  const p = importPlan(j);
+  const pre = { memos: Object.assign({}, memos), memoAt: Object.assign({}, memoAt), contests: JSON.parse(JSON.stringify(contests)), pins: new Set(pins) };
+  const diffK = new Set(p.diff.map(d => d[0])), cDiffK = new Set(p.cDiff);
+  let nImp = 0, nKeep = 0, ncOk = 0;
+  for (const [k, v] of p.inc){
+    if (memos[k] === v) continue; // 同じ本文は書かない（更新日も変えない）
+    if (keepMine && diffK.has(k)){ nKeep++; continue; } // このスマホの方を残す
+    if (window.noteForget) noteForget(k);
+    memos[k] = v; nImp++;
+    if (validAt(p.at[k])) memoAt[k] = p.at[k]; else delete memoAt[k]; // 更新日は採用した本文（バックアップ）の日時。無ければ日時なし
+  }
+  for (const [k, v] of Object.entries(p.cs)){
+    if (!(v && Array.isArray(v.waves) && v.stageId) || JSON.stringify(contests[k]) === JSON.stringify(v)) continue;
+    if (keepMine && cDiffK.has(k)){ nKeep++; continue; }
+    contests[k] = v; ncOk++;
+  }
+  const migrated = ncOk ? migrateOldContests(true, true) : false; // 前の版の記録から作るメモも、控えに入るよう先に作る（保存は下でまとめて）
+  const pinsAdded = p.pins.filter(k => !pins.has(k)); pinsAdded.forEach(k => pins.add(k));
+  // 変わった物の「前と後」を控えにする（移行で増えたメモも含む）
+  const undo = { at: Date.now(), memos: {}, memoAt: {}, contests: {}, pins: pinsAdded };
+  new Set([...Object.keys(pre.memos), ...Object.keys(memos)]).forEach(k => {
+    const a = k in pre.memos ? pre.memos[k] : null, b = k in memos ? memos[k] : null;
+    if (a !== b){ undo.memos[k] = [a, b]; undo.memoAt[k] = k in pre.memoAt ? pre.memoAt[k] : null; }
+  });
+  Object.keys(contests).forEach(k => { const a = k in pre.contests ? pre.contests[k] : null; if (JSON.stringify(a) !== JSON.stringify(contests[k])) undo.contests[k] = [a, contests[k]]; });
+  const changed = Object.keys(undo.memos).length + Object.keys(undo.contests).length + pinsAdded.length > 0;
+  let undoSaved = false;
+  if (changed && !noUndo){
+    undoSaved = save('sm_imp_undo', undo);
+    if (!undoSaved){
+      // 控えが無いまま書き換えない。いったん元に戻して聞く
+      refill(memos, pre.memos); refill(memoAt, pre.memoAt); refill(contests, pre.contests); pins = pre.pins;
+      if (confirm('「読み込む前に戻す」のための控えを保存できませんでした（空き容量が足りない可能性があります）。控え無しで読み込みますか？\n（やめる場合は何も変わりません）')) return runImport(j, keepMine, true);
+      render(); toast('読み込みをやめました'); return;
+    }
+  }
+  const savedMemos = save('sm_memos', memos), savedContests = save('sm_contests', contests);
+  if (savedMemos) save('sm_memo_at', memoAt); else atUnsaved = true; // 更新日は本文を保存できてから（本文だけ失敗して日時だけ新しくならないように）
+  if (migrated && savedMemos) save('sm_contests_migrated', true); // 移行が本当に走った時だけ（データの準備前に「済み」にしない。Codexレビュー）
+  let pinsOk = true; if (pinsAdded.length && !save('sm_pins', [...pins])){ pinsAdded.forEach(k => pins.delete(k)); pinsOk = false; if (undoSaved){ undo.pins = []; save('sm_imp_undo', undo); } } // 入らなかった印は、戻す時に外さない
+  const nt = j.tiers && window.mergeTierStore ? mergeTierStore(j.tiers) : 0;
+  render(); toast(!savedMemos || !savedContests ? '読み込んだ内容を端末に保存できませんでした' : nt < 0 ? 'メモは読み込みましたが、ティアリストは保存できませんでした' : !pinsOk ? 'メモは読み込みましたが、「試合前」の印は保存できませんでした' : '読み込みました' + (nt ? '（ティアリスト' + nt + '件）' : ''));
+  // 結果の内訳（作戦図・画像は後から足す）
+  const prevImp = backupLog.imp;
+  const imp = { at: Date.now(), memos: savedMemos ? nImp : 0, contests: savedContests ? ncOk : 0, tiers: nt > 0 ? nt : 0, boards: 0, bases: 0, pics: 0, miss: [] };
+  if (!savedMemos) imp.miss.push('メモ' + nImp + '件（端末に保存できませんでした）');
+  if (ncOk && !savedContests) imp.miss.push('ばちこんの記録');
+  if (p.cBad) imp.miss.push('ばちこんの記録' + p.cBad + '件（形が違って使えない）');
+  if (nt < 0) imp.miss.push('ティアリスト');
+  if (!pinsOk) imp.miss.push('「試合前」の印');
+  if (p.bad) imp.miss.push('このアプリで使えない項目' + p.bad + '件');
+  if (nKeep) imp.kept = nKeep; // このスマホの方を残した数
+  if (changed && noUndo){ imp.miss.push('読み込む前の内容の控え（「読み込む前に戻す」は使えません）'); try { localStorage.removeItem('sm_imp_undo'); } catch (e){} }
+  // 何も変わらなかった読み込みでは、前の読み込みの「戻す」をそのまま使えるようにする
+  imp.undo = changed ? undoSaved : !!(prevImp && prevImp.undo && !prevImp.undone && load('sm_imp_undo', null));
+  const pB = j.boards && window.importBoards, pP = Array.isArray(j.notePics) && window.importNotePics;
+  imp.pending = !!(pB || pP); saveBackupLog('imp', imp);
+  const waits = [];
+  // 作戦図は非同期で読み込む（今ある作戦図は消さずに追加）
+  if (pB) waits.push(importBoards(j.boards).then(r => {
+    imp.boards = r.boards || 0; imp.bases = r.bases || 0;
+    if (r.skipBoards) imp.miss.push('作戦図' + r.skipBoards + '件');
+    if (r.skipBases) imp.miss.push('土台の画像' + r.skipBases + '枚' + (r.noBase ? '（それを使う作戦図' + r.noBase + '件は土台なしで入れました）' : ''));
+    if (r.err && !r.skipped) imp.miss.push('作戦図の一部');
+    return r;
+  }).then(r => {
+    // 作戦図が別のIDで入った場合は、この読み込みで書いたWAVEの割り当て（bd:）だけを新しいIDに付け替える。
+    // 残した物・同じだった物・戻した後・読み込んだ後に書き直した物には触らない（Codexレビュー）。付け替えたら控えの「後」も合わせる
+    // 控えが無い読み込み（控え無しで読み込んだ時）は、この読み込みで書いた物（undo.memos）と今の値が同じ時だけ付け替える
+    const u = undoSaved ? load('sm_imp_undo', null) : null, mine = !!(u && u.at === undo.at && u.memos);
+    const todo = [];
+    if (!imp.undone && (mine || !undoSaved)) for (const [k, v] of p.inc){
+      if (!/^bd:/.test(k) || !undo.memos[k] || memos[k] !== v || !r.idMap[v] || r.idMap[v] === v) continue;
+      if (mine && !(Array.isArray(u.memos[k]) && u.memos[k][1] === v)) continue; // 後の読み込みが書いた物には触らない
+      todo.push([k, r.idMap[v]]);
+    }
+    if (todo.length){
+      let ok = true;
+      if (mine){ todo.forEach(([k, nv]) => { u.memos[k][1] = nv; }); ok = save('sm_imp_undo', u); } // 控えを先に
+      if (!ok) imp.miss.push('作戦図のWAVEの割り当て（控えを保存できなかったため、付け替えていません）');
+      else {
+        const keep = todo.map(([k]) => [k, memos[k]]); todo.forEach(([k, nv]) => { memos[k] = nv; });
+        if (!save('sm_memos', memos)){ keep.forEach(([k, ov]) => { memos[k] = ov; }); toast('WAVEの割り当てを保存できませんでした'); imp.miss.push('作戦図のWAVEの割り当て'); }
+      }
+    }
+    if (r.boards || r.bases) toast('作戦図' + r.boards + '件・土台' + r.bases + '枚を読み込みました' + (r.skipped ? '（' + r.skipped + '件は読み込めませんでした' + (r.noBase ? '。作戦図' + r.noBase + '件は土台の画像なしで入れました' : '') + '）' : r.err ? '（一部読めないものがありました）' : ''));
+    else if (r.err) toast('作戦図を読み込めませんでした');
+    render();
+  }).catch(() => { imp.miss.push('作戦図'); }));
+  // メモの画像も非同期で読み込む（今ある画像は消さずに追加）。作戦図のお知らせと重ならないよう少し後に出す
+  if (pP) waits.push(importNotePics(j.notePics).then(r => {
+    imp.pics = r.pics || 0; if (r.err) imp.miss.push(r.pics ? 'メモの画像の一部' : 'メモの画像');
+    setTimeout(() => toast(r.pics ? 'メモの画像' + r.pics + '枚を読み込みました' + (r.err ? '（一部入れられないものがありました）' : '') : r.err ? 'メモの画像を読み込めませんでした' : 'メモの画像は読み込み済みでした'), 2500);
+    // 画像だけのメモ（本文が無いので上で日時を入れていない）も、バックアップの日時を手元より新しければ使う
+    if (r.pics && j.memoAt && typeof j.memoAt === 'object' && window.memoPicKeys) memoPicKeys().then(keys => {
+      let ch = false; keys.forEach(k => { const ta = j.memoAt[k]; if (!(k in j.memos) && validAt(ta) && !(memoAt[k] >= ta)){ memoAt[k] = ta; ch = true; } });
+      if (ch){ save('sm_memo_at', memoAt); if (ui.view === 'list' && ui.listKind === 'search') fillMemoSearch(); }
+    }).catch(() => {});
+    if (ui.view === 'list' && ui.listKind === 'search') fillMemoSearch();
+    else if (ui.view === 'note' || ui.view === 'cnote') render();
+  }).catch(() => { imp.miss.push('メモの画像'); }));
+  if (waits.length) Promise.all(waits).then(() => { imp.pending = false; if (backupLog.imp === imp) saveBackupLog('imp', imp); }); // 途中で別のファイルを読み込んでいたら、そちらの記録を消さない
+}
 function importMemos(file){
   // 画像入りでも普通は数MB。大きすぎるファイルは読まない（メモリを使い切らないように）
   if (file.size > 250e6){ alert('ファイルが大きすぎます（250MBまで）。「書き出す」で作ったファイルを選んでください。'); return; }
   const r = new FileReader();
   r.onload = () => {
+    let j, plan;
     try{
-      const j = JSON.parse(r.result);
-      const m = j && j.memos;
-      if (!m || typeof m !== 'object' || Array.isArray(m)) throw 0;
-      const cs = (j.contests && typeof j.contests === 'object') ? j.contests : {};
-      const n = Object.keys(m).length, nc = Object.keys(cs).length;
-      if (!confirm(n + '件のメモ' + (nc ? 'と' + nc + '件のばちこんシナリオ' : '') + 'を読み込みます。同じものは上書きされます（それ以外は残ります）。よろしいですか？')) return;
-      let nImp = 0, nBad = 0; // 結果の内訳用: 入れたメモ・入れられなかったメモ
-      for (const [k0, v] of Object.entries(m)){
-        if (typeof v !== 'string' || !/^(coop|vs|cm|ct|sp|wc|wv|bs|th|dg|nb|bd|sb|rl|cw|al|wk|td|coach):/.test(k0)){ nBad++; continue; }
-        let k = k0;
-        // 秒のメモは「64.0」などの書き方を揃える（表示側のキーと一致させるため）
-        const mt = k0.match(/^(ct:\d+:\d+:)([\d.]+)$/);
-        if (mt){ if (isNaN(parseFloat(mt[2]))){ nBad++; continue; } k = mt[1] + fmtT(parseFloat(mt[2])); }
-        nImp++;
-        if (window.noteForget) noteForget(k);
-        const prev = memos[k], join = prev && prev !== v && k !== k0;
-        memos[k] = join ? prev + '\n' + v : v;
-        // 更新日（Codexレビュー）: 本文を置き換えた時は、採用した本文（バックアップ）の日時。無ければ日時なし。
-        // つなげた時・同じ本文の時は、両方の新しい方
-        const ta = j.memoAt && typeof j.memoAt === 'object' ? j.memoAt[k0] : undefined;
-        if (join || prev === v){ if (validAt(ta) && !(memoAt[k] >= ta)) memoAt[k] = ta; }
-        else if (validAt(ta)) memoAt[k] = ta; else delete memoAt[k];
-      }
-      let ncOk = 0; for (const [k, v] of Object.entries(cs)) if (v && Array.isArray(v.waves) && v.stageId){ contests[k] = v; ncOk++; }
-      const savedMemos = save('sm_memos', memos), savedContests = save('sm_contests', contests);
-      if (savedMemos) save('sm_memo_at', memoAt); else atUnsaved = true; // 更新日は本文を保存できてから（本文だけ失敗して日時だけ新しくならないように）
-      if (nc) migrateOldContests(true);
-      // 「試合前に見る」印は足し合わせる（メモのキーの形のものだけ）
-      let pinsOk = true;
-      if (Array.isArray(j.pins)){ const before = new Set(pins); j.pins.forEach(k => { if (typeof k === 'string' && /^(coop|vs|wv|wc|bs|sb|rl|cw|al|wk|td):.+/.test(k) && k.length < 200) pins.add(k); }); if (!save('sm_pins', [...pins])){ pins = before; pinsOk = false; } }
-      const nt = j.tiers && window.mergeTierStore ? mergeTierStore(j.tiers) : 0;
-      render(); toast(!savedMemos || !savedContests ? '読み込んだ内容を端末に保存できませんでした' : nt < 0 ? 'メモは読み込みましたが、ティアリストは保存できませんでした' : !pinsOk ? 'メモは読み込みましたが、「試合前」の印は保存できませんでした' : '読み込みました' + (nt ? '（ティアリスト' + nt + '件）' : ''));
-      // 結果の内訳（作戦図・画像は後から足す）
-      const imp = { at: Date.now(), memos: savedMemos ? nImp : 0, contests: savedContests ? ncOk : 0, tiers: nt > 0 ? nt : 0, boards: 0, bases: 0, pics: 0, miss: [] };
-      if (!savedMemos) imp.miss.push('メモ' + nImp + '件（端末に保存できませんでした）');
-      if (ncOk && !savedContests) imp.miss.push('ばちこんの記録');
-      if (nc > ncOk) imp.miss.push('ばちこんの記録' + (nc - ncOk) + '件（形が違って使えない）');
-      if (nt < 0) imp.miss.push('ティアリスト');
-      if (!pinsOk) imp.miss.push('「試合前」の印');
-      if (nBad) imp.miss.push('このアプリで使えない項目' + nBad + '件');
-      const pB = j.boards && window.importBoards, pP = Array.isArray(j.notePics) && window.importNotePics;
-      imp.pending = !!(pB || pP); saveBackupLog('imp', imp);
-      const waits = [];
-      // 作戦図は非同期で読み込む（今ある作戦図は消さずに追加）
-      if (pB) waits.push(importBoards(j.boards).then(r => {
-        imp.boards = r.boards || 0; imp.bases = r.bases || 0;
-        if (r.skipBoards) imp.miss.push('作戦図' + r.skipBoards + '件');
-        if (r.skipBases) imp.miss.push('土台の画像' + r.skipBases + '枚' + (r.noBase ? '（それを使う作戦図' + r.noBase + '件は土台なしで入れました）' : ''));
-        if (r.err && !r.skipped) imp.miss.push('作戦図の一部');
-        return r;
-      }).then(r => {
-        // 作戦図が別のIDで入った場合は、読み込んだWAVEの割り当て（bd:）をその新しいIDに付け替える
-        let fixed = false;
-        for (const [k, v] of Object.entries(m)) if (/^bd:/.test(k) && typeof v === 'string' && r.idMap[v] && r.idMap[v] !== v){ memos[k] = r.idMap[v]; fixed = true; }
-        if (fixed && !save('sm_memos', memos)){ toast('WAVEの割り当てを保存できませんでした'); imp.miss.push('作戦図のWAVEの割り当て'); }
-        if (r.boards || r.bases) toast('作戦図' + r.boards + '件・土台' + r.bases + '枚を読み込みました' + (r.skipped ? '（' + r.skipped + '件は読み込めませんでした' + (r.noBase ? '。作戦図' + r.noBase + '件は土台の画像なしで入れました' : '') + '）' : r.err ? '（一部読めないものがありました）' : ''));
-        else if (r.err) toast('作戦図を読み込めませんでした');
-        render();
-      }).catch(() => { imp.miss.push('作戦図'); }));
-      // メモの画像も非同期で読み込む（今ある画像は消さずに追加）。作戦図のお知らせと重ならないよう少し後に出す
-      if (pP) waits.push(importNotePics(j.notePics).then(r => {
-        imp.pics = r.pics || 0; if (r.err) imp.miss.push(r.pics ? 'メモの画像の一部' : 'メモの画像');
-        setTimeout(() => toast(r.pics ? 'メモの画像' + r.pics + '枚を読み込みました' + (r.err ? '（一部入れられないものがありました）' : '') : r.err ? 'メモの画像を読み込めませんでした' : 'メモの画像は読み込み済みでした'), 2500);
-        // 画像だけのメモ（本文が無いので上で日時を入れていない）も、バックアップの日時を手元より新しければ使う
-        if (r.pics && j.memoAt && typeof j.memoAt === 'object' && window.memoPicKeys) memoPicKeys().then(keys => {
-          let ch = false; keys.forEach(k => { const ta = j.memoAt[k]; if (!(k in m) && validAt(ta) && !(memoAt[k] >= ta)){ memoAt[k] = ta; ch = true; } });
-          if (ch){ save('sm_memo_at', memoAt); if (ui.view === 'list' && ui.listKind === 'search') fillMemoSearch(); }
-        }).catch(() => {});
-        if (ui.view === 'list' && ui.listKind === 'search') fillMemoSearch();
-        else if (ui.view === 'note' || ui.view === 'cnote') render();
-      }).catch(() => { imp.miss.push('メモの画像'); }));
-      if (waits.length) Promise.all(waits).then(() => { imp.pending = false; if (backupLog.imp === imp) saveBackupLog('imp', imp); }); // 途中で別のファイルを読み込んでいたら、そちらの記録を消さない
-    }catch(e){ alert('このファイルは読み込めませんでした。「書き出す」で作ったファイルを選んでください。'); }
+      j = JSON.parse(r.result);
+      if (!j || !j.memos || typeof j.memos !== 'object' || Array.isArray(j.memos)) throw 0;
+      plan = importPlan(j);
+    }catch(e){ alert('このファイルは読み込めませんでした。「書き出す」で作ったファイルを選んでください。'); return; }
+    showImportSheet(plan, keepMine => {
+      try { runImport(j, keepMine); }
+      catch (e){ alert('読み込みの途中で問題が起きました。「メモ」タブのバックアップに「読み込む前に戻す」が出ていれば、それで戻せます。'); render(); }
+    });
   };
   r.readAsText(file);
 }
@@ -1466,6 +1623,7 @@ document.addEventListener('click', e => {
   const t = e.target.closest('button, [data-chip]');
   if (!t) return;
   if (t.closest('#play') || t.closest('#tier') || t.closest('.tsheet-bg') || t.closest('#bplace') || t.closest('#board') || t.closest('.bsheet-bg') || t.closest('.nbs-bg')) return;
+  if (t.dataset.impundo){ undoImport(); return; }
   if (t.dataset.bplace && window.openBoardPlace){ openBoardPlace(t.dataset.bplace, null); return; }
   if (t.dataset.nbopen && window.openBoardById){ openBoardById(t.dataset.nbopen, { edit: false }); return; }
   if (t.dataset.nowmemo){ toast('このブキはメモの対象外です（ランダム枠など）'); return; }
