@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-26i';</script>
+<script>window.APP_VERSION = '2026-11-26j';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -1594,6 +1594,9 @@ document.getElementById('playBack').onclick = () => { if (history.state && histo
 // 戻る操作は一番上に開いている画面だけを閉じる（作戦メモ編集 → WAVE閲覧 の順）
 // 画像を見る画面（notePop）はメモの編集画面の上にも開くので、先に閉じる
 window.addEventListener('popstate', () => { if (introSkipPop){ introSkipPop = false; return; } if (introOpen()){ closeIntro(true); return; } if (window.notePop && notePop()) {} else if (ed) closeEditor(true); else if (window.boardPop && boardPop()) {} else if (window.tierPop && tierPop()) {} else if (play) closePlay(true); });
+// 日本語の変換を確定した時は、入力の処理をもう一度走らせる（変換の確定で input が来ない端末でも、確定した文で保存する。評価 D10・優先順位12 2026-11-26）。
+// 入力の処理はどれも「今の中身を写して保存を予約する」だけなので、2回走っても困らない
+document.addEventListener('compositionend', e => { const t = e.target; if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT')) t.dispatchEvent(new Event('input', { bubbles: true })); }, true);
 document.getElementById('memoText').addEventListener('input', () => {
   document.getElementById('edSaved').textContent = '入力中…';
   clearTimeout(saveTimer); saveTimer = setTimeout(saveMemo, 500);
