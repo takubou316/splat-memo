@@ -595,13 +595,13 @@ function applyView(){
   const v = bs.view, cx = B.w / 2, cy = B.h / 2;
   $('bStage').style.transform = 'translate(' + v.tx + 'px,' + v.ty + 'px) scale(' + v.s + ') translate(' + cx + 'px,' + cy + 'px) rotate(' + (B.rot || 0) + 'deg) translate(' + (-cx) + 'px,' + (-cy) + 'px)';
 }
-// whole: 全体を出す（「全体を表示」・編集中）。それ以外で「見せる範囲」（B.frame）が決めてあれば、その範囲を出す
+// whole: 全体を出す（「全体を表示」）。見る時も編集中も、それ以外で「見せる範囲」（B.frame）が決めてあれば、その範囲を出す
 function fitView(whole){
   if (!B) return;
   const r = $('bView').getBoundingClientRect(), side = (B.rot || 0) % 180 !== 0;
   const rw = side ? B.h : B.w, rh = side ? B.w : B.h;
   const s = Math.min(r.width / rw, r.height / rh) * 0.96;
-  const f = whole !== true && !bs.edit && frameOf(B);
+  const f = whole !== true && frameOf(B); // 編集に入った時も決めた範囲から（2026-11-26 ユーザー「編集に入った時、ステージ全体の表示から始まるのをやめて」）
   if (f){
     // 範囲の中心が画面の中心に来るように（画面の点 = T + s*(C + R(p - C))）
     const fs = Math.min(r.width / f.w, r.height / (f.w * rh / rw)) * (bs.framing ? 1 : 0.96), a = rad(), dx = f.cx - B.w / 2, dy = f.cy - B.h / 2;
@@ -718,7 +718,8 @@ function iconR(o){
   }
   if (o.t === 'rect'){
     const w = d * wdOf(o), p = 'M' + o.x + ' ' + o.y + 'h' + o.w + 'v' + o.h + 'h' + (-o.w) + 'Z';
-    return g0 + hitAndSel(d, p, w, selected) + '<path d="' + p + '" stroke="' + esc(o.c) + '" stroke-width="' + w + '" fill="' + esc(o.c) + '" fill-opacity=".12" stroke-linejoin="round"/></g>';
+    const rt = rectAng(o) ? ' transform="rotate(' + rectAng(o) + ' ' + (o.x + o.w / 2) + ' ' + (o.y + o.h / 2) + ')"' : ''; // 回した四角（2026-11-26 ユーザー「よくある回転のも付けて」）
+    return g0 + '<g' + rt + '>' + hitAndSel(d, p, w, selected) + '<path d="' + p + '" stroke="' + esc(o.c) + '" stroke-width="' + w + '" fill="' + esc(o.c) + '" fill-opacity=".12" stroke-linejoin="round"/></g></g>';
   }
   if (o.t === 'circle'){
     const w = d * wdOf(o), p = 'M' + (o.x - o.r) + ' ' + o.y + 'a' + o.r + ' ' + o.r + ' 0 1 0 ' + (o.r * 2) + ' 0a' + o.r + ' ' + o.r + ' 0 1 0 ' + (-o.r * 2) + ' 0';
@@ -734,16 +735,33 @@ function iconR(o){
 function drawSvg(){ $('bSvg').innerHTML = curObjs().map(o => objSVG(o, bs.sel === o.id)).join('') + (bs.draft ? objSVG(bs.draft, false) : '') + handlesSVG(); }
 // 大きさを変えるつまみ（2026-11-26 ユーザー「マルや四角の大きさを変更したいけどつまみがない」）。選んでいる四角は四隅、丸は上下左右に
 // 白い丸を出し、引っぱると大きさが変わる（四角は反対の角を止めたまま、丸は中心を止めたまま）。拡大しても画面上は同じ大きさ
+const rectAng = o => Number.isFinite(o.a) ? o.a : 0;
+// 四角の中心から見た位置（回す前）を、回した後の土台の座標へ
+function rectPt(o, lx, ly){ const a = rectAng(o) * Math.PI / 180, cx = o.x + o.w / 2, cy = o.y + o.h / 2; return [cx + lx * Math.cos(a) - ly * Math.sin(a), cy + lx * Math.sin(a) + ly * Math.cos(a)]; }
+// つまみの大きさ（画面の px）: 物が小さい時はつまみも小さく（2026-11-26 ユーザー「白い丸はその四角や丸などの大きさによって調整して」）
+function handleSize(o){
+  const sz = (o.t === 'rect' ? Math.min(o.w, o.h) : o.r * 2) * bs.view.s;
+  const r = Math.max(4, Math.min(8, sz * .07));
+  return { r, hit: Math.max(r * 1.6, Math.min(20, sz * .22)), arm: Math.max(16, Math.min(28, sz * .2 + 10)) };
+}
+// 回すつまみを出す向き（回す前の四角から見て）。地図を回していても、回していない四角では画面の上に出す
+function rotDir(){ const r = (B.rot || 0) * Math.PI / 180; return [Math.round(-Math.sin(r)) || 0, Math.round(-Math.cos(r)) || 0]; } // 画面の上（0,-1）を土台の向きに戻したもの
 function handlePts(o){
-  if (o.t === 'rect') return [['nw', o.x, o.y], ['ne', o.x + o.w, o.y], ['sw', o.x, o.y + o.h], ['se', o.x + o.w, o.y + o.h]];
+  if (o.t === 'rect'){ const hw = o.w / 2, hh = o.h / 2, arm = handleSize(o).arm / bs.view.s;
+    return [['nw', ...rectPt(o, -hw, -hh)], ['ne', ...rectPt(o, hw, -hh)], ['sw', ...rectPt(o, -hw, hh)], ['se', ...rectPt(o, hw, hh)], ['rot', ...(([dx, dy]) => rectPt(o, dx * (hw + arm), dy * (hh + arm)))(rotDir())]]; }
   if (o.t === 'circle') return [['e', o.x + o.r, o.y], ['w', o.x - o.r, o.y], ['s', o.x, o.y + o.r], ['n', o.x, o.y - o.r]];
   return [];
 }
 function handlesSVG(){
   if (!bs.edit || bs.playing || !bs.sel || !bs.view) return '';
   const o = curObjs().find(x => x.id === bs.sel); if (!o) return '';
-  const r = 8 / bs.view.s;
-  return handlePts(o).map(([k, x, y]) => '<g data-hdl="' + k + '"><circle cx="' + x + '" cy="' + y + '" r="' + (r * 2.8) + '" fill="transparent"/><circle cx="' + x + '" cy="' + y + '" r="' + r + '" fill="#fff" stroke="#ff7a3d" stroke-width="' + (r * .35) + '"/></g>').join('');
+  const hs = handleSize(o), r = hs.r / bs.view.s, hit = hs.hit / bs.view.s, pts = handlePts(o);
+  // 回すつまみ: 上の辺のまん中から線を伸ばした先の、オレンジの丸
+  const rot = pts.find(q => q[0] === 'rot'), top = o.t === 'rect' ? (([dx, dy]) => rectPt(o, dx * o.w / 2, dy * o.h / 2))(rotDir()) : null;
+  return (rot ? '<line x1="' + top[0] + '" y1="' + top[1] + '" x2="' + rot[1] + '" y2="' + rot[2] + '" stroke="#fff" stroke-width="' + (r * .3) + '" pointer-events="none"/>' : '') +
+    pts.map(([k, x, y]) => '<g data-hdl="' + k + '"><circle cx="' + x + '" cy="' + y + '" r="' + hit + '" fill="transparent"/>' + (k === 'rot'
+      ? '<circle cx="' + x + '" cy="' + y + '" r="' + r * 1.15 + '" fill="#ff7a3d" stroke="#fff" stroke-width="' + (r * .3) + '"/><path d="M' + (x - r * .5) + ' ' + (y - r * .1) + 'a' + r * .5 + ' ' + r * .5 + ' 0 1 1 ' + r * .2 + ' ' + r * .45 + '" fill="none" stroke="#1a1020" stroke-width="' + r * .22 + '" stroke-linecap="round"/>'
+      : '<circle cx="' + x + '" cy="' + y + '" r="' + r + '" fill="#fff" stroke="#ff7a3d" stroke-width="' + (r * .35) + '"/>') + '</g>').join('');
 }
 // 打ちかけの文字（選んだ文字・手順のメモ）は打つたびに中身へ入れ、確定（change）を待たずに、
 // 描き直し・手順の切り替え・閉じる前などに flushInputs() で1回の変更として保存する（入力欄が消えても失わない）
@@ -1020,7 +1038,8 @@ function lerpObj(a, b, t){
   if (b.t === 'icon' || b.t === 'text'){ o.x = L(a.x, b.x); o.y = L(a.y, b.y); }
   else if (b.t === 'pen'){ if (a.pts.length !== b.pts.length) return t < .5 ? a : b; o.pts = b.pts.map((q, i) => [L(a.pts[i][0], q[0]), L(a.pts[i][1], q[1])]); }
   else if (b.t === 'arrow' || b.t === 'line'){ o.x1 = L(a.x1, b.x1); o.y1 = L(a.y1, b.y1); o.x2 = L(a.x2, b.x2); o.y2 = L(a.y2, b.y2); }
-  else if (b.t === 'rect'){ o.x = L(a.x, b.x); o.y = L(a.y, b.y); o.w = L(a.w, b.w); o.h = L(a.h, b.h); }
+  else if (b.t === 'rect'){ o.x = L(a.x, b.x); o.y = L(a.y, b.y); o.w = L(a.w, b.w); o.h = L(a.h, b.h);
+    let da = rectAng(b) - rectAng(a); da = ((da % 360) + 540) % 360 - 180; o.a = rectAng(a) + da * t; } // 回す向きは近い方へ
   else if (b.t === 'circle'){ o.x = L(a.x, b.x); o.y = L(a.y, b.y); o.r = L(a.r, b.r); }
   return o;
 }
@@ -1134,7 +1153,7 @@ const ptrs = new Map();
 let g = null;
 const TAP = 6;
 function restoreDrag(){
-  if (g && (g.kind === 'drag' || g.kind === 'resize') && g.orig && B && B.steps[g.step]){ const o = B.steps[g.step].objs.find(x => x.id === g.oid); if (o) Object.assign(o, JSON.parse(g.orig)); }
+  if (g && (g.kind === 'drag' || g.kind === 'resize') && g.orig && B && B.steps[g.step]){ const o = B.steps[g.step].objs.find(x => x.id === g.oid); if (o){ const s0 = JSON.parse(g.orig); if (!('a' in s0)) delete o.a; Object.assign(o, s0); } } // 回す途中で取り消した時、元に無かった角度を消す（Codexレビュー）
   if (g && g.kind === 'erase' && g.removed && g.removed.length && B && B.steps[g.step]) B.steps[g.step].objs = g.before;
 }
 function cancelGesture(){
@@ -1237,10 +1256,21 @@ view.addEventListener('pointermove', e => {
     g.moved = true;
     const o = curObjs().find(x => x.id === g.oid); if (!o) return;
     const s0 = JSON.parse(g.orig), min = D() * .01, hx = ix + g.ox, hy = iy + g.oy;
-    if (o.t === 'rect'){
-      const fx = g.hdl.includes('w') ? s0.x + s0.w : s0.x, fy = g.hdl.includes('n') ? s0.y + s0.h : s0.y; // 反対の角（動かさない）
-      const sg = v => v < 0 ? -1 : 1, dx = hx - fx, dy = hy - fy, w = Math.max(min, Math.abs(dx)), h = Math.max(min, Math.abs(dy));
-      o.x = sg(dx) < 0 ? fx - w : fx; o.y = sg(dy) < 0 ? fy - h : fy; o.w = w; o.h = h;
+    if (o.t === 'rect' && g.hdl === 'rot'){
+      // 中心から指への向き。上の辺が指の方を向く。0・90・180・270°の近く（±4°）は吸い付く
+      const cx = s0.x + s0.w / 2, cy = s0.y + s0.h / 2;
+      const [rdx, rdy] = rotDir(); let a = (Math.atan2(hy - cy, hx - cx) - Math.atan2(rdy, rdx)) * 180 / Math.PI; a = ((a % 360) + 540) % 360 - 180;
+      const near = Math.round(a / 90) * 90; if (Math.abs(a - near) < 4) a = near;
+      o.a = Math.round(a * 10) / 10; if (o.a === 180) o.a = -180; if (!o.a) delete o.a;
+    } else if (o.t === 'rect'){
+      // 回した四角は、回す前の向き（中心が原点）で考える。反対の角は動かさない
+      const ar = rectAng(s0) * Math.PI / 180, cx = s0.x + s0.w / 2, cy = s0.y + s0.h / 2, qx = hx - cx, qy = hy - cy;
+      const lx = qx * Math.cos(ar) + qy * Math.sin(ar), ly = -qx * Math.sin(ar) + qy * Math.cos(ar);
+      const fx = g.hdl.includes('w') ? s0.w / 2 : -s0.w / 2, fy = g.hdl.includes('n') ? s0.h / 2 : -s0.h / 2;
+      const dx = lx - fx, dy = ly - fy, w = Math.max(min, Math.abs(dx)), h = Math.max(min, Math.abs(dy));
+      const mx = fx + (dx < 0 ? -w : w) / 2, my = fy + (dy < 0 ? -h : h) / 2; // 新しい中心（回す前の向き）
+      const ncx = cx + mx * Math.cos(ar) - my * Math.sin(ar), ncy = cy + mx * Math.sin(ar) + my * Math.cos(ar);
+      o.x = ncx - w / 2; o.y = ncy - h / 2; o.w = w; o.h = h;
     } else if (o.t === 'circle') o.r = Math.max(min / 2, Math.hypot(hx - s0.x, hy - s0.y));
     drawSvg();
   }
@@ -1436,7 +1466,7 @@ function cleanBoard(b, icons){
       if (o.t === 'icon' && typeof o.k === 'string' && icons.has(o.k)) return Object.assign({ id, t: 'icon', k: o.k, sz: wd(o.sz), x: num(o.x), y: num(o.y) }, o.fly === true && o.k.startsWith('player:') ? { fly: true } : {});
       if (o.t === 'text' && typeof o.s === 'string') return { id, t: 'text', s: o.s.slice(0, 30), c: col(o.c), sz: wd(o.sz), x: num(o.x), y: num(o.y) };
       if (o.t === 'arrow' || o.t === 'line') return { id, t: o.t, c: col(o.c), wd: wd(o.wd), x1: num(o.x1), y1: num(o.y1), x2: num(o.x2), y2: num(o.y2) };
-      if (o.t === 'rect') return { id, t: 'rect', c: col(o.c), wd: wd(o.wd), x: num(o.x), y: num(o.y), w: pos(o.w), h: pos(o.h) };
+      if (o.t === 'rect') return { id, t: 'rect', c: col(o.c), wd: wd(o.wd), x: num(o.x), y: num(o.y), w: pos(o.w), h: pos(o.h), ...(Number.isFinite(o.a) && o.a % 360 ? { a: ((o.a % 360) + 540) % 360 - 180 } : {}) };
       if (o.t === 'circle') return { id, t: 'circle', c: col(o.c), wd: wd(o.wd), x: num(o.x), y: num(o.y), r: pos(o.r) };
       if (o.t === 'pen' && Array.isArray(o.pts)){
         const pts = o.pts.slice(0, Math.max(0, Math.min(2000, LIM.points - points))).filter(p => Array.isArray(p)).map(p => [num(p[0]), num(p[1])]);
