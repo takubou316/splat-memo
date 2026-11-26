@@ -507,6 +507,8 @@ const css2 = `
 .bnav .bpos b{font-size:17px;color:var(--text)}
 .bmemo .vt{font-size:16px;font-weight:600;line-height:1.45;color:var(--text);background:var(--card);border-left:3px solid var(--salmon);border-radius:8px;padding:8px 12px;white-space:pre-wrap;word-break:break-word}
 .bmemo .vt.none{font-size:13px;font-weight:400;color:var(--faint);background:none;border:0;padding:2px 4px}
+#bTxtMap{display:none;position:absolute;z-index:3;transform:translate(-50%,-50%);width:min(92%,380px);height:48px;background:rgba(20,18,28,.96);border:2px solid var(--salmon);border-radius:12px;color:var(--text);font:inherit;font-size:18px;font-weight:700;text-align:center;padding:0 12px;box-shadow:0 6px 20px #000a}
+#bTxtMap.on{display:block}
 #bFrame{display:none;position:absolute;z-index:1;pointer-events:none;border:2px solid var(--salmon);border-radius:6px;box-shadow:0 0 0 9999px rgba(0,0,0,.55)}
 #board.framing #bFrame{display:block}
 #board.framing #bRot,#board.framing #bStyle,#board.framing #bSaved{display:none!important}
@@ -527,7 +529,7 @@ bv.innerHTML = '<div class="ehead"><button class="back" id="bBack">‹ 戻る</b
   '<div id="bTop"></div>' +
   '<div id="bView"><div id="bStage"><img id="bImg" alt=""><svg id="bSvg" xmlns="http://www.w3.org/2000/svg"></svg></div>' +
   '<div class="bvbtns"><button id="bFitBtn">全体を表示</button><button id="bRot">⟳ 向きを回す</button><button id="bStyle"></button></div>' +
-  '<div id="bFrame"></div><div id="bHint"></div><div id="bSaved"></div><div id="bCredit"></div></div>' +
+  '<input id="bTxtMap" maxlength="30" enterkeyhint="done" autocomplete="off" placeholder="文字"><div id="bFrame"></div><div id="bHint"></div><div id="bSaved"></div><div id="bCredit"></div></div>' +
   '<div id="bBottom"></div>';
 document.body.appendChild(bv);
 
@@ -563,6 +565,7 @@ async function openBoard(id, opts){
   drawBoard(); requestAnimationFrame(fitView);
 }
 function closeBoard(fromPop){
+  closeTextEdit();
   openSeq++; // 読み込み中の openBoard を無効にする
   if (!B) return;
   stopPlay(); cancelGesture(); endStripDrag(true); flushInputs();
@@ -796,7 +799,7 @@ function drawBoard(){
     const seg = (items, cur, key) => '<span class="seg3">' + items.map(([l, v]) => '<button data-' + key + '="' + v + '" class="' + (cur === v ? 'on' : '') + '">' + l + '</button>').join('') + '</span>';
     if (sel){
       top += '<span class="lbl">選んでいる物</span>';
-      if (sel.t === 'text') top += '<input id="bTxt" value="' + esc(sel.s) + '" maxlength="30" placeholder="文字">';
+      if (sel.t === 'text') top += '<button class="act" data-btxed="1">✎ 文字を直す</button>'; // 狭い入力欄はやめ、地図の上で直す（2026-11-26 ユーザー要望）
       if (sel.t !== 'icon') top += cols(sel.c);
       if (sel.t === 'icon' || sel.t === 'text') top += seg(SZ_LABEL, [0, 1, 2].includes(sel.sz) ? sel.sz : 1, 'bsz');
       else top += seg(WD_LABEL, [0, 1, 2].includes(sel.wd) ? sel.wd : 1, 'bwd');
@@ -935,15 +938,35 @@ $('bTop').addEventListener('click', e => {
     const on = !sel.fly; normFly(objs, null); if (on) sel.fly = true;
     commit(); toast(on ? iconInfo(sel.k).label + 'にハエを付けました（この手順では1人だけ）' : 'ハエを外しました');
   }
+  else if (d.btxed && sel){ openTextEdit(sel); }
   else if (d.bdup && sel){ if (!roomFor(1, sel.t === 'pen' ? sel.pts.length : 0)) return; const c = JSON.parse(JSON.stringify(sel)); c.id = uid(); delete c.fly; shiftObj(c, D() * .03, D() * .03); objs.push(c); bs.sel = c.id; commit(); }
 });
 // 選んだ文字の書き換えは、打つたびに地図へ反映し、確定（入力欄を離れる）で1回の変更として保存
-$('bTop').addEventListener('input', e => {
-  if (e.target.id !== 'bTxt' || !B) return;
-  const o = curObjs().find(x => x.id === bs.sel); if (!o) return;
+// 2026-11-26 ユーザー「上の文字が入る隙間が少なすぎて編集しにくい、マップに表示してる文字を直接編集できるようにして」:
+// 選んでいる文字をもう一度タップ・「文字を直す」・文字を置いた直後に、地図の上のその文字の所へ大きな入力欄を出す。
+// 打つたびに地図へ反映し、入力欄を離れる・完了キーで1回の変更として保存。キーボードに隠れないよう、画面の上半分に収める
+let txtEditId = null;
+function openTextEdit(o){
+  if (!o || o.t !== 'text' || !bs.edit) return;
+  const inp = $('bTxtMap'), r = $('bView').getBoundingClientRect(), y = toScreen(o.x, o.y)[1];
+  txtEditId = o.id; inp.value = o.s || '';
+  inp.style.left = '50%'; // 横は真ん中（幅いっぱいに近いので）
+  inp.style.top = Math.max(34, Math.min(r.height * .42, y)) + 'px';
+  inp.classList.add('on'); inp.focus(); inp.select();
+}
+function closeTextEdit(){
+  const inp = $('bTxtMap'); if (!txtEditId) return;
+  txtEditId = null; inp.classList.remove('on'); inp.blur();
+  if (B) { flushInputs(); drawBoard(); }
+}
+$('bTxtMap').addEventListener('input', e => {
+  if (!B || !txtEditId) return;
+  const o = curObjs().find(x => x.id === txtEditId); if (!o) return;
   o.s = e.target.value.slice(0, 30); inputDirty = true; drawSvg(); persistSoon();
 });
-$('bTop').addEventListener('change', e => { if (e.target.id === 'bTxt') flushInputs(); });
+$('bTxtMap').addEventListener('blur', () => closeTextEdit());
+$('bTxtMap').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing){ e.preventDefault(); closeTextEdit(); } });
+$('bTxtMap').addEventListener('pointerdown', e => e.stopPropagation()); // 入力欄を触っても地図の操作にしない
 // ---- 下の操作（アイコンの帯・手順・メモ）----
 $('bBottom').addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t || !B) return;
@@ -1201,7 +1224,7 @@ view.addEventListener('pointerdown', e => {
   }
   else if (bs.tool === 'select' && hit && curObjs().find(x => x.id === hit.dataset.oid)){
     const o = curObjs().find(x => x.id === hit.dataset.oid);
-    bs.sel = o.id; g = { kind: 'drag', step, oid: o.id, x0, y0, ix, iy, orig: JSON.stringify(o), moved: false }; drawBoard();
+    const wasSel = bs.sel === o.id; bs.sel = o.id; g = { kind: 'drag', step, oid: o.id, x0, y0, ix, iy, orig: JSON.stringify(o), moved: false, wasSel }; drawBoard();
   }
   else startPan({ x: x0, y: y0 }, { selTap: bs.tool === 'select' });
 });
@@ -1292,7 +1315,7 @@ function endPtr(e){
   const small = D() * .02;
   if (g.kind === 'pan' && g.place && !g.far){
     if (g.place === 'icon' && bs.pending) placeAt(bs.pending, ix, iy);
-    else if (g.place === 'text' && roomFor(1, 0)){ const o = newObjFor('text', ix, iy); curObjs().push(o); bs.tool = 'select'; bs.sel = o.id; commit(); const inp = $('bTxt'); if (inp){ inp.focus(); inp.select(); } }
+    else if (g.place === 'text' && roomFor(1, 0)){ const o = newObjFor('text', ix, iy); curObjs().push(o); bs.tool = 'select'; bs.sel = o.id; commit(); openTextEdit(o); }
   }
   else if (g.kind === 'draw'){
     const d = bs.draft; bs.draft = null;
@@ -1300,7 +1323,7 @@ function endPtr(e){
     if (ok && roomFor(1, d.t === 'pen' ? d.pts.length : 0)){ d.id = uid(); curObjs().push(d); commit(); } else drawSvg();
   }
   else if (g.kind === 'erase'){ if (g.removed.length){ bs.sel = null; commit(); } }
-  else if (g.kind === 'drag' || g.kind === 'resize'){ if (g.moved) commit(); else drawBoard(); }
+  else if (g.kind === 'drag' || g.kind === 'resize'){ if (g.moved) commit(); else { drawBoard(); const o = g.kind === 'drag' && g.wasSel && curObjs().find(x => x.id === g.oid); if (o && o.t === 'text') openTextEdit(o); } }
   else if (g.kind === 'pan' && g.selTap && !g.far && bs.sel){ bs.sel = null; drawBoard(); }
   g = null;
 }
