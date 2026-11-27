@@ -584,6 +584,12 @@ window.boardPop = () => {
 window.openBoardPlace = openPlace;
 window.openBoardById = openBoard;
 window.boardCount = async () => (await allBoards()).length; // バックアップの注意で「作戦図があるか」を見る
+window.boardSearchItems = async () => (await allBoards()).map(x => ({
+  id: x.id, title: x.title || '名称未設定の作戦図', kind: String(x.place).startsWith('c:') ? 'coop' : 'vs', updated: Number(x.updated) || 0,
+  place: placeName(x.place) + (x.sw ? '・' + swName(x.sw) : ''),
+  notes: (x.steps || []).map((s, i) => s && s.note ? '手順' + (i + 1) + ': ' + s.note : '').filter(Boolean),
+  texts: (x.steps || []).flatMap(s => (s && s.objs || []).filter(o => o.t === 'text' && o.s).map(o => String(o.s)))
+}));
 window.boardMeta = async id => { try { return await boardGet(id); } catch (e){ return null; } };
 
 const D = () => Math.max(B.w, B.h);
@@ -647,6 +653,13 @@ function startFraming(whole){
     bs.view = { s, tx: p.x + p.w / 2 - s * sx, ty: p.y + p.h / 2 - s * sy, fit, fitted: false }; applyView(); redrawSoon();
   });
 }
+// 範囲の外に物がある手順（1から数える）。物の中心（線・手書きはどこか1点）が範囲の外なら外とみなす
+function stepsOutside(f){
+  const side = (f.rot || 0) % 180 !== 0, h = f.w * (side ? B.w / B.h : B.h / B.w), a = (f.rot || 0) * Math.PI / 180, m = 4;
+  const out = (x, y) => { const dx = x - f.cx, dy = y - f.cy, u = dx * Math.cos(a) - dy * Math.sin(a), v = dx * Math.sin(a) + dy * Math.cos(a); return Math.abs(u) > f.w / 2 + m || Math.abs(v) > h / 2 + m; };
+  const pts = o => o.t === 'rect' ? [[o.x + o.w / 2, o.y + o.h / 2]] : o.t === 'line' || o.t === 'arrow' ? [[o.x1, o.y1], [o.x2, o.y2]] : o.t === 'pen' ? (o.pts || []) : [[o.x, o.y]];
+  return B.steps.map((st, i) => (st.objs || []).some(o => pts(o).some(([x, y]) => out(x, y))) ? i + 1 : 0).filter(Boolean);
+}
 function endFraming(mode){ // mode: 'set' 枠の範囲にする / 'whole' 全体を見せる
   if (!B || !bs.framing) return;
   cancelGesture();
@@ -657,7 +670,8 @@ function endFraming(mode){ // mode: 'set' 枠の範囲にする / 'whole' 全体
   } else delete B.frame;
   B.updated = Date.now(); persist();
   bs.framing = false; drawBoard(); requestAnimationFrame(() => fitView());
-  toast(B.frame ? '見せる範囲を決めました' : '全体を見せます');
+  const outs = B.frame ? stepsOutside(B.frame) : [];
+  toast(!B.frame ? '全体を見せます' : outs.length ? '見せる範囲を決めました。手順' + outs.slice(0, 5).join('・') + (outs.length > 5 ? 'など' : '') + 'に範囲の外の物があり、見る時は映りません' : '見せる範囲を決めました', outs.length ? 5000 : 0);
 }
 function toImg(px, py){
   const r = $('bView').getBoundingClientRect(), v = bs.view, a = -rad();
@@ -919,7 +933,8 @@ $('bStyle').onclick = () => {
   B.bg = B.bg === 'nw3d' ? 'nw' : 'nw3d'; bs.imgUrl = nwImg(k, B.bg); $('bImg').src = bs.imgUrl;
   B.updated = Date.now(); persist(); drawBoard();
 };
-$('bRot').onclick = () => { if (!B) return; flushInputs(); cancelGesture(); B.rot = ((B.rot || 0) + 90) % 360; fitView(); drawSvg(); persist(); };
+$('bRot').onclick = () => { if (!B) return; flushInputs(); cancelGesture(); const had = !!frameOf(B); B.rot = ((B.rot || 0) + 90) % 360; fitView(); drawSvg(); persist();
+  if (B.frame && had !== !!frameOf(B)) toast(frameOf(B) ? '元の向きに戻したので、決めてあった見せる範囲を使います' : '向きを変えたので、見せる範囲は使われません。「完了」の後に決め直してください', 4500); };
 $('bTitle').onclick = () => {
   if (!bs || !bs.edit) return;
   cancelGesture();
@@ -1360,6 +1375,8 @@ const css3 = `
 .nbrow{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:2px 0 2px}
 .nbrow::-webkit-scrollbar{display:none}
 .nbcard{flex:none;width:min(62vw,240px);text-align:left;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;padding:0}
+.nbrow.one .nbcard{width:100%}
+.nbrow.one .nbthumb{background:none}
 .nbthumb{position:relative;width:100%;background:#0b0a12}
 .nbthumb img,.nbthumb svg{position:absolute;inset:0;width:100%;height:100%}
 .nbthumb img{object-fit:fill}
@@ -1414,11 +1431,13 @@ function nowSlotHTML(k, list, urls){
   if (!list.length) return '<div class="nbmk">作戦図 ' + (k.startsWith('c:') && k.split(':').length === 2
     ? TIDES.map(([t, n]) => '<button data-bplace="' + esc(k + ':' + t) + '">＋ ' + n + '</button>').join('')
     : '<button data-bplace="' + esc(k) + '">＋ 作る</button>') + '</div>';
-  return '<div class="nbrow">' + list.map(b => {
+  const one = list.length === 1;
+  return '<div class="nbrow' + (one ? ' one' : '') + '">' + list.map(b => {
     const tide = (b.place.startsWith('c:') ? TIDE_NAME[b.place.split(':')[2]] || '' : '') + (b.sw ? '・' + swName(b.sw) : '');
     const note = b.steps[0] && b.steps[0].note;
     return '<button class="nbcard" data-nbopen="' + esc(b.id) + '">' +
-      thumbBox(b, isNwBg(b) && nwKey(b.place) ? nwImg(nwKey(b.place), b.bg) : urls[baseKeyOf(b)] || '') +
+      (one ? '<div style="width:min(100%,calc(34vh * ' + thumbAspect(b).toFixed(4) + '));margin:0 auto">' : '') +
+      thumbBox(b, isNwBg(b) && nwKey(b.place) ? nwImg(nwKey(b.place), b.bg) : urls[baseKeyOf(b)] || '') + (one ? '</div>' : '') +
       '<div class="nbcap">' + esc(b.title) + '<small>' + esc([tide, b.steps.length > 1 ? '手順' + b.steps.length : ''].filter(Boolean).join('・')) + '</small></div>' + (note ? '<div class="nbnote">' + esc(note) + '</div>' : '') + '</button>';
   }).join('') + '</div>';
 }

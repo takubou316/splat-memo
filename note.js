@@ -35,6 +35,11 @@ const css = `
 .nb-sec{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px}
 .nb-sec.main{border-color:rgba(255,122,61,.55)}
 .nb-sec h3{margin:0 0 6px;font-size:14px;font-weight:600;color:var(--text);display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.nb-sec h3.nb-h{flex-wrap:nowrap;align-items:center}
+.nb-ht{flex:1;min-width:0}
+.nb-ht small{margin-left:8px}
+.nb-hb{display:flex;gap:6px;flex:none;margin-left:auto}
+.nb-hb .nb-pin,.nb-hb .nb-ebtn{margin-left:0!important}
 .nb-sec h3 small{font-size:11px;font-weight:400;color:var(--faint)}
 .nb-sec textarea{display:block;width:100%;min-height:64px;resize:none;background:#0f0d16;border:1px solid var(--line);border-radius:10px;color:var(--text);font:inherit;font-size:16px;line-height:1.5;padding:9px 11px;overflow:hidden}
 .nb-sec textarea:focus{outline:none;border-color:var(--line2)}
@@ -68,6 +73,11 @@ const css = `
 .nb-picerr{font-size:12px;color:#ff9b9b}
 .nb-inl{display:inline-flex;align-items:center;min-height:40px;margin:0 6px 8px 0;padding:0 12px;border-radius:999px;border:1px dashed var(--line2);color:var(--sub);font-size:13px;font-weight:600}
 .nb-add{margin:4px 0 12px}
+.nb-write{display:flex;align-items:baseline;gap:8px;width:100%;margin:0 0 10px;padding:10px 12px;border-radius:12px;border:1px dashed var(--line2);background:none;text-align:left;color:var(--text)}
+.nb-write b{font-size:14px;color:var(--salmon)}
+.nb-write small{font-size:12px;color:var(--faint)}
+.nbw-list button{padding:11px 12px!important}
+.cn-wjump{display:block;width:100%;margin:-2px 0 10px;padding:9px 12px;border-radius:10px;background:var(--card);border:1px solid var(--line);font-size:13px;font-weight:600;color:var(--salmon);text-align:left}
 .nb-add .lab{font-size:12px;color:var(--faint);margin:0 2px 6px}
 .nb-add .chips{display:flex;flex-wrap:wrap;gap:6px}
 .nb-add .chips button{min-height:40px;padding:0 12px;border-radius:999px;border:1px dashed var(--line2);color:var(--sub);font-size:13px;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -190,7 +200,7 @@ let addList = [], focusKey = null, focusBack = null, pinList = [], scrollKey = n
 // inline: 空の時に「メモを追加」へ回さず、その場に小さな「＋ 書く」を置く（支給ブキ一覧のブキのカードの中など、どのブキの欄か分かるように）
 const sec = (key, title, sub, ph, main, inline, pinTitle) => { // pinTitle: 「試合前に見る」での名前（省略すると title）
   const txt = memos[key] || '', ed = editing.has(key) || dirty.has(key), has = !!txt.trim();
-  const head = btn => '<h3>' + esc(title) + '<small>' + esc(sub) + '</small>' + btn + '</h3>';
+  const head = btn => '<h3 class="nb-h"><span class="nb-ht">' + esc(title) + '<small>' + esc(sub) + '</small></span>' + (btn ? '<span class="nb-hb">' + btn + '</span>' : '') + '</h3>';
   if (ed && !startText.has(key)) startText.set(key, txt);
   if (ed) return '<div class="nb-sec editing' + (main ? ' main' : '') + '" data-nbsec="' + esc(key) + '">' + head('<button class="nb-ebtn done" data-nbdone="' + esc(key) + '" aria-label="' + esc(title) + 'の編集を終える">完了</button>') +
     '<textarea class="nbta" data-nbkey="' + esc(key) + '" aria-label="' + esc(title) + '" placeholder="' + esc(ph) + '" rows="2">' + esc(txt) + '</textarea>' +
@@ -198,7 +208,7 @@ const sec = (key, title, sub, ph, main, inline, pinTitle) => { // pinTitle: 「�
     '<div class="nbpics" data-nbpk="' + esc(key) + '">' + addPicBtn(key) + '</div><div class="st" data-nbst="' + esc(key) + '"></div></div>';
   // 空の欄は隠す（画像だけある欄は、画像を読めた時に fillPics が見せる）
   const hide = !has && !main;
-  if (hide && !inline) addList.push([key, title]);
+  if (hide && !inline) addList.push([key, title, sub]);
   const hp = !has && window.hasPics && hasPics(key); // 画像だけの欄
   const pinned = (has || hp) && window.isPinned && isPinned(key);
   if (pinned) pinList.push([key, pinTitle || title, has ? txt : '（画像のみ）']);
@@ -216,6 +226,13 @@ const pinCard = () => pinList.length ? '<div class="nb-pins"><div class="t">★ 
   '<button class="nb-pinitem' + (i >= 4 ? ' qm' : '') + '" data-nbjump="' + esc(k) + '"><small>' + esc(title) + '</small><b>' + esc(txt.split(/\r?\n/).map(s => s.trim()).filter(Boolean).slice(0, 3).join('\n')) + '</b></button>').join('') + (pinList.length > 4 ? '<button class="qmore-btn" data-nbqmore="' + (pinList.length - 4) + '" aria-expanded="false">▼ ほか' + (pinList.length - 4) + '件</button>' : '') + '</div>'
   : '<div class="nb-pinhint">大事なメモは「☆ 試合前」を押すと、ここにまとめて出ます</div>';
 // 隠した空の欄の入口（画面の下にまとめる）
+const writeBtn = () => addList.length ? '<button class="nb-write" data-nbwrite="1"><b>＋ メモを書く</b><small>まだ書いていない欄（' + addList.length + 'つ）から選ぶ</small></button>' : '';
+function openWriteSheet(){
+  const list = addList.slice();
+  openSheet('<h3>どこに書きますか<button data-nbclose="1">とじる</button></h3><div class="body list nbw-list">' +
+    list.map(([k, title, sub]) => '<button data-nbadd="' + esc(k) + '"><span>' + esc(title) + '<small>' + esc(sub ? '効く範囲: ' + sub : '') + '</small></span></button>').join('') + '</div>',
+    t => { const k = t.dataset.nbadd; if (!k) return; closeSheet(false); flushAll(); editing.add(k); focusKey = k; render(); });
+}
 const addBar = () => addList.length ? '<div class="nb-add"><div class="lab">メモを追加（まだ書いていない欄）</div><div class="chips">' +
   addList.map(([k, title]) => '<button data-nbadd="' + esc(k) + '">＋ ' + esc(title) + '</button>').join('') + '</div></div>' : '';
 // ブキのカテゴリ（TIER_DATA の type）。カテゴリ共通のメモのキーは wk:vs:<type> / wk:coop:<type>（2026-11-23）
@@ -231,7 +248,7 @@ document.getElementById('main').addEventListener('click', e => { if (e.target.cl
 // バトルメモ（view 'note'）とサモランメモ（view 'cnote'）
 window.isNoteView = v => v === 'note' || v === 'cnote';
 // 今出ている画面がこのメモ画面でなければ（別のタブから来た・バトル⇔サモラン）、書きかけの無い欄は読む表示に戻す
-window.renderNote = () => { addList = []; pinList = []; const m = document.getElementById('main'); if (!(m.querySelector('.nb-cards') && m.dataset.nv === ui.view)){ closeEditingSecs(); showRules = false; } return (ui.view === 'cnote' ? renderCoop() : renderBattle()).replace('<!--PINS-->', () => pinCard()); }; // 関数で渡す（メモに $' などがあっても置き換えの特別な記号として読まれないように。Codexレビュー）
+window.renderNote = () => { addList = []; pinList = []; const m = document.getElementById('main'); if (!(m.querySelector('.nb-cards') && m.dataset.nv === ui.view)){ closeEditingSecs(); showRules = false; } return (ui.view === 'cnote' ? renderCoop() : renderBattle()).replace('<!--PINS-->', () => pinCard() + writeBtn()); }; // 関数で渡す（メモに $' などがあっても置き換えの特別な記号として読まれないように。Codexレビュー）
 
 let showRules = false; // バトルメモのルールの列を広げているか（描き直しても保つ。画面を移ると閉じる）
 function renderBattle(){
@@ -327,7 +344,8 @@ function renderCoop(){
   if (!cnb.all) h += '<div class="cn-ws">' + c.supplied.map(x => x.id
       ? '<button data-cnw="' + esc(x.id) + '" class="' + (x.id === c.weaponId ? 'on' : '') + '"><img src="' + esc(x.img) + '" alt=""><span>' + esc(x.name) + '</span></button>'
       : '<button disabled><img src="' + esc(x.img) + '" alt=""><span>' + esc(x.name) + '</span></button>').join('') +
-      '<button data-cnpick="weapon" class="more' + (w && !c.supplied.some(x => x.id === w.id) ? ' on' : '') + '">' + (w && !c.supplied.some(x => x.id === w.id) ? '<img src="' + esc(w.img) + '" alt=""><span>' + esc(w.name) + '</span>' : '<b>＋</b><span>ほかのブキ</span>') + '</button></div>';
+      '<button data-cnpick="weapon" class="more' + (w && !c.supplied.some(x => x.id === w.id) ? ' on' : '') + '">' + (w && !c.supplied.some(x => x.id === w.id) ? '<img src="' + esc(w.img) + '" alt=""><span>' + esc(w.name) + '</span>' : '<b>＋</b><span>ほかのブキ</span>') + '</button></div>' +
+      (w ? '<button class="cn-wjump" data-cnwjump="' + esc(w.id) + '">' + (memos[cwKey(sid, w.id)] && memos[cwKey(sid, w.id)].trim() || memos['wc:' + w.id] && memos['wc:' + w.id].trim() || (window.hasPics && (hasPics(cwKey(sid, w.id)) || hasPics('wc:' + w.id))) ? '↓ ' + esc(w.name) + 'のメモへ' : '＋ ' + esc(w.name) + 'のメモを書く') + '</button>' : '');
   h += '<!--PINS-->' + tideSec + board;
   if (!cnb.all){
     if (w) h += sec(cwKey(sid, w.id), sName + ' × ' + w.name, 'このステージでこのブキのとき', '例: このブキの時はここで納品を守る など') +
@@ -387,6 +405,7 @@ window.noteFlush = flushAll;
 window.noteForget = k => { clearTimeout(timers[k]); delete timers[k]; dirty.delete(k); editing.delete(k); startText.delete(k); redoText.delete(k); };
 // 書いている途中は画面を描き直さない（時間帯の更新などで打ちかけが消えないように）。見送った分は書き終えた後に描き直す
 // 描いてある画面（バトル／サモラン）と開こうとしている画面が違う時は「書いている途中」扱いにしない（タブを移ったのに前の画面が残らないように。Codexレビュー 2026-11-23）
+window.noteDirty = k => dirty.has(k); // 保存できていない書きかけがあるか（メモを移す前に確かめる）
 window.noteBusy = () => { const a = document.activeElement; return !!(a && a.classList && a.classList.contains('nbta')) && main.dataset.nv === ui.view; };
 window.noteDeferRender = () => { pendingRender = true; };
 const main = document.getElementById('main');
@@ -410,7 +429,7 @@ window.noteAfterRender = () => {
   main.querySelectorAll('.nb-txt').forEach(el => { const b = el.nextElementSibling; if (b && b.dataset.nbmore) b.hidden = !(el.classList.contains('open') || el.scrollHeight > el.clientHeight + 2); });
   if (scrollKey){ const s = main.querySelector('[data-nbsec="' + CSS.escape(scrollKey) + '"]'); scrollKey = null; if (s) s.scrollIntoView({ block: 'start' }); }
   if (focusBack){ const b = main.querySelector('[data-nbedit="' + CSS.escape(focusBack) + '"]'); focusBack = null; if (b) b.focus({ preventScroll: true }); }
-  if (focusKey){ const ta = main.querySelector('.nbta[data-nbkey="' + CSS.escape(focusKey) + '"]'); focusKey = null; if (ta){ ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); ta.scrollIntoView({ block: 'center' }); } }
+  if (focusKey){ const ta = main.querySelector('.nbta[data-nbkey="' + CSS.escape(focusKey) + '"]'); focusKey = null; if (ta){ ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); ta.scrollIntoView({ block: 'center' }); [400, 1200].forEach(ms => setTimeout(() => { if (document.activeElement === ta) ta.scrollIntoView({ block: 'center' }); }, ms)); } } // 作戦図の絵が後から入って欄が押し下げられるので、少し待ってもう一度
 };
 
 // ---- 画像（2026-11-22 ユーザー要望「それぞれ画像を載せれるようにしたい」）----
@@ -667,6 +686,7 @@ main.addEventListener('click', e => {
   // 書いている欄にカーソルが残ったままだと描き直しが見送られるので、先に外す（iPhoneではボタンを押してもカーソルが外れないことがある）
   if ((d.nbedit || d.nbadd || d.nbdone) && document.activeElement && document.activeElement.classList.contains('nbta')) document.activeElement.blur();
   if (d.nbedit || d.nbadd){ const k = d.nbedit || d.nbadd; flushAll(); editing.add(k); focusKey = k; render(); }
+  else if (d.nbwrite) openWriteSheet();
   else if (d.nbdone){ flushAll(); if (!dirty.has(d.nbdone)){ editing.delete(d.nbdone); startText.delete(d.nbdone); redoText.delete(d.nbdone); focusBack = d.nbdone; render(); } }
   else if (d.nbrev){
     const k = d.nbrev, ta = main.querySelector('.nbta[data-nbkey="' + CSS.escape(k) + '"]'); if (!ta) return;
@@ -692,6 +712,10 @@ main.addEventListener('click', e => {
   else if (d.cnall != null){ cnb.all = d.cnall === '1'; redraw(); }
   else if (d.cntide){ cnb.tide = d.cntide; scrollKey = 'td:' + c.stageId + ':' + d.cntide; redraw(); } // 切り替えた潮位のメモが見える所へ（評価 F6）
   else if (d.cnw){ cnb.weapon = { id: d.cnw, at: c.at }; redraw(); }
+  else if (d.cnwjump){
+    const ks = [cwKey(c.stageId, d.cnwjump), 'wc:' + d.cnwjump], s = ks.map(k => main.querySelector('.nb-sec:not(.hid)[data-nbsec="' + CSS.escape(k) + '"]')).find(Boolean);
+    if (s) s.scrollIntoView({ block: 'start', behavior: 'smooth' }); else { flushAll(); editing.add(ks[0]); focusKey = ks[0]; render(); }
+  }
   else if (d.cnpick === 'stage') openCoopStageSheet();
   else if (d.cnpick === 'weapon') openWeaponSheet(coopWeapons(), c.weaponId, cnb.recent, id => {
     cnb.weapon = { id, at: coopCurrent().at }; cnb.recent = [id].concat(cnb.recent.filter(x => x !== id)).slice(0, 8);

@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-27m';</script>
+<script>window.APP_VERSION = '2026-11-27n';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -155,6 +155,12 @@ nav button.on{color:var(--salmon)}
 #editor.reading .memo-read:empty{display:none}
 #editor.reading #memoText,#editor.reading .ed-rev,#editor.reading .coach-tools,#editor.reading .nbpic-add{display:none}
 #editor.reading .saved{display:none}
+.ed-move{display:flex;gap:8px;padding:0 12px calc(12px + env(safe-area-inset-bottom))}
+.ed-move[hidden]{display:none}
+.ed-move button{flex:1;min-height:42px;border-radius:12px;font-size:13px;font-weight:600;color:var(--sub);background:var(--card);border:1px solid var(--line2)}
+#editor.reading:has(.ed-move:not([hidden])) .memo-read{margin-bottom:8px}
+.mv-list button{display:block!important}
+.mv-list button small{margin-top:2px}
 /* ばちこん */
 .ccard{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden}
 .ccard .shead{padding:10px 14px}
@@ -262,6 +268,7 @@ nav button.on{color:var(--salmon)}
 
 .memo-search{display:grid;gap:5px;padding:8px 0 12px}
 .memo-search label,.quick-title{font-size:13px;color:var(--muted,#aab2be);font-weight:700}
+.memo-range{font-size:12px;color:var(--faint);margin:-2px 0 10px;line-height:1.5}
 .memo-search input{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--text);font:inherit;font-size:16px}
 .memo-found{text-align:left}.memo-found .rprev{white-space:normal;overflow-wrap:anywhere}
 .memo-scope{display:flex;flex-wrap:wrap;gap:5px;margin:0 8px 8px}
@@ -280,6 +287,8 @@ nav button.on{color:var(--salmon)}
 .bsteps ol{margin:6px 0 8px;padding-left:1.4em}
 .bsteps li{margin:6px 0}
 .bsteps p{font-size:13px;color:var(--sub);margin:6px 0}
+.offgo{display:flex;flex-direction:column;gap:8px;margin:14px auto 0;max-width:280px}
+.offgo button{min-height:44px;border-radius:12px;background:var(--card);border:1px solid var(--line2);color:var(--text);font-size:14px;font-weight:600}
 .bwarn{display:flex;flex-direction:column;gap:4px;width:100%;text-align:left;margin:0 0 12px;padding:10px 12px;border-radius:12px;background:rgba(255,122,61,.12);border:1px solid var(--salmon);color:var(--text);font-size:13px;line-height:1.5}
 .bwarn b{color:var(--salmon);font-size:13px}
 .bgo{display:block;width:100%;text-align:left;margin:6px 0 4px;padding:12px 14px;border-radius:12px;background:var(--card);border:1px solid var(--line);font-size:14px;font-weight:600;color:var(--text)}
@@ -326,7 +335,7 @@ nav button.on{color:var(--salmon)}
   <button id="navNow" class="on"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9.5 2.5h5"/></svg>いまのステージ</button>
   <button id="navNote"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8.5 13.5l2 2 4-4.5"/></svg>バトルメモ</button>
   <button id="navCoop"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12c3-4.5 8-6 12-4l3-2.5v13L15 16c-4 2-9 .5-12-4z"/><path d="M7.5 9.5v5"/></svg>サモランメモ</button>
-  <button id="navList"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h5"/></svg>メモ</button>
+  <button id="navList"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h5"/></svg>メモ一覧</button>
   <button id="navMore" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="19" cy="12" r="1.3" fill="currentColor"/></svg><span id="navMoreLbl">その他</span></button>
 </nav>
 <div id="moreMenu" hidden>
@@ -360,6 +369,7 @@ nav button.on{color:var(--salmon)}
   <textarea id="memoText" placeholder="ここにメモを書く（自動で保存されます）"></textarea>
   <!-- このメモに付けた画像（note.js が中身を入れる。ステージ・ブキ・オオモノのメモだけ） -->
   <div id="edPicWrap"><div class="nbpics" id="edPics" data-nbpk=""></div><div id="edPicSt" data-nbst=""></div></div>
+  <div class="ed-move" id="edMove" hidden><button type="button" id="edMoveBtn">保存先を変える</button><button type="button" id="edStow">しまう</button></div>
 </div>
 <div class="toast" id="toast"></div>
 <script src="contest-data.js"></script>
@@ -482,7 +492,8 @@ function stageName(s){ return (loc && loc.stages && loc.stages[s.id] && loc.stag
 function nameById(id){ return (loc && loc.stages && loc.stages[id] && loc.stages[id].name) || FALLBACK_STAGES[id] || id; }
 function ruleName(r){ return RULE_NAME[r.id] || (loc && loc.rules && loc.rules[r.id] && loc.rules[r.id].name) || r.name; }
 function ruleFull(r){ return (loc && loc.rules && loc.rules[r.id] && loc.rules[r.id].name) || ruleName(r); }
-function bossName(b){ return b ? ((loc && loc.bosses && loc.bosses[b.id] && loc.bosses[b.id].name) || b.name) : ''; }
+const FALLBACK_BOSSES = {"Q29vcEVuZW15LTIz":"ヨコヅナ","Q29vcEVuZW15LTI0":"タツ","Q29vcEVuZW15LTI1":"ジョー","Q29vcEVuZW15LTMw":"オカシラ連合"};
+function bossName(b){ return b ? ((loc && loc.bosses && loc.bosses[b.id] && loc.bosses[b.id].name) || FALLBACK_BOSSES[b.id] || (loc ? b.name : '')) : ''; }
 function weaponName(w){ return (loc && loc.weapons && loc.weapons[w.__splatoon3ink_id] && loc.weapons[w.__splatoon3ink_id].name) || w.name; }
 function eventName(e){ return (loc && loc.events && loc.events[e.id] && loc.events[e.id].name) || e.name; }
 function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -674,7 +685,8 @@ function renderNow(){
   let h = '<div class="seg"><button data-sub="salmon" class="salmon ' + (ui.nowSub==='salmon'?'on':'') + '">サーモンラン</button>' +
     '<button data-sub="battle" class="' + (ui.nowSub==='battle'?'on':'') + '">バトル</button></div>';
   const coaching = coachingLink(ui.nowSub === 'salmon' ? 'coop' : 'vs');
-  if (!sched){ return h + coaching + '<div class="empty">' + (fetchError ? 'スケジュールを取得できませんでした。<br>通信を確認して右上の「更新」を押してください。' : '読み込み中…') + '</div>'; }
+  if (!sched){ return h + coaching + '<div class="empty">' + (fetchError ? 'スケジュールを取得できませんでした。<br>通信を確認して右上の「更新」を押してください。' +
+    '<div class="offgo"><button data-goview="' + (ui.nowSub === 'salmon' ? 'cnote' : 'note') + '">ステージを選んでメモを読む</button><button data-goview="list">保存したメモを開く</button></div>' : '読み込み中…') + '</div>'; }
   const fn = ui.nowSub === 'salmon' ? salmonCards : battleCards;
   const cur = fn(p => p.cur, now);
   if (cur && ui.nowSub !== 'salmon') h += pinnedQuick(['al:vs'], 'バトル全体・試合前に見る');
@@ -735,6 +747,7 @@ function filterWeapons(){
 
 const memoTides = { Low:'干潮', Mid:'通常', High:'満潮' };
 function memoLocation(key){
+  if (key.startsWith('ar:')) return 'しまったメモ（' + memoLocation(key.slice(3)) + '）';
   const [kind, id, detail, extra] = key.split(':');
   const category = name => name === 'coop' ? 'サーモンラン' : 'バトル';
   if (kind === 'coach') return coachTitle(id);
@@ -753,7 +766,7 @@ function memoLocation(key){
   }
   return key;
 }
-const memoKinds = ['coop','vs','td','cw','sb','al','wk','rl','wc','wv','bs','cm','ct','th','coach'];
+const memoKinds = ['coop','vs','td','cw','sb','al','wk','rl','wc','wv','bs','cm','ct','th','coach','ar'];
 const coachTitle = kind => (kind === 'coop' ? 'サーモンラン' : 'バトル') + '・コーチング';
 function coachingPreview(key){
   const text = memoOf(key);
@@ -769,11 +782,84 @@ function coachingLink(kind){
 }
 const memoFindText = value => nfkc(value).toLowerCase();
 function memoScopeOf(key){
+  if (key.startsWith('ar:')) return memoScopeOf(key.slice(3));
   const [kind, id] = key.split(':');
   if (['cm', 'ct', 'th'].includes(kind)) return 'contest';
   if (['al', 'wk', 'coach'].includes(kind)) return id;
   return ['coop', 'td', 'cw', 'wc', 'bs'].includes(kind) ? 'coop' : 'vs';
 }
+// ---------- 保存先を変える・しまう（評価2回目 14）----------
+const typeOfWeapon = (set, id) => { const x = window.TIER_DATA && TIER_DATA.sets[set] && TIER_DATA.sets[set].items.find(i => i.id === id); return x && x.type; };
+function moveTargets(key){
+  if (key.startsWith('ar:')) return [key.slice(3)].concat(moveTargets(key.slice(3))); // しまったメモは、まず元の場所
+  const [k, a, b, c] = key.split(':'), out = [];
+  const coop = memoScopeOf(key) === 'coop';
+  if (coop){
+    const S = ['coop', 'td', 'cw'].includes(k) ? a : null, W = k === 'cw' ? b : k === 'wc' ? a : null, T = W ? typeOfWeapon('coopWeapon', W) : k === 'wk' ? b : null;
+    if (S){ out.push('coop:' + S); ['Low', 'Mid', 'High'].forEach(t => out.push('td:' + S + ':' + t)); if (W) out.push('cw:' + S + ':' + W); }
+    if (W) out.push('wc:' + W);
+    if (T) out.push('wk:coop:' + T);
+    out.push('al:coop');
+  } else {
+    const S = ['vs', 'sb'].includes(k) ? a : null, R = k === 'vs' && b && b !== 'all' ? b : k === 'rl' ? a : null;
+    const W = k === 'sb' ? b : k === 'wv' ? a : null, T = W ? typeOfWeapon('vsWeapon', W) : k === 'wk' ? b : null;
+    if (S){ out.push('vs:' + S + ':all'); RULES.forEach(([r]) => out.push('vs:' + S + ':' + r)); if (W) out.push('sb:' + S + ':' + W); }
+    if (W) out.push('wv:' + W);
+    if (T) out.push('wk:vs:' + T);
+    if (R) out.push('rl:' + R); else RULES.forEach(([r]) => out.push('rl:' + r));
+    out.push('al:vs');
+  }
+  return [...new Set(out)].filter(x => x !== key);
+}
+const canMove = key => !!key && !/^(cm|ct|th|coach|ar):/.test(key.replace(/^ar:/, '')); // ar: の中身の種類で判断（Codexレビュー）
+function syncMove(){
+  const box = document.getElementById('edMove'), k = ed ? edKey() : '';
+  box.hidden = !(ed && document.getElementById('editor').classList.contains('reading') && canMove(k) && memoOf(k));
+  document.getElementById('edStow').hidden = k.startsWith('ar:');
+  document.getElementById('edMoveBtn').textContent = k.startsWith('ar:') ? '元に戻す・保存先を変える' : '保存先を変える';
+}
+let mvSheet = null;
+function closeMoveSheet(){ if (mvSheet){ mvSheet.remove(); mvSheet = null; } }
+function openMoveSheet(){
+  const src = edKey(), list = moveTargets(src);
+  closeMoveSheet();
+  mvSheet = document.createElement('div'); mvSheet.className = 'nbs-bg';
+  mvSheet.innerHTML = '<div class="nbs"><h3>どこに移しますか<button data-mvclose="1">とじる</button></h3><div class="body list mv-list">' +
+    list.map((k, i) => '<button data-mvto="' + esc(k) + '">' + esc((src.startsWith('ar:') && i === 0 ? '元の場所に戻す: ' : '') + memoLocation(k)) +
+      '<small>' + (memoOf(k) ? 'メモがあるので、その後ろにつなげます' : 'まだ何も書いていない欄') + '</small></button>').join('') + '</div></div>';
+  mvSheet.addEventListener('click', e => {
+    if (e.target === mvSheet || e.target.closest('[data-mvclose]')){ closeMoveSheet(); return; }
+    const t = e.target.closest('[data-mvto]'); if (t){ closeMoveSheet(); moveMemo(src, t.dataset.mvto); }
+  });
+  document.body.appendChild(mvSheet);
+}
+// src の文を dst へ移す（dst に文があれば後ろにつなげる）。画像は元の欄に残す
+function moveMemo(src, dst, stow){
+  if (!ed) return;
+  clearTimeout(saveTimer); saveMemo();
+  if (window.noteFlush) noteFlush();
+  if (window.noteDirty && (noteDirty(src) || noteDirty(dst))){ toast('保存できていない書きかけがあるので移せませんでした'); return; }
+  const text = memoOf(src); if (!text) return;
+  const cur = memoOf(dst), before = { s: memos[src], d: memos[dst] };
+  if (window.noteForget){ noteForget(src); noteForget(dst); }
+  memos[dst] = cur ? (cur === text ? cur : cur + '\n' + text) : text; delete memos[src];
+  if (!save('sm_memos', memos)){
+    if (before.d === undefined) delete memos[dst]; else memos[dst] = before.d; memos[src] = before.s;
+    toast('移せませんでした（空き容量を確かめてください）'); return;
+  }
+  if (pins.has(src)){ pins.delete(src); if (PIN_KEY_RE.test(dst)) pins.add(dst); if (!save('sm_pins', [...pins])){ pins.delete(dst); pins.add(src); toast('「試合前」の印を移せませんでした'); } }
+  touchMemo(dst); if (window.settleMemoAt) settleMemoAt(src);
+  const pics = window.hasPics && hasPics(src);
+  ed = { read: true, kind: 'found', id: dst, rule: null };
+  document.getElementById('edTitle').textContent = memoLocation(dst);
+  drawEditor();
+  toast((stow ? 'しまいました。「メモ一覧」で探すと出てきます' : dst === src.slice(3) ? '元の場所に戻しました' : '「' + memoLocation(dst) + '」に移しました') + (pics ? '（画像は元の欄に残っています）' : ''), 4000);
+}
+document.getElementById('edMoveBtn').onclick = () => { if (ed) openMoveSheet(); };
+document.getElementById('edStow').onclick = () => {
+  if (!ed) return; const k = edKey();
+  if (confirm('このメモをしまいますか？\nいつもの画面には出なくなり、「メモ一覧」で探した時だけ出ます。開いて「元に戻す」で戻せます。')) moveMemo(k, 'ar:' + k, true);
+};
 // ---------- 最近消したメモ（2026-11-27 評価2回目の優先順位3）----------
 // メモを空にして保存した時、消す前の文を30日・30件まで取っておき、「メモ」タブの「最近消したメモ」から戻せる
 let trash = load('sm_trash', []); if (!Array.isArray(trash)) trash = [];
@@ -806,14 +892,14 @@ function restoreTrash(id){
   toast('戻しました');
 }
 function renderMemoSearch(){
-  return '<div id="bwarnBox">' + backupWarnBar() + '</div><div class="memo-search"><label for="memoSearch">保存したメモ</label><input id="memoSearch" type="search" placeholder="本文・ステージ名・ブキ名" value="' + esc(ui.memoSearch || '') + '"></div>' +
+  return '<div id="bwarnBox">' + backupWarnBar() + '</div><div class="memo-search"><label for="memoSearch">保存したメモ・作戦図</label><input id="memoSearch" type="search" placeholder="本文・ステージ名・ブキ名・作戦図の題名" value="' + esc(ui.memoSearch || '') + '"></div>' +
     '<div class="memo-scope" aria-label="表示するメモ">' +
     [['all', 'すべて'], ['coop', 'サーモンラン'], ['vs', 'バトル'], ['contest', 'ばちこん']].map(([key, name]) =>
       '<button data-memoscope="' + key + '" aria-pressed="' + ((ui.memoScope || 'all') === key) + '">' + name + '</button>').join('') +
     '</div><div class="memo-scope" aria-label="並べ方">' +
     [['new', '新しい順'], ['place', '場所の順']].map(([key, name]) =>
       '<button data-memosort="' + key + '" aria-pressed="' + ((ui.memoSort || 'new') === key) + '">' + name + '</button>').join('') +
-    '</div><details class="memo-options"' + (ui.showBackup ? ' open' : '') + '><summary>コーチング</summary>' +
+    '</div><div class="memo-range">探す範囲: メモの本文・場所・ブキ名、作戦図の題名・手順のメモ・地図の文字</div><details class="memo-options"' + (ui.showBackup ? ' open' : '') + '><summary>コーチング</summary>' +
     coachingLink('coop') + coachingLink('vs') + '</details>' +
     '<button class="bgo" data-gobackup="1">バックアップ・機種変更 ›</button>' +
     '<div id="memoSearchResults" class="list" aria-live="polite"></div><div id="memoTrash">' + trashHTML() + '</div>';
@@ -830,8 +916,10 @@ async function fillMemoSearch(){
   if (!results) return;
   const request = ++memoSearchRequest;
   let images = [];
-  let picsFailed = false;
+  let picsFailed = false, boards = [], boardsFailed = false;
   try { if (window.memoPicKeys) images = await memoPicKeys(); } catch (e){ picsFailed = true; }
+  const scope = ui.memoScope || 'all', bTerms = memoFindText(ui.memoSearch || '').trim();
+  if (bTerms && scope !== 'contest' && window.boardSearchItems){ try { boards = await boardSearchItems(); } catch (e){ boardsFailed = true; } }
   if (!results.isConnected || request !== memoSearchRequest) return;
   const pictureKeys = new Set(images);
   const terms = memoFindText(ui.memoSearch || '').trim().split(/\s+/).filter(Boolean);
@@ -846,14 +934,19 @@ async function fillMemoSearch(){
     const excerpt = lines.find(line => terms.some(term => memoFindText(line).includes(term))) || lines[0] || '画像のみ';
     matches.push({ key, label, excerpt, hasPic, at: Number(memoAt[key]) || 0 });
   }
+  const bMatches = boards.filter(x => (scope === 'all' || x.kind === scope) && terms.every(term => memoFindText([x.title, x.place, ...x.notes, ...x.texts].join('\n')).includes(term)))
+    .map(x => ({ ...x, hit: x.notes.find(t => terms.some(term => memoFindText(t).includes(term))) || x.texts.find(t => terms.some(term => memoFindText(t).includes(term))) || '' }))
+    .sort((p, q) => q.updated - p.updated);
+  const boardHTML = bMatches.length ? '<div class="sec">作戦図 ' + bMatches.length + '件</div>' + bMatches.map(x =>
+    '<button class="row memo-found" data-nbopen="' + esc(x.id) + '"><div class="rinfo"><div class="rname">▦ ' + esc(x.title) + '</div><div class="rprev">' + esc(x.place) + (x.hit ? ' ｜ ' + esc(x.hit.slice(0, 120)) : '') + '</div>' + (x.updated ? '<div class="mf-at">' + esc(memoDate(x.updated)) + ' に更新</div>' : '') + '</div></button>').join('') : '';
   // 新しい順（既定）: 書いた日時の新しい物から。日時の無い古いメモは最後に場所の順で
   matches.sort((a, b) => (ui.memoSort === 'place' ? 0 : b.at - a.at) || a.label.localeCompare(b.label, 'ja'));
-  results.innerHTML = (matches.length ? '<div class="sec">' + matches.length + '件</div>' + matches.map(({key, label, excerpt, hasPic, at}) =>
+  results.innerHTML = (matches.length ? '<div class="sec">メモ ' + matches.length + '件</div>' + matches.map(({key, label, excerpt, hasPic, at}) =>
     '<button class="row memo-found" data-memokey="' + esc(key) + '"><div class="rinfo"><div class="rname">' +
     (pins.has(key) ? '<span class="mf-pin" aria-label="試合前に見る">★</span>' : '') + esc(label) + '</div><div class="rprev">' + esc(excerpt.slice(0, 240)) + (hasPic && excerpt !== '画像のみ' ? ' ｜ 画像あり' : '') + '</div>' + (at ? '<div class="mf-at">' + esc(memoDate(at)) + ' に更新</div>' : '') + '</div></button>').join('') :
-    '<div class="empty">' + (terms.length ? '該当するメモがありません。作戦図は「作戦図」から探せます。' :
+    boardHTML ? '' : '<div class="empty">' + (terms.length ? '該当するメモ・作戦図がありません。' :
       '保存したメモはここに並びます。「ステージ」「ブキ」から対象を選ぶか、「コーチング」から書き始められます。') + '</div>') +
-    (picsFailed ? '<div class="empty">画像の一覧を読み込めませんでした。</div>' : '');
+    boardHTML + (picsFailed ? '<div class="empty">画像の一覧を読み込めませんでした。</div>' : '') + (boardsFailed ? '<div class="empty">作戦図を読み込めませんでした。</div>' : '');
 }
 function salmonQuickRead(stageId){
   const keys = Object.keys(memoTides).map(tide => 'td:' + stageId + ':' + tide);
@@ -1001,7 +1094,7 @@ function render(){
   const inMore = ui.view === 'contest' || ui.view === 'tier' || ui.view === 'backup';
   document.getElementById('navMore').classList.toggle('on', inMore);
   // 上の題名は今の画面の名前（前はどの画面でも「ステージメモ」で、今どこか分からなかった。評価 F11）
-  document.getElementById('title').textContent = ({ now:'いまのステージ', note:'バトルメモ', cnote:'サモランメモ', list:'メモ', contest:'ばちこん', tier:'ティア', backup:'バックアップ・機種変更' })[ui.view] || 'ステージメモ';
+  document.getElementById('title').textContent = ({ now:'いまのステージ', note:'バトルメモ', cnote:'サモランメモ', list:'メモ一覧', contest:'ばちこん', tier:'ティア', backup:'バックアップ・機種変更' })[ui.view] || 'ステージメモ';
   document.getElementById('navMoreLbl').textContent = ui.view === 'contest' ? 'ばちこん' : ui.view === 'tier' ? 'ティア' : ui.view === 'backup' ? 'バックアップ' : 'その他';
   maybeAutoOpen();
   armSlotTimer(); // 次の時間帯の境目で描き直す
@@ -1463,7 +1556,7 @@ function drawEditor(){
   document.getElementById('edEdit').hidden = !reading;
   if (reading) hint.textContent = '';
   document.getElementById('edSaved').textContent = '';
-  drawEdPics();
+  drawEdPics(); syncMove();
 }
 // 画像はメモ欄と同じ保存キーを使う。ばちこんのWAVE・秒のメモは対象外。
 function drawEdPics(){
@@ -1515,7 +1608,7 @@ function saveMemo(){
 function closeEditor(fromPop){
   if (!ed) return;
   clearTimeout(saveTimer); saveMemo();
-  ed = null; drawEdPics(); document.getElementById('editor').classList.remove('reading'); document.getElementById('edEdit').hidden = true; // 画像の欄を空にする（閉じた後の描き直しで読みにいかないように）
+  ed = null; closeMoveSheet(); drawEdPics(); syncMove(); document.getElementById('editor').classList.remove('reading'); document.getElementById('edEdit').hidden = true; // 画像の欄を空にする（閉じた後の描き直しで読みにいかないように）
   document.getElementById('editor').classList.remove('open');
   document.getElementById('memoText').blur();
   if (!fromPop && history.state && history.state.editor) history.back();
@@ -1526,7 +1619,7 @@ function closeEditor(fromPop){
 
 // ---------- バックアップ ----------
 let toastTimer;
-function toast(t){ clearTimeout(toastTimer); const el = document.getElementById('toast'); el.textContent = t; el.classList.add('show'); toastTimer = setTimeout(() => el.classList.remove('show'), 2200); }
+function toast(t, ms){ clearTimeout(toastTimer); const el = document.getElementById('toast'); el.textContent = t; el.classList.add('show'); toastTimer = setTimeout(() => el.classList.remove('show'), ms || 2200); } // ms: 長い知らせは長めに出す
 async function exportMemos(){
   const d = new Date(), stamp = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
   // 作戦図（土台の画像を含む）はIndexedDBから読んで一緒に書き出す
@@ -1564,8 +1657,8 @@ async function exportMemos(){
 //  ・中身は importPlan で1回だけ読み解き、表示・書き込み・結果の数で同じ物を使う（秒のメモの書き方の違いで同じキーにまとまる物はファイルの順につなげる）
 //  ・控えを保存できてから端末のデータを書き換える（控えが保存できない時は元に戻し、控え無しで読み込むか聞く）
 //  ・戻す時は、読み込んだ後に書き直したメモ・記録には触らない
-const IMP_KEY_RE = /^(coop|vs|cm|ct|sp|wc|wv|bs|th|dg|nb|bd|sb|rl|cw|al|wk|td|coach):/;
-const PIN_KEY_RE = /^(coop|vs|wv|wc|bs|sb|rl|cw|al|wk|td):.+/;
+const IMP_KEY_RE = /^(coop|vs|cm|ct|sp|wc|wv|bs|th|dg|nb|bd|sb|rl|cw|al|wk|td|coach|ar):/;
+const PIN_KEY_RE = /^(ar:)?(coop|vs|wv|wc|bs|sb|rl|cw|al|wk|td):.+/; // ar: しまったメモの印（戻した時に復元）
 function importPlan(j){
   const m = j.memos, cs = (j.contests && typeof j.contests === 'object') ? j.contests : {}, mAt = j.memoAt && typeof j.memoAt === 'object' ? j.memoAt : {};
   const inc = new Map(), at = {}; let bad = 0;
@@ -1607,7 +1700,7 @@ function showImportSheet(p, onGo){
         (p.diff.length ? '<div class="idiff">' + p.diff.slice(0, 3).map(([k, a, b]) => '<div><b>' + esc(memoLocation(k)) + '</b></div><div>このスマホ: ' + short(a) + '</div><div>控え: ' + short(b) + '</div>').join('<hr>') + (p.diff.length > 3 ? '<div>ほか' + (p.diff.length - 3) + '件</div>' : '') + '</div>' : '') +
         '<div class="ichoice"><button data-imk="1" aria-pressed="' + keepMine + '">このスマホの方を残す<small>違う物は読み込みません（足す物だけ入ります）</small></button>' +
         '<button data-imk="0" aria-pressed="' + !keepMine + '">控えの方にする<small>このスマホの内容を、控えの内容に置き換えます</small></button></div>' : '') +
-      '<p class="inote">読み込みで変わったメモ・ばちこんの記録・「試合前」の印は、あとから「メモ」タブのバックアップの「読み込む前に戻す」で戻せます（最後の1回の読み込みだけ。作戦図・画像・ティアは足すだけなので対象外）。</p>' +
+      '<p class="inote">読み込みで変わったメモ・ばちこんの記録・「試合前」の印は、あとから「その他 → バックアップ・機種変更」の「読み込む前に戻す」で戻せます（最後の1回の読み込みだけ。作戦図・画像・ティアは足すだけなので対象外）。</p>' +
       '<div class="ibtn"><button data-imgo="0">やめる</button><button class="pri" data-imgo="1">読み込む</button></div></div>';
   };
   draw(); document.body.appendChild(el);
@@ -1769,7 +1862,7 @@ function importMemos(file){
     }catch(e){ alert('このファイルは読み込めませんでした。「書き出す」で作ったファイルを選んでください。'); return; }
     showImportSheet(plan, keepMine => {
       try { runImport(j, keepMine); }
-      catch (e){ alert('読み込みの途中で問題が起きました。「メモ」タブのバックアップに「読み込む前に戻す」が出ていれば、それで戻せます。'); render(); }
+      catch (e){ alert('読み込みの途中で問題が起きました。「その他 → バックアップ・機種変更」に「読み込む前に戻す」が出ていれば、それで戻せます。'); render(); }
     });
   };
   r.readAsText(file);
@@ -1783,6 +1876,7 @@ document.addEventListener('click', e => {
   if (!t) return;
   if (t.closest('#play') || t.closest('#tier') || t.closest('.tsheet-bg') || t.closest('#bplace') || t.closest('#board') || t.closest('.bsheet-bg') || t.closest('.nbs-bg')) return;
   if (t.dataset.qmore){ const box = t.closest('.quick-memos'), open = box.classList.toggle('open'); t.setAttribute('aria-expanded', String(open)); t.textContent = open ? '▲ たたむ' : '▼ ほか' + t.dataset.qmore + '件'; return; }
+  if (t.dataset.goview){ document.getElementById(({ note:'navNote', cnote:'navCoop', list:'navList' })[t.dataset.goview]).click(); return; }
   if (t.dataset.gobackup){ if (window.noteFlush) noteFlush(); setUI({ view:'backup' }); document.getElementById('main').scrollTop = 0; return; }
   if (t.dataset.impundo){ undoImport(); return; }
   if (t.dataset.trashback != null){ restoreTrash(t.dataset.trashback); return; }
@@ -1864,8 +1958,8 @@ document.getElementById('navContest').onclick =() => { setMoreMenu(false); if (w
 // どのタブに何を書くかを3枚で。メモがまだ無い人に最初の1回だけ出す（「その他 → 使い方」でいつでも見られる）
 const INTRO = [
   ['いまのステージ', '今の時間帯の<b>ステージ</b>と、そこに書いた<b>メモ</b>が出ます。試合の前にここを開けば、ぱっと確認できます。'],
-  ['バトルメモ・サモランメモ', 'ステージ・ブキ・ルール（サモランは<b>潮位</b>）ごとにメモを書く場所です。大事なメモは「<b>☆ 試合前</b>」を押すと、その画面の上にまとまって出ます。ステージ・潮位・全体のメモと、サモランの今の支給ブキのメモは「<b>いまのステージ</b>」にも出ます。'],
-  ['メモ', '書いたメモを<b>全部まとめて探せます</b>。メモはこのスマホの中だけに保存されるので、機種変更の前は「その他」の「<b>バックアップ・機種変更</b>」で<b>書き出す</b>を押して、控えを取ってください。']
+  ['バトルメモ・サモランメモ', 'ステージ・ブキ・ルール（サモランは<b>潮位</b>）ごとにメモを書く場所です。大事なメモは「<b>☆ 試合前</b>」を押すと、その画面の上にまとまって出ます。ステージ・潮位・全体のメモと、サモランの今の支給ブキのメモは「<b>いまのステージ</b>」にも出ます。<br>どの画面から書いても、<b>同じステージ・同じ欄なら同じメモ</b>です（片方で直すと、もう片方も変わります）。'],
+  ['メモ一覧', '書いたメモと作戦図を<b>まとめて探せます</b>。作戦図も題名・手順のメモで探せます。メモはこのスマホの中だけに保存されるので、機種変更の前は「その他」の「<b>バックアップ・機種変更</b>」で<b>書き出す</b>を押して、控えを取ってください。']
 ];
 let introAt = 0;
 function drawIntro(){
