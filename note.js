@@ -52,6 +52,9 @@ const css = `
 .nb-pin{flex:none;align-self:center;min-height:36px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:600;color:var(--sub);border:1px solid var(--line2);background:var(--card2);margin-left:auto}
 .nb-pin.on{color:#1a1020;background:#ffd23d;border-color:#ffd23d}
 .nb-sec h3 .nb-pin + .nb-ebtn{margin-left:6px}
+.nb-rulechip{display:flex;align-items:center;gap:6px;width:100%;margin:0 0 10px;padding:8px 12px;border-radius:10px;background:var(--card);border:1px solid var(--line);font-size:13px;color:var(--sub);text-align:left}
+.nb-rulechip b{color:var(--text)}
+.nb-rulechip span{margin-left:auto;font-size:12px;color:var(--salmon)}
 .nb-pins{background:rgba(255,210,61,.08);border:1px solid rgba(255,210,61,.5);border-radius:12px;padding:8px 10px 4px;margin-bottom:10px}
 .nb-pins .t{font-size:12px;font-weight:700;color:#ffd23d;margin:0 2px 4px}
 .nb-pinitem{display:block;width:100%;text-align:left;padding:6px 2px 8px;border-top:1px solid var(--line)}
@@ -228,8 +231,9 @@ document.getElementById('main').addEventListener('click', e => { if (e.target.cl
 // バトルメモ（view 'note'）とサモランメモ（view 'cnote'）
 window.isNoteView = v => v === 'note' || v === 'cnote';
 // 今出ている画面がこのメモ画面でなければ（別のタブから来た・バトル⇔サモラン）、書きかけの無い欄は読む表示に戻す
-window.renderNote = () => { addList = []; pinList = []; const m = document.getElementById('main'); if (!(m.querySelector('.nb-cards') && m.dataset.nv === ui.view)) closeEditingSecs(); return (ui.view === 'cnote' ? renderCoop() : renderBattle()).replace('<!--PINS-->', () => pinCard()); }; // 関数で渡す（メモに $' などがあっても置き換えの特別な記号として読まれないように。Codexレビュー）
+window.renderNote = () => { addList = []; pinList = []; const m = document.getElementById('main'); if (!(m.querySelector('.nb-cards') && m.dataset.nv === ui.view)){ closeEditingSecs(); showRules = false; } return (ui.view === 'cnote' ? renderCoop() : renderBattle()).replace('<!--PINS-->', () => pinCard()); }; // 関数で渡す（メモに $' などがあっても置き換えの特別な記号として読まれないように。Codexレビュー）
 
+let showRules = false; // バトルメモのルールの列を広げているか（描き直しても保つ。画面を移ると閉じる）
 function renderBattle(){
   // スケジュールが無くても（初回・通信できない）、ステージを選べばメモを読めるようにする（前は「読み込み中…」のまま止まっていた。Codexの評価 2026-11-23）
   const c = current(), w = weaponById(nb.weapon);
@@ -246,7 +250,10 @@ function renderBattle(){
     (w ? '<button class="nb-card w" data-nbpick="weapon"><img src="' + esc(w.img) + '" alt=""><span class="t"><small>ブキ</small><b>' + esc(w.name) + '</b></span></button>'
       : '<button class="nb-card w empty" data-nbpick="weapon"><span class="t"><small>ブキ</small><b>タップして選ぶ</b></span></button>') + '</div>';
   // ルール（今のモードのルールが選ばれている。変えると手動）
-  h += '<div class="nb-rules">' + RULES.map(([id, n]) => '<button data-nbrule="' + id + '" class="' + (c.ruleId === id ? 'on' : '') + '">' + esc(n) + '</button>').join('') + '</div>';
+  // 評価2回目 C3（2026-11-27）: 上のマッチの種類にルールが付いているので、普段は「ルール: エリア　変える ›」の1行にたたむ。
+  // 押した時・自分でルールを選んでいる時・スケジュールが無い時だけ列を出す（選ぶ所が3段並んで、何を選ぶのか分かりにくかった）
+  if (showRules || c.ruleManual || !c.modes.length || !c.ruleId) h += '<div class="nb-rules">' + RULES.map(([id, n]) => '<button data-nbrule="' + id + '" class="' + (c.ruleId === id ? 'on' : '') + '">' + esc(n) + '</button>').join('') + '</div>';
+  else h += '<button class="nb-rulechip" data-nbrules="1">ルール: <b>' + esc(RULE_NAME[c.ruleId] || '') + '</b><span>ほかのルールのメモを見る ›</span></button>';
   if (c.ruleManual || c.manual) h += '<div class="nb-note">' + (c.manual ? 'ステージ' : '') + (c.manual && c.ruleManual ? 'と' : '') + (c.ruleManual ? 'ルール' : '') + 'を自分で選んでいます（次の時間帯になると今のものに戻ります）<button data-nbreset="1">今に戻す</button></div>';
   if (!c.stageId) return h + '<div class="nb-empty">ステージを選ぶと、メモが出ます</div>';
   const sName = nameById(c.stageId), rName = RULE_NAME[c.ruleId] || '';
@@ -667,6 +674,7 @@ main.addEventListener('click', e => {
     autosize(ta); clearTimeout(timers[k]); delete timers[k]; dirty.set(k, ta.value); saveDirty([k]); revSync(k);
   }
   else if (d.nbqmore){ const box = t.closest('.nb-pins'), open = box.classList.toggle('open'); t.setAttribute('aria-expanded', String(open)); t.textContent = open ? '▲ たたむ' : '▼ ほか' + d.nbqmore + '件'; }
+  else if (d.nbrules){ showRules = true; render(); }
   else if (d.nbpin){ if (window.togglePin && togglePin(d.nbpin)) render(); }
   else if (d.nbjump){ const s = main.querySelector('[data-nbsec="' + CSS.escape(d.nbjump) + '"]'); if (s){ const tx = s.querySelector('.nb-txt'); if (tx && !tx.classList.contains('open')){ expanded.add(d.nbjump); tx.classList.add('open'); const mb = s.querySelector('[data-nbmore]'); if (mb){ mb.hidden = false; mb.textContent = '▲ たたむ'; } } s.scrollIntoView({ block: 'start', behavior: 'smooth' }); const fb = s.querySelector('[data-nbedit]'); if (fb) fb.focus({ preventScroll: true }); } } // 読み上げ・キー操作でも移った先から続けられるように
   else if (d.nbmore){
