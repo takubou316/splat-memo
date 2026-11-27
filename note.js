@@ -57,7 +57,10 @@ const css = `
 .nb-pinitem{display:block;width:100%;text-align:left;padding:6px 2px 8px;border-top:1px solid var(--line)}
 .nb-pinitem:first-of-type{border-top:0}
 .nb-pinitem small{display:block;font-size:11px;color:var(--faint);margin-bottom:2px}
-.nb-pinitem b{display:block;font-size:17px;font-weight:600;line-height:1.5;color:var(--text);white-space:pre-line;word-break:break-word}
+.nb-pinitem b{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;font-size:17px;font-weight:600;line-height:1.5;color:var(--text);white-space:pre-line;word-break:break-word}
+.nb-pins .nb-pinitem.qm{display:none}
+.nb-pins.open .nb-pinitem.qm{display:block}
+.nb-pins .qmore-btn{margin:4px 0 6px;min-height:34px;padding:0 12px;border-radius:999px;font-size:12px;font-weight:600;color:var(--sub);background:var(--card);border:1px solid var(--line2)}
 .nb-pinhint{font-size:11px;color:var(--faint);margin:0 2px 10px}
 .nb-picerr{font-size:12px;color:#ff9b9b}
 .nb-inl{display:inline-flex;align-items:center;min-height:40px;margin:0 6px 8px 0;padding:0 12px;border-radius:999px;border:1px dashed var(--line2);color:var(--sub);font-size:13px;font-weight:600}
@@ -204,8 +207,9 @@ const sec = (key, title, sub, ph, main, inline, pinTitle) => { // pinTitle: 「�
     (hide && inline ? '<button class="nb-inl" data-nbadd="' + esc(key) + '">＋ ' + esc(title) + '</button>' : '');
 };
 // 「試合前に見る」要点カード: 印を付けた欄の最初の3行を、選ぶ部分のすぐ下にまとめて大きく出す（押すとその欄へ）。印が無ければ使い方の1行だけ
-const pinCard = () => pinList.length ? '<div class="nb-pins"><div class="t">★ 試合前に見る</div>' + pinList.map(([k, title, txt]) =>
-  '<button class="nb-pinitem" data-nbjump="' + esc(k) + '"><small>' + esc(title) + '</small><b>' + esc(txt.split(/\r?\n/).map(s => s.trim()).filter(Boolean).slice(0, 3).join('\n')) + '</b></button>').join('') + '</div>'
+// 要点は表示上3行まで、5件目からは「ほか○件」で畳む（評価2回目の優先順位6）
+const pinCard = () => pinList.length ? '<div class="nb-pins"><div class="t">★ 試合前に見る</div>' + pinList.map(([k, title, txt], i) =>
+  '<button class="nb-pinitem' + (i >= 4 ? ' qm' : '') + '" data-nbjump="' + esc(k) + '"><small>' + esc(title) + '</small><b>' + esc(txt.split(/\r?\n/).map(s => s.trim()).filter(Boolean).slice(0, 3).join('\n')) + '</b></button>').join('') + (pinList.length > 4 ? '<button class="qmore-btn" data-nbqmore="' + (pinList.length - 4) + '" aria-expanded="false">▼ ほか' + (pinList.length - 4) + '件</button>' : '') + '</div>'
   : '<div class="nb-pinhint">大事なメモは「☆ 試合前」を押すと、ここにまとめて出ます</div>';
 // 隠した空の欄の入口（画面の下にまとめる）
 const addBar = () => addList.length ? '<div class="nb-add"><div class="lab">メモを追加（まだ書いていない欄）</div><div class="chips">' +
@@ -647,6 +651,7 @@ main.addEventListener('click', e => {
     if (redoText.has(k)){ ta.value = redoText.get(k); redoText.delete(k); } else { redoText.set(k, ta.value); ta.value = startText.get(k) || ''; }
     autosize(ta); clearTimeout(timers[k]); delete timers[k]; dirty.set(k, ta.value); saveDirty([k]); revSync(k);
   }
+  else if (d.nbqmore){ const box = t.closest('.nb-pins'), open = box.classList.toggle('open'); t.setAttribute('aria-expanded', String(open)); t.textContent = open ? '▲ たたむ' : '▼ ほか' + d.nbqmore + '件'; }
   else if (d.nbpin){ if (window.togglePin && togglePin(d.nbpin)) render(); }
   else if (d.nbjump){ const s = main.querySelector('[data-nbsec="' + CSS.escape(d.nbjump) + '"]'); if (s){ const tx = s.querySelector('.nb-txt'); if (tx && !tx.classList.contains('open')){ expanded.add(d.nbjump); tx.classList.add('open'); const mb = s.querySelector('[data-nbmore]'); if (mb){ mb.hidden = false; mb.textContent = '▲ たたむ'; } } s.scrollIntoView({ block: 'start', behavior: 'smooth' }); const fb = s.querySelector('[data-nbedit]'); if (fb) fb.focus({ preventScroll: true }); } } // 読み上げ・キー操作でも移った先から続けられるように
   else if (d.nbmore){

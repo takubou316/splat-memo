@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-27e';</script>
+<script>window.APP_VERSION = '2026-11-27f';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -294,6 +294,10 @@ nav button.on{color:var(--salmon)}
 .quick-memo.pin span{flex:none;font-weight:700}
 .quick-memo.pin b{white-space:pre-line;font-size:15px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
 .stage + .quick-memos,.nowpics + .quick-memos,.nowbd + .quick-memos{margin:-2px 14px 10px}
+.quick-memos .qmore{display:none}
+.quick-memos.open .qmore{display:flex}
+.qmore-btn{justify-self:start;min-height:34px;padding:0 12px;border-radius:999px;font-size:12px;font-weight:600;color:var(--sub);background:var(--card);border:1px solid var(--line2)}
+.ptide b{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
 </style>
 </head>
 <body>
@@ -413,9 +417,12 @@ window.isPinned = isPinned; window.togglePin = togglePin;
 window.dropPin = k => { if (pins.delete(k)) save('sm_pins', [...pins]); };
 // 印の付いたメモの最初の数行（いまのステージ・バトルメモ・サモランメモの「試合前に見る」で使う）
 const pinLines = (v, n) => String(v || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean).slice(0, n).join('\n');
+const PIN_SHOW = 4;
 function pinnedQuick(keys, title){
-  const items = keys.filter(k => isPinned(k) && memoOf(k)).map(k => '<button class="quick-memo pin" data-memokey="' + esc(k) + '"><span>★ ' + esc(pinLabel(k)) + '</span><b>' + esc(pinLines(memoOf(k), 3)) + '</b></button>');
-  return items.length ? '<div class="quick-memos"><div class="quick-title">' + esc(title || '試合前に見る') + '</div>' + items.join('') + '</div>' : '';
+  const items = keys.filter(k => isPinned(k) && memoOf(k)).map((k, i) => '<button class="quick-memo pin' + (i >= PIN_SHOW ? ' qmore' : '') + '" data-memokey="' + esc(k) + '"><span>★ ' + esc(pinLabel(k)) + '</span><b>' + esc(pinLines(memoOf(k), 3)) + '</b></button>');
+  const more = items.length - PIN_SHOW;
+  return items.length ? '<div class="quick-memos"><div class="quick-title">' + esc(title || '試合前に見る') + '</div>' + items.join('') +
+    (more > 0 ? '<button class="qmore-btn" data-qmore="' + more + '" aria-expanded="false">▼ ほか' + more + '件</button>' : '') + '</div>' : '';
 }
 // 印の付いたメモの短い名前
 function pinLabel(k){ const a = k.split(':'); return a[0] === 'coop' ? 'ステージ共通' : a[0] === 'al' ? (a[1] === 'coop' ? 'サモラン全体' : 'バトル全体') : a[0] === 'rl' ? ((typeof RULE_NAME !== 'undefined' && RULE_NAME[a[1]]) || 'ルール') + '共通' : a[0] === 'vs' ? (a[2] === 'all' ? 'ステージ共通' : ((typeof RULE_NAME !== 'undefined' && RULE_NAME[a[2]]) || '') + 'の時') : a[0] === 'td' ? (memoTides[a[2]] || '') + 'の時' : 'メモ'; }
@@ -581,7 +588,8 @@ function vsCard(label, color, node, setting, now){
   const rule = setting.vsRule;
   return '<div class="card" style="--c:var(' + color + ')"><div class="chead"><span class="mode">' + esc(label) + '</span>' +
     '<span class="rule">' + esc(ruleFull(rule)) + '</span><span class="time">' + fmtRange(node.startTime, node.endTime, now) + '</span></div>' +
-    setting.vsStages.map(s => stageButton(s, rule) + (rule ? pinnedQuick([kVs(s.id, rule.id), kVs(s.id), 'rl:' + rule.id, 'al:vs'], stageName(s) + '・試合前に見る') : '')).join('') + '</div>';
+    (rule ? pinnedQuick(['rl:' + rule.id], ruleName(rule) + '共通・試合前に見る') : '') +
+    setting.vsStages.map(s => stageButton(s, rule) + (rule ? pinnedQuick([kVs(s.id, rule.id), kVs(s.id)], stageName(s) + '・試合前に見る') : '')).join('') + '</div>';
 }
 function coopCard(label, node, now){
   const st = node.setting || {};
@@ -648,6 +656,7 @@ function renderNow(){
   if (!sched){ return h + coaching + '<div class="empty">' + (fetchError ? 'スケジュールを取得できませんでした。<br>通信を確認して右上の「更新」を押してください。' : '読み込み中…') + '</div>'; }
   const fn = ui.nowSub === 'salmon' ? salmonCards : battleCards;
   const cur = fn(p => p.cur, now);
+  if (cur && ui.nowSub !== 'salmon') h += pinnedQuick(['al:vs'], 'バトル全体・試合前に見る');
   h += cur || '<div class="empty">今の時間帯の情報がありません。<br>右上の「更新」を押してください。</div>';
   h += coaching;
   const next = fn(p => p.next, now);
@@ -833,7 +842,7 @@ function salmonQuickRead(stageId){
     const line = value.split(/\r?\n/).find(text => text.trim()) || '';
     return ['<button class="quick-memo" data-memokey="' + esc(key) + '"><span>' + esc(title) + '</span><b>' + esc(line.trim()) + '</b></button>'];
   });
-  return links.length ? '<div class="quick-memos"><div class="quick-title">試合前に読む</div>' + links.join('') + '</div>' : '';
+  return links.length ? '<div class="quick-memos"><div class="quick-title">潮位のメモ（1行目）</div>' + links.join('') + '</div>' : '';
 }
 
 function renderList(){
@@ -1728,6 +1737,7 @@ document.addEventListener('click', e => {
   const t = e.target.closest('button, [data-chip]');
   if (!t) return;
   if (t.closest('#play') || t.closest('#tier') || t.closest('.tsheet-bg') || t.closest('#bplace') || t.closest('#board') || t.closest('.bsheet-bg') || t.closest('.nbs-bg')) return;
+  if (t.dataset.qmore){ const box = t.closest('.quick-memos'), open = box.classList.toggle('open'); t.setAttribute('aria-expanded', String(open)); t.textContent = open ? '▲ たたむ' : '▼ ほか' + t.dataset.qmore + '件'; return; }
   if (t.dataset.impundo){ undoImport(); return; }
   if (t.dataset.trashback != null){ restoreTrash(t.dataset.trashback); return; }
   if (t.dataset.bplace && window.openBoardPlace){ openBoardPlace(t.dataset.bplace, null); return; }
