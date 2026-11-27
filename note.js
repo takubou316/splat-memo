@@ -16,8 +16,17 @@ const css = `
 .nb-modes button.on{border-color:var(--c,var(--salmon));box-shadow:inset 0 0 0 1px var(--c,var(--salmon))}
 .nb-modes button.on small{color:var(--c,var(--salmon))}
 .nb-pair{display:flex;gap:6px;margin-bottom:8px}
-.nb-pair button{flex:1;min-width:0;min-height:40px;padding:6px 8px;border-radius:9px;background:var(--card);border:1px solid var(--line);font-size:12px;font-weight:600;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nb-pair button{display:flex;flex-direction:column;align-items:stretch;gap:4px;flex:1;min-width:0;min-height:40px;padding:6px;border-radius:9px;background:var(--card);border:1px solid var(--line);font-size:12px;font-weight:600;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .nb-pair button.on{color:var(--text);border-color:var(--line2);background:var(--card2)}
+.nb-pair img{width:100%;height:44px;object-fit:cover;border-radius:6px;background:var(--card2);opacity:.7}
+.nb-pair button.on img{opacity:1}
+.nb-pair span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nb-pair .nb-other{flex:0 0 72px;justify-content:center;align-items:center;text-align:center;white-space:normal;font-size:11px;line-height:1.35;border-style:dashed}
+.nb-pair .nb-other small{display:block;font-size:10px;color:var(--salmon)}
+.nb-pair .nb-other.on{color:var(--text);border-color:var(--salmon);border-style:solid}
+.nb-card.rl .chg{position:absolute;right:8px;bottom:6px;font-size:10px;color:var(--salmon)}
+.nb-card.rl b{font-size:15px}
+.nb-cards > :only-child{grid-column:1/-1}
 .nb-cards{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
 .nb-card{position:relative;display:flex;align-items:center;gap:8px;min-height:64px;padding:8px;border-radius:12px;background:var(--card);border:1px solid var(--line2);text-align:left;overflow:hidden}
 .nb-card img{flex:none;width:52px;height:44px;object-fit:cover;border-radius:7px;background:var(--card2)}
@@ -258,19 +267,23 @@ function renderBattle(){
   if (!c.modes.length) h += noSchedNote('バトル');
   if (c.modes.length){
     h += '<div class="nb-modes">' + c.modes.map(m => '<button data-nbmode="' + esc(m.key) + '" class="' + (c.mode && m.key === c.mode.key ? 'on' : '') + '" style="--c:var(' + m.c + ')"><b>' + esc(m.label) + '</b><small>' + esc(RULE_NAME[m.s.vsRule.id] || m.s.vsRule.name) + '</small></button>').join('') + '</div>';
-    if (c.mode && c.mode.s.vsStages.length > 1) h += '<div class="nb-pair">' + c.mode.s.vsStages.map((s, i) => '<button data-nbpair="' + i + '" class="' + (!c.manual && c.pair === i ? 'on' : '') + '">' + esc(stageName(s)) + '</button>').join('') + '</div>';
+    if (c.mode && c.mode.s.vsStages.length > 1) h += '<div class="nb-pair">' + c.mode.s.vsStages.map((s, i) => '<button data-nbpair="' + i + '" class="' + (!c.manual && c.pair === i ? 'on' : '') + '"><img src="' + esc(imgOf(s.id)) + '" alt=""><span>' + esc(stageName(s)) + '</span></button>').join('') +
+      '<button class="nb-other' + (c.manual ? ' on' : '') + '" data-nbpick="stage">' + (c.manual ? '<small>自分で選んだ</small>' + esc(nameById(c.stageId)) : 'ほかの<br>ステージ') + '</button></div>';
   }
   // ステージとブキのカード（タップで選ぶ）
-  h += '<div class="nb-cards">' +
-    (c.stageId ? '<button class="nb-card" data-nbpick="stage"><img src="' + esc(imgOf(c.stageId)) + '" alt=""><span class="t"><small>ステージ</small><b>' + esc(nameById(c.stageId)) + '</b></span><span class="tag' + (c.manual ? ' man' : '') + '">' + (c.manual ? '手動' : '今') + '</span></button>'
+  const pairRow = !!(c.mode && c.mode.s.vsStages.length > 1);
+  const ruleRow = showRules || c.ruleManual || !c.modes.length || !c.ruleId;
+  h += '<div class="nb-cards' + (pairRow ? ' np' : '') + '">' + (pairRow ? '' :
+    c.stageId ? '<button class="nb-card" data-nbpick="stage"><img src="' + esc(imgOf(c.stageId)) + '" alt=""><span class="t"><small>ステージ</small><b>' + esc(nameById(c.stageId)) + '</b></span><span class="tag' + (c.manual ? ' man' : '') + '">' + (c.manual ? '手動' : '今') + '</span></button>'
       : '<button class="nb-card empty" data-nbpick="stage"><span class="t"><small>ステージ</small><b>選ぶ</b></span></button>') +
     (w ? '<button class="nb-card w" data-nbpick="weapon"><img src="' + esc(w.img) + '" alt=""><span class="t"><small>ブキ</small><b>' + esc(w.name) + '</b></span></button>'
-      : '<button class="nb-card w empty" data-nbpick="weapon"><span class="t"><small>ブキ</small><b>タップして選ぶ</b></span></button>') + '</div>';
+      : '<button class="nb-card w empty" data-nbpick="weapon"><span class="t"><small>ブキ</small><b>タップして選ぶ</b></span></button>') +
+    (pairRow && !ruleRow ? '<button class="nb-card rl" data-nbrules="1"><span class="t"><small>ルール</small><b>' + esc(RULE_NAME[c.ruleId] || '') + '</b></span><span class="chg">ほかのルール ›</span></button>' : '') + '</div>';
   // ルール（今のモードのルールが選ばれている。変えると手動）
   // 評価2回目 C3（2026-11-27）: 上のマッチの種類にルールが付いているので、普段は「ルール: エリア　変える ›」の1行にたたむ。
   // 押した時・自分でルールを選んでいる時・スケジュールが無い時だけ列を出す（選ぶ所が3段並んで、何を選ぶのか分かりにくかった）
-  if (showRules || c.ruleManual || !c.modes.length || !c.ruleId) h += '<div class="nb-rules">' + RULES.map(([id, n]) => '<button data-nbrule="' + id + '" class="' + (c.ruleId === id ? 'on' : '') + '">' + esc(n) + '</button>').join('') + '</div>';
-  else h += '<button class="nb-rulechip" data-nbrules="1">ルール: <b>' + esc(RULE_NAME[c.ruleId] || '') + '</b><span>ほかのルールのメモを見る ›</span></button>';
+  if (ruleRow) h += '<div class="nb-rules">' + RULES.map(([id, n]) => '<button data-nbrule="' + id + '" class="' + (c.ruleId === id ? 'on' : '') + '">' + esc(n) + '</button>').join('') + '</div>';
+  else if (!pairRow) h += '<button class="nb-rulechip" data-nbrules="1">ルール: <b>' + esc(RULE_NAME[c.ruleId] || '') + '</b><span>ほかのルールのメモを見る ›</span></button>';
   if (c.ruleManual || c.manual) h += '<div class="nb-note">' + (c.manual ? 'ステージ' : '') + (c.manual && c.ruleManual ? 'と' : '') + (c.ruleManual ? 'ルール' : '') + 'を自分で選んでいます（次の時間帯になると今のものに戻ります）<button data-nbreset="1">今に戻す</button></div>';
   if (!c.stageId) return h + '<div class="nb-empty">ステージを選ぶと、メモが出ます</div>';
   const sName = nameById(c.stageId), rName = RULE_NAME[c.ruleId] || '';

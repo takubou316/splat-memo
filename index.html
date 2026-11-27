@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-27o';</script>
+<script>window.APP_VERSION = '2026-11-27p';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -277,6 +277,12 @@ body:has(.ovl.open) #editor{z-index:21}
 
 .memo-search{display:grid;gap:5px;padding:8px 0 12px}
 .memo-search label,.quick-title{font-size:13px;color:var(--muted,#aab2be);font-weight:700}
+.othermatch>summary{list-style:none;margin:2px 0 12px;padding:12px 14px;border-radius:12px;background:var(--card);border:1px dashed var(--line2);font-size:14px;font-weight:600;color:var(--text)}
+.othermatch>summary::-webkit-details-marker{display:none}
+.othermatch>summary small{display:block;margin-top:2px;font-size:11px;font-weight:400;color:var(--faint)}
+.othermatch[open]>summary{margin-bottom:10px}
+.bfold summary{list-style:none;padding:10px 4px;font-size:13px;font-weight:600;color:var(--salmon)}
+.bfold summary::-webkit-details-marker{display:none}
 .memo-range{font-size:12px;color:var(--faint);margin:-2px 0 10px;line-height:1.5}
 .memo-search input{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--text);font:inherit;font-size:16px}
 .memo-found{text-align:left}.memo-found .rprev{white-space:normal;overflow-wrap:anywhere}
@@ -689,23 +695,27 @@ function festSettings(node){
   const f = node && node.festMatchSettings;
   return Array.isArray(f) ? f : (f ? [f] : []);
 }
-function battleCards(pick, now){
-  const d = sched.data; let h = '';
+function battleCards(pick, now, fold){
+  const d = sched.data; let h = ''; const items = []; const add = (key, html) => { items.push([key, html]); h += html; };
   const g = (key) => pick(curAndNext((d[key]||{}).nodes, now));
   const bk = g('bankaraSchedules');
   if (bk) (bk.bankaraMatchSettings || []).forEach(s =>
-    h += vsCard(s.bankaraMode === 'OPEN' ? 'バンカラ(オープン)' : 'バンカラ(チャレンジ)', '--bankara', bk, s, now));
-  const x = g('xSchedules'); if (x) h += vsCard('Xマッチ', '--x', x, x.xMatchSetting, now);
-  const rg = g('regularSchedules'); if (rg) h += vsCard('レギュラー', '--regular', rg, rg.regularMatchSetting, now);
+    add(s.bankaraMode === 'OPEN' ? 'bo' : 'bc', vsCard(s.bankaraMode === 'OPEN' ? 'バンカラ(オープン)' : 'バンカラ(チャレンジ)', '--bankara', bk, s, now)));
+  const x = g('xSchedules'); if (x) add('x', vsCard('Xマッチ', '--x', x, x.xMatchSetting, now));
+  const rg = g('regularSchedules'); if (rg) add('rg', vsCard('レギュラー', '--regular', rg, rg.regularMatchSetting, now));
   const fs = g('festSchedules');
-  if (fs) festSettings(fs).forEach(s => h += vsCard(s.festMode === 'REGULAR' ? 'フェス(オープン)' : 'フェス(チャレンジ)', '--fest', fs, s, now));
+  if (fs) festSettings(fs).forEach(s => add('f' + (s.festMode || ''), vsCard(s.festMode === 'REGULAR' ? 'フェス(オープン)' : 'フェス(チャレンジ)', '--fest', fs, s, now)));
   // イベントマッチは時間帯が飛び飛び
   (d.eventSchedules && d.eventSchedules.nodes || []).forEach(ev => {
     const p = pick(curAndNext(ev.timePeriods, now));
     const s = ev.leagueMatchSetting;
-    if (p && s) h += vsCard('イベント: ' + eventName(s.leagueMatchEvent), '--event', p, s, now);
+    if (p && s) add('ev' + ((s.leagueMatchEvent && s.leagueMatchEvent.id) || ''), vsCard('イベント: ' + eventName(s.leagueMatchEvent), '--event', p, s, now));
   });
-  return h;
+  const fav = fold && (load('sm_nb', {}) || {}).mode, i = fav ? items.findIndex(([k]) => k === fav) : -1;
+  if (i < 0) return h;
+  const rest = items.filter((_, j) => j !== i);
+  if (items.length < 3) return items[i][1] + rest.map(x => x[1]).join('');
+  return items[i][1] + '<details class="othermatch"' + (ui.showOtherMatch ? ' open' : '') + '><summary>▼ ほかのマッチ（' + rest.length + '）<small>バトルメモで最後に選んだマッチを上に出しています</small></summary>' + rest.map(x => x[1]).join('') + '</details>';
 }
 function salmonCards(pick, now){
   const c = sched.data.coopGroupingSchedule || {}; let h = '';
@@ -723,7 +733,7 @@ function renderNow(){
   if (!sched){ return h + coaching + '<div class="empty">' + (fetchError ? 'スケジュールを取得できませんでした。<br>通信を確認して右上の「更新」を押してください。' +
     '<div class="offgo"><button data-goview="' + (ui.nowSub === 'salmon' ? 'cnote' : 'note') + '">ステージを選んでメモを読む</button><button data-goview="list">保存したメモを開く</button></div>' : '読み込み中…') + '</div>'; }
   const fn = ui.nowSub === 'salmon' ? salmonCards : battleCards;
-  const cur = fn(p => p.cur, now);
+  const cur = fn(p => p.cur, now, true);
   if (cur && ui.nowSub !== 'salmon') h += pinnedQuick(['al:vs'], 'バトル全体・試合前に見る');
   h += cur || '<div class="empty">今の時間帯の情報がありません。<br>右上の「更新」を押してください。</div>';
   h += coaching;
@@ -758,8 +768,9 @@ function coopWeaponIdByName(name){
   const x = weaponSet('coop').find(w => nfkc(w.name) === n);
   return x ? x.id : null;
 }
+const wOnly = kind => ui.wOnlyMemo == null ? weaponSet(kind).some(w => memoOf(wKey(kind, w.id))) : !!ui.wOnlyMemo; // 評価3回目 C10
 function renderWeaponList(kind){
-  const only = !!ui.wOnlyMemo;
+  const only = wOnly(kind);
   let h = '<div class="wtools"><input id="wSearch" placeholder="ブキ名で探す" value="' + esc(ui.wSearch || '') + '">' +
     '<button id="wOnly" class="' + (only ? 'on' : '') + '">メモありだけ</button></div><div class="list" id="wList">';
   const items = weaponSet(kind);
@@ -774,7 +785,7 @@ function renderWeaponList(kind){
 }
 // 検索とメモありの絞り込みは、打つたびに作り直すと入力欄のフォーカスが外れるので、表示/非表示だけ切り替える
 function filterWeapons(){
-  const q = nfkc(ui.wSearch || '').toLowerCase(), only = !!ui.wOnlyMemo;
+  const q = nfkc(ui.wSearch || '').toLowerCase(), only = wOnly(ui.listSub === 'salmon' ? 'coop' : 'vs');
   document.querySelectorAll('#wList .wrow').forEach(r => {
     r.style.display = (!q || r.dataset.name.includes(q)) && (!only || r.dataset.has === '1') ? '' : 'none';
   });
@@ -985,7 +996,7 @@ async function fillMemoSearch(){
   let picsFailed = false, boards = [], boardsFailed = false;
   try { if (window.memoPicKeys) images = await memoPicKeys(); } catch (e){ picsFailed = true; }
   const scope = ui.memoScope || 'all', bTerms = memoFindText(ui.memoSearch || '').trim();
-  if (bTerms && scope !== 'contest' && window.boardSearchItems){ try { boards = await boardSearchItems(); } catch (e){ boardsFailed = true; } }
+  if (scope !== 'contest' && window.boardSearchItems){ try { boards = await boardSearchItems(); } catch (e){ boardsFailed = true; } }
   if (!results.isConnected || request !== memoSearchRequest) return;
   const pictureKeys = new Set(images);
   const terms = memoFindText(ui.memoSearch || '').trim().split(/\s+/).filter(Boolean);
@@ -1002,16 +1013,19 @@ async function fillMemoSearch(){
   }
   const bMatches = boards.filter(x => (scope === 'all' || x.kind === scope) && terms.every(term => memoFindText([x.title, x.place, ...x.notes, ...x.texts].join('\n')).includes(term)))
     .map(x => ({ ...x, hit: x.notes.find(t => terms.some(term => memoFindText(t).includes(term))) || x.texts.find(t => terms.some(term => memoFindText(t).includes(term))) || '' }))
-    .sort((p, q) => q.updated - p.updated);
-  const boardHTML = bMatches.length ? '<div class="sec">作戦図 ' + bMatches.length + '件</div>' + bMatches.map(x =>
-    '<button class="row memo-found" data-nbopen="' + esc(x.id) + '"><div class="rinfo"><div class="rname">▦ ' + esc(x.title) + '</div><div class="rprev">' + esc(x.place) + (x.hit ? ' ｜ ' + esc(x.hit.slice(0, 120)) : '') + '</div>' + (x.updated ? '<div class="mf-at">' + esc(memoDate(x.updated)) + ' に更新</div>' : '') + '</div></button>').join('') : '';
+    .sort((p, q) => ui.memoSort === 'place' ? p.place.localeCompare(q.place, 'ja') || p.title.localeCompare(q.title, 'ja') : q.updated - p.updated);
+  const bRow = x =>
+    '<button class="row memo-found" data-nbopen="' + esc(x.id) + '"><div class="rinfo"><div class="rname">▦ ' + esc(x.title) + '</div><div class="rprev">' + esc(x.place) + (x.hit ? ' ｜ ' + esc(x.hit.slice(0, 120)) : '') + '</div>' + (x.updated ? '<div class="mf-at">' + esc(memoDate(x.updated)) + ' に更新</div>' : '') + '</div></button>';
+  const BSHOW = 5, bFold = !terms.length && bMatches.length > BSHOW;
+  const boardHTML = bMatches.length ? '<div class="sec">作戦図 ' + bMatches.length + '件</div>' + (bFold ? bMatches.slice(0, BSHOW).map(bRow).join('') +
+    '<details class="bfold"><summary>▼ ほかの作戦図 ' + (bMatches.length - BSHOW) + '件</summary>' + bMatches.slice(BSHOW).map(bRow).join('') + '</details>' : bMatches.map(bRow).join('')) : '';
   // 新しい順（既定）: 書いた日時の新しい物から。日時の無い古いメモは最後に場所の順で
   matches.sort((a, b) => (ui.memoSort === 'place' ? 0 : b.at - a.at) || a.label.localeCompare(b.label, 'ja'));
   results.innerHTML = (matches.length ? '<div class="sec">メモ ' + matches.length + '件</div>' + matches.map(({key, label, excerpt, hasPic, at}) =>
     '<button class="row memo-found" data-memokey="' + esc(key) + '"><div class="rinfo"><div class="rname">' +
     (pins.has(key) ? '<span class="mf-pin" aria-label="試合前に見る">★</span>' : '') + esc(label) + '</div><div class="rprev">' + esc(excerpt.slice(0, 240)) + (hasPic && excerpt !== '画像のみ' ? ' ｜ 画像あり' : '') + '</div>' + (at ? '<div class="mf-at">' + esc(memoDate(at)) + ' に更新</div>' : '') + '</div></button>').join('') :
     boardHTML ? '' : '<div class="empty">' + (terms.length ? '該当するメモ・作戦図がありません。' :
-      '保存したメモはここに並びます。「ステージ」「ブキ」から対象を選ぶか、「コーチング」から書き始められます。') + '</div>') +
+      '保存したメモはここに並びます。メモは下の「バトルメモ」「サモランメモ」で書けます。') + '</div>') +
     boardHTML + (picsFailed ? '<div class="empty">画像の一覧を読み込めませんでした。</div>' : '') + (boardsFailed ? '<div class="empty">作戦図を読み込めませんでした。</div>' : '');
 }
 function salmonQuickRead(stageId){
@@ -1951,6 +1965,7 @@ function importMemos(file){
 
 // ---------- イベント ----------
 // 「コーチング・バックアップ」を自分で閉じたら、描き直しても閉じたままにする（結果を出す時だけ開く）
+document.addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('othermatch')) ui.showOtherMatch = e.target.open; }, true);
 document.addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('memo-options') && !e.target.classList.contains('trash-box')) ui.showBackup = e.target.open; }, true);
 document.addEventListener('click', e => {
   const t = e.target.closest('button, [data-chip]');
@@ -1965,7 +1980,7 @@ document.addEventListener('click', e => {
   if (t.dataset.nbopen && window.openBoardById){ const edAt = t.closest('#editor') ? ed : null; openBoardById(t.dataset.nbopen, { edit: false, alive: edAt ? () => ed === edAt : null }); return; }
   if (t.dataset.nowmemo){ toast('このブキはメモの対象外です（ランダム枠など）'); return; }
   if (t.dataset.lkind){ setUI({ listKind:t.dataset.lkind }); document.getElementById('main').scrollTop = 0; return; }
-  if (t.id === 'wOnly'){ ui.wOnlyMemo = !ui.wOnlyMemo; t.classList.toggle('on', ui.wOnlyMemo); save('sm_ui', Object.assign(load('sm_ui', {}), { wOnlyMemo: ui.wOnlyMemo })); filterWeapons(); return; }
+  if (t.id === 'wOnly'){ ui.wOnlyMemo = !t.classList.contains('on'); t.classList.toggle('on', ui.wOnlyMemo); save('sm_ui', Object.assign(load('sm_ui', {}), { wOnlyMemo: ui.wOnlyMemo })); filterWeapons(); return; }
   if (t.dataset.memosort){
     ui.memoSort = t.dataset.memosort;
     document.querySelectorAll('[data-memosort]').forEach(button => button.setAttribute('aria-pressed', String(button === t)));
@@ -2040,8 +2055,8 @@ document.getElementById('navContest').onclick =() => { setMoreMenu(false); if (w
 // どのタブに何を書くかを3枚で。メモがまだ無い人に最初の1回だけ出す（「その他 → 使い方」でいつでも見られる）
 const INTRO = [
   ['いまのステージ', '今の時間帯の<b>ステージ</b>と、そこに書いた<b>メモ</b>が出ます。試合の前にここを開けば、ぱっと確認できます。'],
-  ['バトルメモ・サモランメモ', 'ステージ・ブキ・ルール（サモランは<b>潮位</b>）ごとにメモを書く場所です。大事なメモは「<b>☆ 試合前</b>」を押すと、その画面の上にまとまって出ます。ステージ・潮位・全体のメモと、サモランの今の支給ブキのメモは「<b>いまのステージ</b>」にも出ます。<br>どの画面から書いても、<b>同じステージ・同じ欄なら同じメモ</b>です（片方で直すと、もう片方も変わります）。'],
-  ['メモ一覧', '書いたメモと作戦図を<b>まとめて探せます</b>。作戦図も題名・手順のメモで探せます。メモはこのスマホの中だけに保存されるので、機種変更の前は「その他」の「<b>バックアップ・機種変更</b>」で<b>書き出す</b>を押して、控えを取ってください。']
+  ['バトルメモ・サモランメモ', 'ステージ・ブキ・ルール（サモランは<b>潮位</b>）ごとにメモを書く場所です。どの画面から書いても、<b>同じ欄なら同じメモ</b>です。大事なメモは「<b>☆ 試合前</b>」を押すと、上にまとまって出ます。'],
+  ['メモ一覧', '書いたメモと作戦図を<b>まとめて探せます</b>。メモはこのスマホの中だけに保存されるので、機種変更の前は「その他」の「<b>バックアップ・機種変更</b>」で<b>書き出す</b>を押して、控えを取ってください。']
 ];
 let introAt = 0;
 function drawIntro(){

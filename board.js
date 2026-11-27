@@ -589,12 +589,13 @@ window.boardPop = () => {
 window.openBoardPlace = openPlace;
 window.openBoardById = openBoard;
 window.boardCount = async () => (await allBoards()).length; // バックアップの注意で「作戦図があるか」を見る
-window.boardSearchItems = async () => (await allBoards()).map(x => ({
+let bsCache = null;
+window.boardSearchItems = async () => { if (bsCache && bsCache.gen === idbGen) return bsCache.items; const gen = idbGen; const items = (await allBoards()).map(x => ({
   id: x.id, title: x.title || '名称未設定の作戦図', kind: String(x.place).startsWith('c:') ? 'coop' : 'vs', updated: Number(x.updated) || 0,
   place: placeName(x.place) + (x.sw ? '・' + swName(x.sw) : ''),
   notes: (x.steps || []).map((s, i) => s && s.note ? '手順' + (i + 1) + ': ' + s.note : '').filter(Boolean),
   texts: (x.steps || []).flatMap(s => (s && s.objs || []).filter(o => o.t === 'text' && o.s).map(o => String(o.s)))
-}));
+})); if (gen === idbGen) bsCache = { gen, items }; return items; };
 window.boardMeta = async id => { try { return await boardGet(id); } catch (e){ return null; } };
 
 const D = () => Math.max(B.w, B.h);
@@ -1453,17 +1454,33 @@ function nowSlotHTML(k, list, urls){
       '<div class="nbcap">' + esc(b.title) + '<small>' + esc([tide, b.steps.length > 1 ? '手順' + b.steps.length : ''].filter(Boolean).join('・')) + '</small></div>' + (note ? '<div class="nbnote">' + esc(note) + '</div>' : '') + '</button>';
   }).join('') + '</div>';
 }
+// 作戦図の欄の高さ（場所のキー→px）。絵が入るのを待ってから測る
+let bdH = load('sm_bdh', {}); if (!bdH || typeof bdH !== 'object') bdH = {};
+let bdHTimer = 0;
+const bdHKey = el => (typeof ui !== 'undefined' ? ui.view : '') + '|' + el.dataset.nbd + '|' + innerWidth + 'x' + innerHeight;
+function rememberBdH(slots){
+  clearTimeout(bdHTimer);
+  bdHTimer = setTimeout(() => {
+    let changed = false;
+    slots.forEach(el => { if (!el.isConnected || el.closest('#editor')) return; const h = Math.round(el.offsetHeight), k = bdHKey(el); if (h > 0 && bdH[k] !== h){ delete bdH[k]; bdH[k] = h; changed = true; } });
+    const keys = Object.keys(bdH); if (keys.length > 200) keys.slice(0, keys.length - 200).forEach(k => delete bdH[k]);
+    if (changed) try { localStorage.setItem('sm_bdh', JSON.stringify(bdH)); } catch (e){}
+  }, 800);
+}
 window.fillNowBoards = async function(){
   const my = ++nowSeq;
   const slots = [...document.querySelectorAll('[data-nbd]')];
   if (!slots.length){ dropNowCache(); return; } // 作戦図の欄が無くなったら画像を手放す
+  slots.forEach(el => { if (el.innerHTML) return; const k = el.dataset.nbd;
+    if (nowCache && nowCache.gen === idbGen && nowCache.html.has(k)) el.innerHTML = nowCache.html.get(k);
+    else if (!el.closest('#editor') && bdH[bdHKey(el)] > 0) el.innerHTML = '<div class="nbwait" style="height:' + bdH[bdHKey(el)] + 'px"></div>'; }); // 空の欄は display:none なので、高さ付きの空の箱を入れておく
   // 今のサモランのステージのマップ（3つの潮位）を先に読んでおく（スマホに保存され、電波が弱くても作戦図がすぐ開ける）
   slots.forEach(el => { const k = el.dataset.nbd; if (k.startsWith('c:')) TIDES.forEach(([t]) => { const nk = nwKey(k + ':' + t); if (nk && !prefetched.has(nk)){ prefetched.add(nk); fetch(nwImg(nk, 'nw')).then(r => { if (!r.ok) prefetched.delete(nk); }, () => prefetched.delete(nk)); } }); });
   let c = nowCache && nowCache.gen === idbGen ? nowCache : null;
   const fresh = !c;
   if (fresh){
     const gen = idbGen; let boards;
-    try { boards = (await allBoards()).filter(b => b && typeof b.place === 'string' && Array.isArray(b.steps) && b.w > 0 && b.h > 0); } catch (e){ return; }
+    try { boards = (await allBoards()).filter(b => b && typeof b.place === 'string' && Array.isArray(b.steps) && b.w > 0 && b.h > 0); } catch (e){ if (my === nowSeq) slots.forEach(el => { if (el.isConnected && el.querySelector('.nbwait')) el.innerHTML = ''; }); return; } // 読めなければ取っておいた高さの箱を外す
     if (my !== nowSeq) return;
     c = { gen, boards, urls: {}, html: new Map() };
   }
@@ -1488,7 +1505,8 @@ window.fillNowBoards = async function(){
   if (readFail) c.gen = -1; // 読めなかった土台があれば、この中身は使い回さない（次の描画で読み直す。Codexレビュー）
   need.forEach(k => c.html.set(k, nowSlotHTML(k, groups.get(k), c.urls)));
   if (fresh){ dropNowCache(); nowCache = c; } // 前の画像はここで手放す（欄はこのすぐ後に全部入れ替える）
-  slots.forEach(el => { if (el.isConnected) el.innerHTML = c.html.get(el.dataset.nbd); });
+  slots.forEach(el => { if (el.isConnected){ el.innerHTML = c.html.get(el.dataset.nbd); } });
+  rememberBdH(slots);
   // 潮位ボタンに「作戦図あり」の点（評価3回目 C4）
   document.querySelectorAll('[data-tideplace]').forEach(el => el.classList.toggle('hasbd', c.boards.some(x => x.place === el.dataset.tideplace)));
 };
@@ -1609,4 +1627,7 @@ window.importBoards = async data => {
   statusCache = null;
   gcBases();
   return res;
-};})();
+};
+// 起動時の最初の描画は board.js より前に走るので、ここで作戦図の欄を埋める（高さを先に取って、後から絵が入っても画面がずれないように。評価3回目 C9）
+if (document.querySelector('#main [data-nbd]')) window.fillNowBoards();
+})();
