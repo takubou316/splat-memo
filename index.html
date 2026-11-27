@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-27i';</script>
+<script>window.APP_VERSION = '2026-11-27j';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -276,6 +276,13 @@ nav button.on{color:var(--salmon)}
 .ed-rev{padding:0 12px 8px}
 .ed-rev button,.nb-rev{min-height:36px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:600;color:var(--text);background:var(--card);border:1px solid var(--line2)}
 .ed-rev button[hidden],.nb-rev[hidden]{display:none}
+.bsteps{padding:4px 2px 6px;font-size:14px;line-height:1.6;color:var(--text)}
+.bsteps ol{margin:6px 0 8px;padding-left:1.4em}
+.bsteps li{margin:6px 0}
+.bsteps p{font-size:13px;color:var(--sub);margin:6px 0}
+.bwarn{display:flex;flex-direction:column;gap:4px;width:100%;text-align:left;margin:0 0 12px;padding:10px 12px;border-radius:12px;background:rgba(255,122,61,.12);border:1px solid var(--salmon);color:var(--text);font-size:13px;line-height:1.5}
+.bwarn b{color:var(--salmon);font-size:13px}
+.bgo{display:block;width:100%;text-align:left;margin:6px 0 4px;padding:12px 14px;border-radius:12px;background:var(--card);border:1px solid var(--line);font-size:14px;font-weight:600;color:var(--text)}
 .trash-note{font-size:12px;color:var(--sub);margin:6px 2px 8px;line-height:1.5}
 .trash-row{display:flex;align-items:center;gap:10px;padding:10px 4px;border-top:1px solid var(--line)}
 .trash-row .rinfo{flex:1;min-width:0}
@@ -325,6 +332,7 @@ nav button.on{color:var(--salmon)}
 <div id="moreMenu" hidden>
   <button id="navContest"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12c3-4.5 8-6 12-4l3-2.5v13L15 16c-4 2-9 .5-12-4z"/><circle cx="8" cy="11" r=".6" fill="currentColor"/></svg><span class="mm">ばちこん<small>バイトチームコンテストの作戦</small></span></button>
   <button id="navTier"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h5M4 12h5M4 19h5M12 5h8M12 12h5M12 19h3"/></svg><span class="mm">ティア<small>ブキの強さの表を作る</small></span></button>
+  <button id="navBackup"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg><span class="mm">バックアップ・機種変更<small>控えを書き出す・読み込む</small></span></button>
   <button id="navHelp"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg><span class="mm">使い方<small>どのタブに何を書くか</small></span></button>
 </div>
 </div>
@@ -797,15 +805,16 @@ function restoreTrash(id){
   toast('戻しました');
 }
 function renderMemoSearch(){
-  return '<div class="memo-search"><label for="memoSearch">保存したメモ</label><input id="memoSearch" type="search" placeholder="本文・ステージ名・ブキ名" value="' + esc(ui.memoSearch || '') + '"></div>' +
+  return backupWarnBar() + '<div class="memo-search"><label for="memoSearch">保存したメモ</label><input id="memoSearch" type="search" placeholder="本文・ステージ名・ブキ名" value="' + esc(ui.memoSearch || '') + '"></div>' +
     '<div class="memo-scope" aria-label="表示するメモ">' +
     [['all', 'すべて'], ['coop', 'サーモンラン'], ['vs', 'バトル'], ['contest', 'ばちこん']].map(([key, name]) =>
       '<button data-memoscope="' + key + '" aria-pressed="' + ((ui.memoScope || 'all') === key) + '">' + name + '</button>').join('') +
     '</div><div class="memo-scope" aria-label="並べ方">' +
     [['new', '新しい順'], ['place', '場所の順']].map(([key, name]) =>
       '<button data-memosort="' + key + '" aria-pressed="' + ((ui.memoSort || 'new') === key) + '">' + name + '</button>').join('') +
-    '</div><details class="memo-options"' + (ui.showBackup ? ' open' : '') + '><summary>コーチング・バックアップ</summary>' +
-    coachingLink('coop') + coachingLink('vs') + backupHTML() + '</details>' +
+    '</div><details class="memo-options"' + (ui.showBackup ? ' open' : '') + '><summary>コーチング</summary>' +
+    coachingLink('coop') + coachingLink('vs') + '</details>' +
+    '<button class="bgo" data-gobackup="1">バックアップ・機種変更 ›</button>' +
     '<div id="memoSearchResults" class="list" aria-live="polite"></div><div id="memoTrash">' + trashHTML() + '</div>';
 }
 // 一覧の日付: 今日は時刻、今年は月/日、それより前は年/月/日
@@ -842,7 +851,7 @@ async function fillMemoSearch(){
     '<button class="row memo-found" data-memokey="' + esc(key) + '"><div class="rinfo"><div class="rname">' +
     (pins.has(key) ? '<span class="mf-pin" aria-label="試合前に見る">★</span>' : '') + esc(label) + '</div><div class="rprev">' + esc(excerpt.slice(0, 240)) + (hasPic && excerpt !== '画像のみ' ? ' ｜ 画像あり' : '') + '</div>' + (at ? '<div class="mf-at">' + esc(memoDate(at)) + ' に更新</div>' : '') + '</div></button>').join('') :
     '<div class="empty">' + (terms.length ? '該当するメモがありません。作戦図は「作戦図」から探せます。' :
-      '保存したメモはここに並びます。「ステージ」「ブキ」から対象を選ぶか、「コーチング・バックアップ」から書き始められます。') + '</div>') +
+      '保存したメモはここに並びます。「ステージ」「ブキ」から対象を選ぶか、「コーチング」から書き始められます。') + '</div>') +
     (picsFailed ? '<div class="empty">画像の一覧を読み込めませんでした。</div>' : '');
 }
 function salmonQuickRead(stageId){
@@ -903,6 +912,19 @@ function countMedia(){
     const box = document.querySelector('#main .backup'); if (mediaCount > 0 && box){ box.querySelectorAll('.blog, .improw').forEach(el => el.remove()); box.insertAdjacentHTML('beforeend', backupLogHTML()); }
   });
 }
+// 2026-11-27 評価2回目の優先順位10: バックアップを「その他 → バックアップ・機種変更」の独立した画面にし、機種変更の手順を出す。
+// 注意（書き出していない・欠けた書き出し）は「メモ」タブの上にも出して、その画面へ案内する
+function renderBackup(){
+  return '<div class="bsteps"><div class="sec">機種変更・データの控え</div><ol>' +
+    '<li><b>このスマホで「書き出す」</b>を押し、できたファイルを「ファイル」アプリ（iCloud Drive）などに保存します。</li>' +
+    '<li><b>新しいスマホ</b>でこのアプリを開き、この画面の<b>「読み込む」</b>でそのファイルを選びます。</li>' +
+    '<li>読み込んだ後、メモ・画像・作戦図をいくつか開いて、<b>入っているか確かめます</b>。</li></ol>' +
+    '<p>メモはこのスマホの中だけに保存されています。機種変更の前や、アプリを消す前は必ず書き出してください。</p></div>' + backupHTML();
+}
+function backupWarnBar(){
+  const w = backupLogHTML().match(/<div class="blog warn">([\s\S]*?)<\/div>/);
+  return w ? '<button class="bwarn" data-gobackup="1"><span>' + w[1] + '</span><b>バックアップを開く ›</b></button>' : '';
+}
 function backupLogHTML(){
   const e = backupLog.exp, i = backupLog.imp, h = [];
   // 書き出すべき物があるか: 文字のメモ・印・ばちこんの記録。画像・作戦図だけの人も漏らさないよう、無い時は一度だけ数えに行く（評価2回目 17）
@@ -952,7 +974,7 @@ function render(){
   });
   if (!keepNote && !keepSearch) document.getElementById('main').innerHTML = ui.view === 'now' ? renderNow() : ui.view === 'contest' ? renderContest() :
     ui.view === 'tier' ? (typeof renderTierList === 'function' ? renderTierList() : '<div class="empty">読み込み中…</div>') :
-    noteV ? (window.renderNote ? renderNote() : '<div class="empty">読み込み中…</div>') : renderList();
+    noteV ? (window.renderNote ? renderNote() : '<div class="empty">読み込み中…</div>') : ui.view === 'backup' ? renderBackup() : renderList();
   if (noteV && !keepNote && window.noteAfterRender) noteAfterRender();
   if (ui.view === 'list' && ui.listKind === 'weapon') filterWeapons();
   if (ui.view === 'list' && ui.listKind === 'search') fillMemoSearch();
@@ -963,14 +985,15 @@ function render(){
   document.getElementById('navContest').classList.toggle('on', ui.view === 'contest');
   document.getElementById('navList').classList.toggle('on', ui.view === 'list');
   document.getElementById('navTier').classList.toggle('on', ui.view === 'tier');
+  document.getElementById('navBackup').classList.toggle('on', ui.view === 'backup');
   document.getElementById('navNote').classList.toggle('on', ui.view === 'note');
   document.getElementById('navCoop').classList.toggle('on', ui.view === 'cnote');
   // ばちこん・ティアを開いている時は「その他」を光らせ、名前もその画面にする（今どこにいるか分かるように）
-  const inMore = ui.view === 'contest' || ui.view === 'tier';
+  const inMore = ui.view === 'contest' || ui.view === 'tier' || ui.view === 'backup';
   document.getElementById('navMore').classList.toggle('on', inMore);
   // 上の題名は今の画面の名前（前はどの画面でも「ステージメモ」で、今どこか分からなかった。評価 F11）
-  document.getElementById('title').textContent = ({ now:'いまのステージ', note:'バトルメモ', cnote:'サモランメモ', list:'メモ', contest:'ばちこん', tier:'ティア' })[ui.view] || 'ステージメモ';
-  document.getElementById('navMoreLbl').textContent = ui.view === 'contest' ? 'ばちこん' : ui.view === 'tier' ? 'ティア' : 'その他';
+  document.getElementById('title').textContent = ({ now:'いまのステージ', note:'バトルメモ', cnote:'サモランメモ', list:'メモ', contest:'ばちこん', tier:'ティア', backup:'バックアップ・機種変更' })[ui.view] || 'ステージメモ';
+  document.getElementById('navMoreLbl').textContent = ui.view === 'contest' ? 'ばちこん' : ui.view === 'tier' ? 'ティア' : ui.view === 'backup' ? 'バックアップ' : 'その他';
   maybeAutoOpen();
   armSlotTimer(); // 次の時間帯の境目で描き直す
 }
@@ -1751,6 +1774,7 @@ document.addEventListener('click', e => {
   if (!t) return;
   if (t.closest('#play') || t.closest('#tier') || t.closest('.tsheet-bg') || t.closest('#bplace') || t.closest('#board') || t.closest('.bsheet-bg') || t.closest('.nbs-bg')) return;
   if (t.dataset.qmore){ const box = t.closest('.quick-memos'), open = box.classList.toggle('open'); t.setAttribute('aria-expanded', String(open)); t.textContent = open ? '▲ たたむ' : '▼ ほか' + t.dataset.qmore + '件'; return; }
+  if (t.dataset.gobackup){ if (window.noteFlush) noteFlush(); setUI({ view:'backup' }); document.getElementById('main').scrollTop = 0; return; }
   if (t.dataset.impundo){ undoImport(); return; }
   if (t.dataset.trashback != null){ restoreTrash(t.dataset.trashback); return; }
   if (t.dataset.bplace && window.openBoardPlace){ openBoardPlace(t.dataset.bplace, null); return; }
@@ -1832,7 +1856,7 @@ document.getElementById('navContest').onclick =() => { setMoreMenu(false); if (w
 const INTRO = [
   ['いまのステージ', '今の時間帯の<b>ステージ</b>と、そこに書いた<b>メモ</b>が出ます。試合の前にここを開けば、ぱっと確認できます。'],
   ['バトルメモ・サモランメモ', 'ステージ・ブキ・ルール（サモランは<b>潮位</b>）ごとにメモを書く場所です。大事なメモは「<b>☆ 試合前</b>」を押すと、その画面の上にまとまって出ます。ステージ・潮位・全体のメモと、サモランの今の支給ブキのメモは「<b>いまのステージ</b>」にも出ます。'],
-  ['メモ', '書いたメモを<b>全部まとめて探せます</b>。メモはこのスマホの中だけに保存されるので、機種変更の前は「メモ」の下の「バックアップ」で<b>書き出す</b>を押して、控えを取ってください。']
+  ['メモ', '書いたメモを<b>全部まとめて探せます</b>。メモはこのスマホの中だけに保存されるので、機種変更の前は「その他」の「<b>バックアップ・機種変更</b>」で<b>書き出す</b>を押して、控えを取ってください。']
 ];
 let introAt = 0;
 function drawIntro(){
@@ -1863,6 +1887,7 @@ function closeIntro(fromPop){
 document.getElementById('introNext').onclick = () => { if (introAt < INTRO.length - 1){ introAt++; drawIntro(); } else closeIntro(); };
 document.getElementById('introBack').onclick = () => { if (introAt){ introAt--; drawIntro(); } else closeIntro(); };
 document.getElementById('navHelp').onclick = () => { setMoreMenu(false); openIntro(); };
+document.getElementById('navBackup').onclick = () => { setMoreMenu(false); if (window.noteFlush) noteFlush(); setUI({ view:'backup' }); document.getElementById('main').scrollTop = 0; };
 function setMoreMenu(open){
   document.getElementById('moreMenu').hidden = !open;
   document.getElementById('navMore').setAttribute('aria-expanded', open ? 'true' : 'false');
