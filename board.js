@@ -743,10 +743,15 @@ const rectAng = o => Number.isFinite(o.a) ? o.a : 0;
 // 四角の中心から見た位置（回す前）を、回した後の土台の座標へ
 function rectPt(o, lx, ly){ const a = rectAng(o) * Math.PI / 180, cx = o.x + o.w / 2, cy = o.y + o.h / 2; return [cx + lx * Math.cos(a) - ly * Math.sin(a), cy + lx * Math.sin(a) + ly * Math.cos(a)]; }
 // つまみの大きさ（画面の px）: 物が小さい時はつまみも小さく（2026-11-26 ユーザー「白い丸はその四角や丸などの大きさによって調整して」）
+// 物の上を押した時に、つまみではなく物を動かす距離（つまみの中心からこれより離れていたら物）。小さい物ほど短く、
+// 画面で24px未満のとても小さい物は、物の上なら必ず動かす（大きさを変える時は拡大してから）
+function bodyGap(o){ const sz = (o.t === 'rect' ? Math.min(o.w, o.h) : o.r * 2) * bs.view.s; return sz < 24 ? -1 : Math.max(8, Math.min(18, sz * .3)); }
 function handleSize(o){
   const sz = (o.t === 'rect' ? Math.min(o.w, o.h) : o.r * 2) * bs.view.s;
   const r = Math.max(4, Math.min(8, sz * .07));
-  return { r, hit: Math.max(r * 1.6, Math.min(20, sz * .22)), arm: Math.max(16, Math.min(28, sz * .2 + 10)) };
+  // 見た目（r）は物に合わせて小さく、触って反応する範囲（hit）は指で押せる大きさ（半径22px）に分ける（2026-11-27 評価2回目の優先順位4）。
+  // 範囲が重なった時・物の上と重なった時は、押した所から一番近いつまみを選び、どのつまみからも離れていて物の上なら物を動かす（pointerdown）
+  return { r, hit: 22, arm: Math.max(16, Math.min(28, sz * .2 + 10)) };
 }
 // 回すつまみを出す向き（回す前の四角から見て）。地図を回していても、回していない四角では画面の上に出す
 function rotDir(){ const r = (B.rot || 0) * Math.PI / 180; return [Math.round(-Math.sin(r)) || 0, Math.round(-Math.cos(r)) || 0]; } // 画面の上（0,-1）を土台の向きに戻したもの
@@ -1208,7 +1213,14 @@ view.addEventListener('pointerdown', e => {
   const hdl = e.target.closest && e.target.closest('[data-hdl]');
   const x0 = e.clientX, y0 = e.clientY, step = bs.step;
   const selO = bs.edit && bs.sel && curObjs().find(x => x.id === bs.sel);
-  if (hdl && selO){ const hp = handlePts(selO).find(q => q[0] === hdl.dataset.hdl); g = { kind: 'resize', step, oid: selO.id, hdl: hdl.dataset.hdl, x0, y0, ox: hp ? hp[1] - ix : 0, oy: hp ? hp[2] - iy : 0, orig: JSON.stringify(selO), moved: false }; } // ox/oy: 指とつまみの中心のずれ（掴んだ瞬間に跳ねないように。Codexレビュー）
+  let near = null, onBody = false;
+  if (hdl && selO){
+    const vr = view.getBoundingClientRect();
+    near = handlePts(selO).map(([k, x, y]) => { const [sx, sy] = toScreen(x, y); return [k, Math.hypot(sx + vr.left - x0, sy + vr.top - y0), x, y]; }).sort((a, b) => a[1] - b[1])[0];
+    onBody = !!near && near[1] > bodyGap(selO) && document.elementsFromPoint(x0, y0).some(el => el.closest && el.closest('#bSvg [data-oid="' + CSS.escape(selO.id) + '"]'));
+  }
+  if (near && !onBody) g = { kind: 'resize', step, oid: selO.id, hdl: near[0], x0, y0, ox: near[2] - ix, oy: near[3] - iy, orig: JSON.stringify(selO), moved: false }; // ox/oy: 指とつまみの中心のずれ（掴んだ瞬間に跳ねないように。Codexレビュー）
+  else if (onBody){ g = { kind: 'drag', step, oid: selO.id, x0, y0, ix, iy, orig: JSON.stringify(selO), moved: false, wasSel: true }; drawBoard(); } // つまみの範囲の中でも、物の上で離れていれば物を動かす
   else if (!bs.edit) startPan({ x: x0, y: y0 });
   else if (bs.pending || bs.tool === 'text') startPan({ x: x0, y: y0 }, { place: bs.pending ? 'icon' : 'text' });
   else if (DRAW_TOOLS.includes(bs.tool)){
