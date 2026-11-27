@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-27j';</script>
+<script>window.APP_VERSION = '2026-11-27k';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -805,7 +805,7 @@ function restoreTrash(id){
   toast('戻しました');
 }
 function renderMemoSearch(){
-  return backupWarnBar() + '<div class="memo-search"><label for="memoSearch">保存したメモ</label><input id="memoSearch" type="search" placeholder="本文・ステージ名・ブキ名" value="' + esc(ui.memoSearch || '') + '"></div>' +
+  return '<div id="bwarnBox">' + backupWarnBar() + '</div><div class="memo-search"><label for="memoSearch">保存したメモ</label><input id="memoSearch" type="search" placeholder="本文・ステージ名・ブキ名" value="' + esc(ui.memoSearch || '') + '"></div>' +
     '<div class="memo-scope" aria-label="表示するメモ">' +
     [['all', 'すべて'], ['coop', 'サーモンラン'], ['vs', 'バトル'], ['contest', 'ばちこん']].map(([key, name]) =>
       '<button data-memoscope="' + key + '" aria-pressed="' + ((ui.memoScope || 'all') === key) + '">' + name + '</button>').join('') +
@@ -908,7 +908,7 @@ let mediaCount = -1, mediaCounting = false;
 function countMedia(){
   if (mediaCounting) return; mediaCounting = true;
   Promise.all([window.memoPicKeys ? memoPicKeys().then(k => k.length, () => 0) : 0, window.boardCount ? boardCount().catch(() => 0) : 0]).then(([a, b]) => {
-    mediaCount = a + b; mediaCounting = false;
+    mediaCount = a + b; mediaCounting = false; refreshWarnBox();
     const box = document.querySelector('#main .backup'); if (mediaCount > 0 && box){ box.querySelectorAll('.blog, .improw').forEach(el => el.remove()); box.insertAdjacentHTML('beforeend', backupLogHTML()); }
   });
 }
@@ -922,21 +922,28 @@ function renderBackup(){
     '<p>メモはこのスマホの中だけに保存されています。機種変更の前や、アプリを消す前は必ず書き出してください。</p></div>' + backupHTML();
 }
 function backupWarnBar(){
-  const w = backupLogHTML().match(/<div class="blog warn">([\s\S]*?)<\/div>/);
-  return w ? '<button class="bwarn" data-gobackup="1"><span>' + w[1] + '</span><b>バックアップを開く ›</b></button>' : '';
+  const w = backupWarnText();
+  return w ? '<button class="bwarn" data-gobackup="1"><span>' + w + '</span><b>バックアップを開く ›</b></button>' : '';
 }
-function backupLogHTML(){
-  const e = backupLog.exp, i = backupLog.imp, h = [];
+// 1. メモタブの上の帯は、描き直し（検索欄を残す時も）・数え終わり・結果の記録のたびに入れ直す（Codexレビュー）
+function refreshWarnBox(){ const b = document.getElementById('bwarnBox'); if (b) b.innerHTML = backupWarnBar(); }
+// 書き出しの注意の文（HTML、中の値は esc 済み）。無ければ ''。バックアップの画面とメモタブの上の帯で使う
+function backupWarnText(){
+  const e = backupLog.exp;
   // 書き出すべき物があるか: 文字のメモ・印・ばちこんの記録。画像・作戦図だけの人も漏らさないよう、無い時は一度だけ数えに行く（評価2回目 17）
   const hasData = Object.keys(memos).some(k => memoOf(k)) || pins.size > 0 || Object.keys(contests).length > 0 || mediaCount > 0;
   if (!hasData && mediaCount < 0) countMedia();
-  // 注意は「欠けずに書き出せた日」で判断する（2026-11-27 評価2回目の優先順位2）。
-  // 一部が欠けた書き出し（画像を入れられなかった等）では、新しく書き出しても注意を消さない
+  // 注意は「欠けずに書き出せた日」で判断する（2026-11-27 評価2回目の優先順位2）。一部が欠けた書き出しでは、新しく書き出しても注意を消さない
   const fullAt = validAt(backupLog.full) ? backupLog.full : e && !(e.miss && e.miss.length) ? e.at : null;
   const days = fullAt ? Math.floor((Date.now() - fullAt) / 864e5) : null;
-  if (hasData && e && e.miss && e.miss.length && !(fullAt >= e.at)) h.push('<div class="blog warn">前回の書き出しには入らなかった物がありました（' + e.miss.map(esc).join('、') + '）。' +
-    (fullAt ? '全部入った書き出しは' + days + '日前（' + esc(logDate(fullAt)) + '）です。' : '全部入った書き出しは、まだありません。') + '入らなかった理由を直してから、もう一度書き出してください</div>');
-  else if (hasData && (!fullAt || days >= 14)) h.push('<div class="blog warn">' + (fullAt ? '前回の書き出しから' + days + '日たっています。' : 'まだ一度も書き出していません。') + '機種変更などに備えて書き出しておくと安心です</div>');
+  if (hasData && e && e.miss && e.miss.length && !(fullAt >= e.at)) return ('前回の書き出しには入らなかった物がありました（' + e.miss.map(esc).join('、') + '）。' +
+    (fullAt ? '全部入った書き出しは' + days + '日前（' + esc(logDate(fullAt)) + '）です。' : '全部入った書き出しは、まだありません。') + '入らなかった理由を直してから、もう一度書き出してください');
+  if (hasData && (!fullAt || days >= 14)) return ('' + (fullAt ? '前回の書き出しから' + days + '日たっています。' : 'まだ一度も書き出していません。') + '機種変更などに備えて書き出しておくと安心です');
+  return '';
+}
+function backupLogHTML(){
+  const e = backupLog.exp, i = backupLog.imp, h = [];
+  const w = backupWarnText(); if (w) h.push('<div class="blog warn">' + w + '</div>');
   const part = (title, x, items) => '<div class="blog' + (x.miss && x.miss.length ? ' bad' : '') + '"><b>' + title + '（' + esc(logDate(x.at)) + '）</b>' +
     (items.filter(Boolean).join('・') || '中身なし') +
     (x.miss && x.miss.length ? '<div class="miss">入らなかった物: ' + x.miss.map(esc).join('、') + '</div>' : '') + '</div>';
@@ -949,6 +956,7 @@ function backupLogHTML(){
 function saveBackupLog(kind, x){
   backupLog[kind] = x; ui.showBackup = true;
   if (!save('sm_backup_log', backupLog)) toast('結果の記録を保存できませんでした（空き容量を確かめてください）');
+  refreshWarnBox();
   const box = document.querySelector('#main .backup'); if (!box) return;
   box.querySelectorAll('.blog, .improw').forEach(el => el.remove()); box.insertAdjacentHTML('beforeend', backupLogHTML());
   const det = box.closest('details'); if (det) det.open = true;
@@ -962,11 +970,11 @@ function backupHTML(){
 }
 
 function render(){
-  if (window.slotBarEl) slotBarEl.hidden = true; // 描き直したら新しい時間帯になっている
   statusText();
   // バトルのメモ帳で書いている途中は描き直さない（時間帯の更新などで打ちかけが消えないように）
   const noteV = ui.view === 'note' || ui.view === 'cnote'; // バトルメモ・サモランメモ（note.js）
   const keepNote = noteV && window.noteBusy && noteBusy();
+  if (window.slotBarEl && !keepNote) slotBarEl.hidden = true; // 描き直したら新しい時間帯になっている（書いている途中で描き直さない時は帯を残す。Codexレビュー）
   if (keepNote){ if (window.noteDeferRender) noteDeferRender(); } else if (window.noteFlush) noteFlush(); // 描き直す前に打った分を保存
   const keepSearch = ui.view === 'list' && ui.listKind === 'search' && document.getElementById('memoSearch');
   if (keepSearch) document.querySelectorAll('.memo-options .coach-link').forEach(link => {
@@ -977,7 +985,7 @@ function render(){
     noteV ? (window.renderNote ? renderNote() : '<div class="empty">読み込み中…</div>') : ui.view === 'backup' ? renderBackup() : renderList();
   if (noteV && !keepNote && window.noteAfterRender) noteAfterRender();
   if (ui.view === 'list' && ui.listKind === 'weapon') filterWeapons();
-  if (ui.view === 'list' && ui.listKind === 'search') fillMemoSearch();
+  if (ui.view === 'list' && ui.listKind === 'search'){ fillMemoSearch(); refreshWarnBox(); }
   if (ui.view === 'now' && window.fillMemoPics) fillMemoPics();
   if ((ui.view === 'now' || noteV) && !keepNote){ if (window.fillNowBoards) fillNowBoards(); }
   else if (keepNote){} else if (window.releaseNowBoards) releaseNowBoards();
@@ -1944,7 +1952,7 @@ document.getElementById('main').addEventListener('scroll', () => { lastTouch = D
 const slotBar = document.createElement('div'); slotBar.id = 'slotBar'; slotBar.hidden = true; slotBar.setAttribute('role', 'status');
 slotBar.innerHTML = '<span>新しい時間帯になりました</span><button type="button">今の時間帯に切り替える</button>';
 document.body.appendChild(slotBar); window.slotBarEl = slotBar;
-slotBar.querySelector('button').onclick = () => { slotBar.hidden = true; render(); if (stale()) refresh(); };
+slotBar.querySelector('button').onclick = () => { if (window.noteBusy && noteBusy()){ toast('書き終えると今の時間帯に切り替わります'); return; } render(); if (stale()) refresh(); };
 function armSlotTimer(){
   clearTimeout(slotTimer);
   const t = nextBoundary(); if (!t) return;
