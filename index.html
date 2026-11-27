@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-27d';</script>
+<script>window.APP_VERSION = '2026-11-27e';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -147,6 +147,13 @@ nav button.on{color:var(--salmon)}
 #memoText{flex:1;margin:8px 12px calc(12px + env(safe-area-inset-bottom));padding:12px;border-radius:12px;border:1px solid var(--line);
   background:var(--card);color:var(--text);font:inherit;font-size:16px;line-height:1.6;resize:none;outline:none}
 #memoText:focus{border-color:var(--line2)}
+/* 読む表示（2026-11-27 評価2回目の優先順位5）: 要点・潮位ボタン・検索の結果などから開いた時は、まず読む。「✎ 編集」で書く欄にする */
+.edmode{flex:none;min-height:38px;padding:0 14px;border-radius:999px;font-size:14px;font-weight:700;color:#1a1020;background:var(--salmon);border:1px solid var(--salmon)}
+.edmode[hidden]{display:none}
+.memo-read{display:none;flex:1;overflow-y:auto;margin:8px 12px calc(12px + env(safe-area-inset-bottom));padding:12px 14px;border-radius:12px;background:var(--card);border:1px solid var(--line);font-size:16px;line-height:1.7;color:var(--text);white-space:pre-wrap;word-break:break-word}
+#editor.reading .memo-read{display:block}
+#editor.reading #memoText,#editor.reading .ed-rev,#editor.reading .coach-tools,#editor.reading .nbpic-add{display:none}
+#editor.reading .saved{display:none}
 /* ばちこん */
 .ccard{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden}
 .ccard .shead{padding:10px 14px}
@@ -326,11 +333,13 @@ nav button.on{color:var(--salmon)}
     <button class="back" id="edBack">‹ 戻る</button>
     <div class="etitle" id="edTitle"></div>
     <div class="saved" id="edSaved"></div>
+    <button type="button" class="edmode" id="edEdit" hidden>✎ 編集</button>
   </div>
   <div class="chips" id="edChips"></div>
   <div class="ehint" id="edHint"></div>
   <div id="coachTools" class="coach-tools" hidden><button type="button" id="coachTemplate">練習メモのひな形</button><button type="button" id="coachCopy">このメモをコピー</button></div>
   <div class="ed-rev"><button type="button" id="edRevert" hidden>↶ 書き始める前の文に戻す</button></div>
+  <div class="memo-read" id="memoRead" tabindex="0"></div>
   <textarea id="memoText" placeholder="ここにメモを書く（自動で保存されます）"></textarea>
   <!-- このメモに付けた画像（note.js が中身を入れる。ステージ・ブキ・オオモノのメモだけ） -->
   <div id="edPicWrap"><div class="nbpics" id="edPics" data-nbpk=""></div><div id="edPicSt" data-nbst=""></div></div>
@@ -581,7 +590,7 @@ function coopCard(label, node, now){
   // 支給ブキはタップでそのブキのサモラン用メモ。メモがあるブキには印を付ける
   const ws = (st.weapons || []).map(w => {
     const nm = weaponName(w), id = coopWeaponIdByName(nm), has = id && memoOf(wKey('coop', id));
-    return '<button class="wbtn' + (has ? ' has' : '') + '"' + (id ? ' data-edit="wc" data-id="' + esc(id) + '" data-rule=""' : ' data-nowmemo="1"') + ' aria-label="' + esc(nm) + 'のメモ">' +
+    return '<button class="wbtn' + (has ? ' has' : '') + '"' + (id ? ' data-edit="wc" data-read="1" data-id="' + esc(id) + '" data-rule=""' : ' data-nowmemo="1"') + ' aria-label="' + esc(nm) + 'のメモ">' +
       '<img src="' + esc(w.image && w.image.url || '') + '" alt="' + esc(nm) + '" title="' + esc(nm) + '"></button>';
   }).join('');
   return '<div class="card" style="--c:var(--salmon)"><div class="chead"><span class="mode">' + esc(label) + '</span>' +
@@ -1343,9 +1352,9 @@ function setUI(p){ Object.assign(ui, p); save('sm_ui', { view:ui.view, nowSub:ui
 // ---------- エディタ ----------
 let ed = null;
 let originalMemoText = ''; // { kind, id, rule }
-function openEditor(kind, id, rule){
+function openEditor(kind, id, rule, opts){
   if (window.noteFlush) noteFlush();
-  ed = { kind, id, rule: kind === 'vs' ? (rule || 'all') : (kind === 'cm' || kind === 'ct' || kind === 'th') ? rule : null };
+  ed = { read: !!(opts && opts.read), kind, id, rule: kind === 'vs' ? (rule || 'all') : (kind === 'cm' || kind === 'ct' || kind === 'th') ? rule : null };
   document.getElementById('edTitle').textContent =
     kind === 'found' ? memoLocation(id) :
     kind === 'cm' ? 'WAVE ' + rule + ' の作戦（' + nameById(scenById(+id).stage) + '）' :
@@ -1393,6 +1402,12 @@ function drawEditor(){
   ta.value = memos[edKey()] || '';
   originalMemoText = ta.value;
   edStartText = ta.value; edRedoText = null; syncRevert(); // 書き始める前の文（評価2回目の優先順位3）
+  // 読む表示: 中身がある時だけ（空なら書く欄から）。「✎ 編集」で書く欄にする
+  const reading = !!ed.read && !!ta.value.trim();
+  document.getElementById('editor').classList.toggle('reading', reading);
+  document.getElementById('memoRead').textContent = reading ? ta.value : '';
+  document.getElementById('edEdit').hidden = !reading;
+  if (reading) hint.textContent = '';
   document.getElementById('edSaved').textContent = '';
   drawEdPics();
 }
@@ -1409,6 +1424,10 @@ function drawEdPics(){
 // 書き換え・削除を戻す（2026-11-27 評価2回目の優先順位3。打った内容は0.5秒で保存され、「戻る」は取り消しにならないため）。
 // 開いた時の文（edStartText）と違えば「書き始める前の文に戻す」。戻した後は「戻す前の文にする」で、戻す直前の文へ（1回分だけ）
 let edStartText = '', edRedoText = null;
+document.getElementById('edEdit').onclick = () => {
+  if (!ed) return; ed.read = false; drawEditor();
+  const ta = document.getElementById('memoText'); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); // 終わりから書き足せるように
+};
 function syncRevert(){
   const b = document.getElementById('edRevert'), v = document.getElementById('memoText').value;
   if (edRedoText != null){ b.hidden = false; b.textContent = '↷ 戻す前の文にする'; }
@@ -1442,7 +1461,7 @@ function saveMemo(){
 function closeEditor(fromPop){
   if (!ed) return;
   clearTimeout(saveTimer); saveMemo();
-  ed = null; drawEdPics(); // 画像の欄を空にする（閉じた後の描き直しで読みにいかないように）
+  ed = null; drawEdPics(); document.getElementById('editor').classList.remove('reading'); document.getElementById('edEdit').hidden = true; // 画像の欄を空にする（閉じた後の描き直しで読みにいかないように）
   document.getElementById('editor').classList.remove('open');
   document.getElementById('memoText').blur();
   if (!fromPop && history.state && history.state.editor) history.back();
@@ -1730,11 +1749,11 @@ document.addEventListener('click', e => {
   if (t.dataset.memokey){
     const key = t.dataset.memokey, [kind, id, wave, second] = key.split(':');
     if (['cm', 'ct', 'th'].includes(kind) && scenById(+id)){
-      openEditor(kind, id, kind === 'ct' ? wave + ':' + second : wave);
-    } else openEditor('found', key);
+      openEditor(kind, id, kind === 'ct' ? wave + ':' + second : wave, { read: true });
+    } else openEditor('found', key, undefined, { read: true });
     return;
   }
-  if (t.dataset.edit){ openEditor(t.dataset.edit, t.dataset.id, t.dataset.rule); return; }
+  if (t.dataset.edit){ openEditor(t.dataset.edit, t.dataset.id, t.dataset.rule, { read: t.dataset.read === '1' }); return; }
   if (t.dataset.play){ openPlay(+t.dataset.play, +t.dataset.no, t.dataset.start); return; }
   if (t.dataset.addtext && ed){
     const ta = document.getElementById('memoText');
@@ -1769,7 +1788,7 @@ document.getElementById('navNow').onclick = () => { setUI({ view:'now' }); docum
 document.getElementById('navList').onclick = () => { setUI({ view:'list', listKind:'search' }); document.getElementById('main').scrollTop = 0; };
 document.getElementById('navTier').onclick = () => { setMoreMenu(false); if (window.noteFlush) noteFlush(); setUI({ view:'tier' }); document.getElementById('main').scrollTop = 0; };
 // ばちこんのWAVE画面の「潮位のメモ」を押したら、そのメモを書く画面へ（WAVE画面のボタンは上の共通の処理を通らないため）
-document.getElementById('playBody').addEventListener('click', e => { const b = e.target.closest('[data-memokey]'); if (b) openEditor('found', b.dataset.memokey); });
+document.getElementById('playBody').addEventListener('click', e => { const b = e.target.closest('[data-memokey]'); if (b) openEditor('found', b.dataset.memokey, undefined, { read: true }); });
 document.getElementById('unsavedRetry').onclick = async () => {
   if (window.noteFlush) noteFlush();
   const okM = (!memosUnsaved || save('sm_memos', memos)) && (!atUnsaved || save('sm_memo_at', memoAt)); // 更新日は本文の後に
