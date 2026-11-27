@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-26l';</script>
+<script>window.APP_VERSION = '2026-11-27a';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -814,12 +814,27 @@ let backupLog = load('sm_backup_log', {}); if (!backupLog || typeof backupLog !=
 if (backupLog.imp && backupLog.imp.pending){ backupLog.imp.pending = false; (backupLog.imp.miss = backupLog.imp.miss || []).push('作戦図・画像（読み込みの途中でアプリが閉じられたため、入ったか確認できていません）'); save('sm_backup_log', backupLog); }
 const logDate = t => { const d = new Date(t); return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + hm(d); };
 const cnt = (n, unit, name) => n ? name + n + unit : '';
+// 画像・作戦図の数（-1 はまだ数えていない）。数え終わったら出ている欄を書き換える
+let mediaCount = -1, mediaCounting = false;
+function countMedia(){
+  if (mediaCounting) return; mediaCounting = true;
+  Promise.all([window.memoPicKeys ? memoPicKeys().then(k => k.length, () => 0) : 0, window.boardCount ? boardCount().catch(() => 0) : 0]).then(([a, b]) => {
+    mediaCount = a + b; mediaCounting = false;
+    const box = document.querySelector('#main .backup'); if (mediaCount > 0 && box){ box.querySelectorAll('.blog, .improw').forEach(el => el.remove()); box.insertAdjacentHTML('beforeend', backupLogHTML()); }
+  });
+}
 function backupLogHTML(){
   const e = backupLog.exp, i = backupLog.imp, h = [];
-  const hasMemo = Object.keys(memos).some(k => memoOf(k));
-  // しばらく書き出していない時は目立たせる（メモがある人だけ）
-  const days = e ? Math.floor((Date.now() - e.at) / 864e5) : null;
-  if (hasMemo && (!e || days >= 14)) h.push('<div class="blog warn">' + (e ? '前回の書き出しから' + days + '日たっています。' : 'まだ一度も書き出していません。') + '機種変更などに備えて書き出しておくと安心です</div>');
+  // 書き出すべき物があるか: 文字のメモ・印・ばちこんの記録。画像・作戦図だけの人も漏らさないよう、無い時は一度だけ数えに行く（評価2回目 17）
+  const hasData = Object.keys(memos).some(k => memoOf(k)) || pins.size > 0 || Object.keys(contests).length > 0 || mediaCount > 0;
+  if (!hasData && mediaCount < 0) countMedia();
+  // 注意は「欠けずに書き出せた日」で判断する（2026-11-27 評価2回目の優先順位2）。
+  // 一部が欠けた書き出し（画像を入れられなかった等）では、新しく書き出しても注意を消さない
+  const fullAt = validAt(backupLog.full) ? backupLog.full : e && !(e.miss && e.miss.length) ? e.at : null;
+  const days = fullAt ? Math.floor((Date.now() - fullAt) / 864e5) : null;
+  if (hasData && e && e.miss && e.miss.length && !(fullAt >= e.at)) h.push('<div class="blog warn">前回の書き出しには入らなかった物がありました（' + e.miss.map(esc).join('、') + '）。' +
+    (fullAt ? '全部入った書き出しは' + days + '日前（' + esc(logDate(fullAt)) + '）です。' : '全部入った書き出しは、まだありません。') + '入らなかった理由を直してから、もう一度書き出してください</div>');
+  else if (hasData && (!fullAt || days >= 14)) h.push('<div class="blog warn">' + (fullAt ? '前回の書き出しから' + days + '日たっています。' : 'まだ一度も書き出していません。') + '機種変更などに備えて書き出しておくと安心です</div>');
   const part = (title, x, items) => '<div class="blog' + (x.miss && x.miss.length ? ' bad' : '') + '"><b>' + title + '（' + esc(logDate(x.at)) + '）</b>' +
     (items.filter(Boolean).join('・') || '中身なし') +
     (x.miss && x.miss.length ? '<div class="miss">入らなかった物: ' + x.miss.map(esc).join('、') + '</div>' : '') + '</div>';
@@ -1386,9 +1401,12 @@ async function exportMemos(){
   const blob = new Blob([JSON.stringify({ app:'splat-stage-memo', version:4, exportedAt:d.toISOString(), memos, contests, tiers: window.getTierStore ? getTierStore() : undefined, boards: boards || undefined, notePics: notePics && notePics.length ? notePics : undefined, pins: [...pins], memoAt })], { type:'application/json' });
   const name = 'stage-memo-' + stamp + '.json';
   // 書き出せた時だけ記録する（共有シートを閉じた時は記録しない）
-  const logExp = how => saveBackupLog('exp', { at: Date.now(), how, memos: Object.keys(memos).filter(k => memoOf(k)).length, pics: notePics ? notePics.length : 0,
+  const logExp = how => { const x = { at: Date.now(), how, memos: Object.keys(memos).filter(k => memoOf(k)).length, pics: notePics ? notePics.length : 0,
     boards: boards && Array.isArray(boards.boards) ? boards.boards.length : 0, bases: boards && boards.bases ? Object.keys(boards.bases).length : 0,
-    tiers: window.getTierStore ? Object.keys((getTierStore() || {}).lists || {}).length : 0, kb: Math.max(1, Math.round(blob.size / 1024)), miss: missing });
+    tiers: window.getTierStore ? Object.keys((getTierStore() || {}).lists || {}).length : 0, kb: Math.max(1, Math.round(blob.size / 1024)), miss: missing };
+    if (!missing.length) backupLog.full = x.at; // 欠けずに書き出せた日（注意はこれで判断する）
+    mediaCount = Math.max(mediaCount, x.pics + x.boards);
+    saveBackupLog('exp', x); };
   // 読み込みの上限（250MB）を超えるファイルは、作っても戻せないので先に知らせる
   if (blob.size > 250e6 && !confirm('書き出すファイルが大きすぎて（' + Math.round(blob.size / 1e6) + 'MB）、このアプリで読み込めない大きさです。使っていない作戦図や画像を消してから書き出すのがおすすめです。このまま書き出しますか？')) return;
   try{

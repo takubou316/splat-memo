@@ -583,6 +583,7 @@ window.boardPop = () => {
 };
 window.openBoardPlace = openPlace;
 window.openBoardById = openBoard;
+window.boardCount = async () => (await allBoards()).length; // バックアップの注意で「作戦図があるか」を見る
 window.boardMeta = async id => { try { return await boardGet(id); } catch (e){ return null; } };
 
 const D = () => Math.max(B.w, B.h);
