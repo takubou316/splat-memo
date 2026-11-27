@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-27g';</script>
+<script>window.APP_VERSION = '2026-11-27h';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -294,6 +294,10 @@ nav button.on{color:var(--salmon)}
 .quick-memo.pin span{flex:none;font-weight:700}
 .quick-memo.pin b{white-space:pre-line;font-size:15px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
 .stage + .quick-memos,.nowpics + .quick-memos,.nowbd + .quick-memos{margin:-2px 14px 10px}
+#slotBar{position:fixed;left:10px;right:10px;top:calc(env(safe-area-inset-top) + 64px);z-index:40;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:var(--card2);border:1px solid var(--salmon);box-shadow:0 6px 20px #000a;font-size:13px;color:var(--text)}
+#slotBar[hidden]{display:none}
+#slotBar span{flex:1}
+#slotBar button{flex:none;min-height:38px;padding:0 12px;border-radius:10px;font-size:13px;font-weight:700;color:#1a1020;background:var(--salmon);border:0}
 .quick-memos .qmore{display:none}
 .quick-memos.open .qmore{display:flex}
 .qmore-btn{justify-self:start;min-height:34px;padding:0 12px;border-radius:999px;font-size:12px;font-weight:600;color:var(--sub);background:var(--card);border:1px solid var(--line2)}
@@ -934,6 +938,7 @@ function backupHTML(){
 }
 
 function render(){
+  if (window.slotBarEl) slotBarEl.hidden = true; // 描き直したら新しい時間帯になっている
   statusText();
   // バトルのメモ帳で書いている途中は描き直さない（時間帯の更新などで打ちかけが消えないように）
   const noteV = ui.view === 'note' || ui.view === 'cnote'; // バトルメモ・サモランメモ（note.js）
@@ -1904,6 +1909,15 @@ function nextBoundary(){
   ['regularSchedules','bigRunSchedules','teamContestSchedules'].forEach(k => ((c[k] || {}).nodes || []).forEach(see));
   return t === Infinity ? 0 : t;
 }
+// 2026-11-27 評価2回目の優先順位8: 読んでいる最中（直前の1分半に触っていた）に時間帯が変わった時は、表示を勝手に切り替えず、
+// 上に「新しい時間帯になりました［切り替える］」を出す。触っていなければ今まで通り切り替える。次に描き直した時（タブを移った等）は新しい時間帯になる
+let lastTouch = 0;
+['pointerdown', 'keydown', 'wheel'].forEach(ev => document.addEventListener(ev, () => { lastTouch = Date.now(); }, { capture: true, passive: true }));
+document.getElementById('main').addEventListener('scroll', () => { lastTouch = Date.now(); }, { passive: true });
+const slotBar = document.createElement('div'); slotBar.id = 'slotBar'; slotBar.hidden = true; slotBar.setAttribute('role', 'status');
+slotBar.innerHTML = '<span>新しい時間帯になりました</span><button type="button">今の時間帯に切り替える</button>';
+document.body.appendChild(slotBar); window.slotBarEl = slotBar;
+slotBar.querySelector('button').onclick = () => { slotBar.hidden = true; render(); if (stale()) refresh(); };
 function armSlotTimer(){
   clearTimeout(slotTimer);
   const t = nextBoundary(); if (!t) return;
@@ -1911,6 +1925,7 @@ function armSlotTimer(){
     if (document.visibilityState === 'visible'){
       const noteV = ui.view === 'note' || ui.view === 'cnote';
       if (noteV && window.noteBusy && noteBusy()) toast('時間帯が変わりました。書き終えると今のステージに切り替わります');
+      else if ((ui.view === 'now' || noteV) && Date.now() - lastTouch < 90e3 && !document.querySelector('#editor.open, #board.open, #play.open')){ slotBar.hidden = false; armSlotTimer(); return; } // 新しいスケジュールの取り直しも、切り替えるまで待つ（取り直すと描き直すため）
       render();
       if (stale()) refresh();
     }
