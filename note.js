@@ -201,7 +201,7 @@ const sec = (key, title, sub, ph, main, inline, pinTitle) => { // pinTitle: 「�
   if (pinned) pinList.push([key, pinTitle || title, has ? txt : '（画像のみ）']);
   // 「試合前に見る」印（文字がある欄だけ付けられる）
   const pinBtn = has || hp ? '<button class="nb-pin' + (pinned ? ' on' : '') + '" data-nbpin="' + esc(key) + '" aria-pressed="' + !!pinned + '" aria-label="' + esc(title) + 'を試合前に見る">' + (pinned ? '★ 試合前' : '☆ 試合前') + '</button>' : '';
-  return '<div class="nb-sec' + (main ? ' main' : '') + (hide ? ' hid' : '') + '" data-nbsec="' + esc(key) + '">' + head(pinBtn + '<button class="nb-ebtn" data-nbedit="' + esc(key) + '" aria-label="' + esc(title) + 'を編集">編集</button>') +
+  return '<div class="nb-sec' + (main ? ' main' : '') + (hide ? ' hid' : '') + '" data-nbsec="' + esc(key) + '">' + head(pinBtn + (has || hp || !main ? '<button class="nb-ebtn" data-nbedit="' + esc(key) + '" aria-label="' + esc(title) + 'を編集">編集</button>' : '')) +
     (has ? '<div class="nb-txt' + (expanded.has(key) ? ' open' : '') + '" data-nbtxt="' + esc(key) + '">' + esc(txt) + '</div><button class="nb-more" data-nbmore="' + esc(key) + '" hidden>' + (expanded.has(key) ? '▲ たたむ' : '▼ 続きを読む') + '</button>'
       : main ? '<button class="nb-blank" data-nbedit="' + esc(key) + '">まだありません　＋ 書く</button>' : '') +
     '<div class="nbpics" data-nbpro="1" data-nbpk="' + esc(key) + '"></div></div>' +

@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-27k';</script>
+<script>window.APP_VERSION = '2026-11-27l';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -579,6 +579,7 @@ function statusText(){
 }
 
 // ---------- 描画: いまのステージ ----------
+const stageHasMemo = (stageId, rule) => rule ? !!(memoOf(kVs(stageId, rule.id)) || memoOf(kVs(stageId))) : !!memoOf(kCoop(stageId));
 function memoBlock(stageId, rule){
   let h = '';
   if (rule){
@@ -589,13 +590,13 @@ function memoBlock(stageId, rule){
     const m = memoOf(kCoop(stageId));
     if (m) h += '<div class="memo">' + esc(m) + '</div>';
   }
-  return h || '<div class="nomemo">メモなし ― タップして書く</div>';
+  return h || '<div class="nomemo">メモはまだありません</div>';
 }
 function stageButton(s, rule){
   const img = (s.thumbnailImage && s.thumbnailImage.url) || (s.image && s.image.url) || stageImg[s.id] || '';
   return '<button class="stage" data-edit="' + (rule ? 'vs' : 'coop') + '" data-id="' + esc(s.id) + '" data-rule="' + (rule ? esc(rule.id) : '') + '">' +
     '<div class="shead">' + (img ? '<img src="' + esc(img) + '" alt="" loading="lazy">' : '') +
-    '<div class="sname">' + esc(stageName(s)) + '</div><span class="editbtn">✎ 編集</span></div>' +
+    '<div class="sname">' + esc(stageName(s)) + '</div><span class="editbtn">' + (stageHasMemo(s.id, rule) ? '✎ 編集' : '＋ 書く') + '</span></div>' +
     memoBlock(s.id, rule) + '</button>' +
     // メモに付けた画像（見るだけ。描画の後に note.js の fillMemoPics が入れる。無ければ空で隠れる）
     (rule ? [kVs(s.id, rule.id), kVs(s.id)] : [kCoop(s.id)]).map(k => '<div class="nbpics nowpics" data-nbpro="1" data-nbpk="' + esc(k) + '"></div>').join('') +
