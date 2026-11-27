@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-27n';</script>
+<script>window.APP_VERSION = '2026-11-27o';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -155,6 +155,8 @@ nav button.on{color:var(--salmon)}
 #editor.reading .memo-read:empty{display:none}
 #editor.reading #memoText,#editor.reading .ed-rev,#editor.reading .coach-tools,#editor.reading .nbpic-add{display:none}
 #editor.reading .saved{display:none}
+#editor.moving{pointer-events:none}
+#editor.moving .ehead{opacity:.6}
 .ed-move{display:flex;gap:8px;padding:0 12px calc(12px + env(safe-area-inset-bottom))}
 .ed-move[hidden]{display:none}
 .ed-move button{flex:1;min-height:42px;border-radius:12px;font-size:13px;font-weight:600;color:var(--sub);background:var(--card);border:1px solid var(--line2)}
@@ -259,8 +261,15 @@ nav button.on{color:var(--salmon)}
 .wbtn{position:relative;padding:0;border-radius:9px}
 .weapons{flex-wrap:wrap} /* 幅の狭い端末では潮位のボタンが次の行へ回る */
 .ctides{display:flex;gap:5px;margin-left:auto}
-.ctide{min-width:40px;height:38px;padding:0 6px;border-radius:9px;background:var(--card2);border:1px solid var(--salmon);color:var(--salmon);font-size:12px;font-weight:700}
-.ctide.none{border-color:var(--line);color:var(--faint);opacity:.55}
+.ctide{position:relative;min-width:44px;height:38px;padding:0 6px;border-radius:9px;background:var(--card2);border:1px solid var(--line2);color:var(--text);font-size:12px;font-weight:600}
+.ctide.has::after,.ctide.hasbd::after{content:'';position:absolute;top:4px;right:4px;width:6px;height:6px;border-radius:50%;background:var(--salmon)}
+.ed-bd{display:none;padding:0 0 calc(12px + env(safe-area-inset-bottom));overflow-y:auto}
+#editor.reading.tdread .ed-bd{display:block;flex:1}
+/* 潮位の読む表示から作戦図を開いた時は、作戦図の画面（.ovl、z-index 22）を上に出す */
+body:has(.ovl.open) #editor{z-index:21}
+#editor.reading.tdread .memo-read{flex:none;max-height:45vh}
+.ed-bd .sec{margin:4px 14px 6px}
+.ed-bd .nowbd{margin:0 12px 10px}
 .wbtn.has::after{content:"";position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:50%;background:var(--salmon);border:2px solid var(--card)}
 .toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:rgba(20,18,28,.94);border:1px solid var(--line2);color:#fff;
   padding:8px 14px;border-radius:999px;font-size:12px;z-index:30;opacity:0;transition:opacity .2s;pointer-events:none}
@@ -366,6 +375,7 @@ nav button.on{color:var(--salmon)}
   <div id="coachTools" class="coach-tools" hidden><button type="button" id="coachTemplate">練習メモのひな形</button><button type="button" id="coachCopy">このメモをコピー</button></div>
   <div class="ed-rev"><button type="button" id="edRevert" hidden>↶ 書き始める前の文に戻す</button></div>
   <div class="memo-read" id="memoRead" tabindex="0"></div>
+  <div class="ed-bd" id="edBoards"></div>
   <textarea id="memoText" placeholder="ここにメモを書く（自動で保存されます）"></textarea>
   <!-- このメモに付けた画像（note.js が中身を入れる。ステージ・ブキ・オオモノのメモだけ） -->
   <div id="edPicWrap"><div class="nbpics" id="edPics" data-nbpk=""></div><div id="edPicSt" data-nbst=""></div></div>
@@ -395,18 +405,41 @@ const FALLBACK_STAGES = {"VnNTdGFnZS0x":"ユノハナ大渓谷","VnNTdGFnZS0y":"
 // ---------- 保存 ----------
 function load(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } }
 // メモ（sm_memos）の保存に失敗したら覚えておき、画面上の帯で知らせる（画面を閉じても消えない。成功したら消える）
-// pendingTrash: 消して、まだ端末に保存できていないメモ（キー→消す前の文）。sm_memos の保存が成功した時に「最近消したメモ」へ移す
+// pendingTrash: 消して、まだ端末に保存できていないメモ（キー→消す前の文）。sm_memos を書く前に「最近消したメモ」へ保存する（trashBeforeSave）
 const pendingTrash = new Map();
-window.markDeleted = (k, t) => { if (typeof t === 'string' && t.trim() && !pendingTrash.has(k)) pendingTrash.set(k, t); };
-window.unmarkDeleted = k => { pendingTrash.delete(k); };
+const pendingPins = new Set(); // 消した時に「試合前」の印があった欄（控えを保存できず本文を戻す時に、印も戻す）
+window.markDeleted = (k, t) => { if (typeof t === 'string' && t.trim() && !pendingTrash.has(k)){ pendingTrash.set(k, t); if (pins.has(k)) pendingPins.add(k); } };
+window.unmarkDeleted = k => { pendingTrash.delete(k); pendingPins.delete(k); };
 // 控えにする文: 消す直前の文が、書き始めた時の文の一部（1文字ずつ消している途中）なら書き始めた時の文、それ以外は消す直前の文
 window.pickDeleted = (start, prev) => typeof start === 'string' && start.trim() && (!prev || start.includes(prev.trim())) ? start : prev;
-function settlePendingTrash(){ [...pendingTrash].forEach(([k, t]) => { pendingTrash.delete(k); if (!(typeof memos[k] === 'string' && memos[k].trim()) && window.trashMemo) trashMemo(k, t); }); }
+// （2026-11-27 評価3回目 K2 で、控えは本文の保存の前に取る形に変えた: trashBeforeSave）
+// sm_memos を書く前に呼ぶ。消したメモの控えを先に保存し、保存できなければ本文を戻す（消さない）。戻した時は true
+function trashBeforeSave(){
+  const items = [...pendingTrash].filter(([k]) => !(typeof memos[k] === 'string' && memos[k].trim()));
+  pendingTrash.clear();
+  if (!items.length){ pendingPins.clear(); return false; }
+  if (!items.length || typeof trashAddAll !== 'function') return false;
+  if (trashAddAll(items)){ pendingPins.clear(); return false; }
+  // 控えを保存できない: 本文・印を戻し、開いている書く欄にも戻す（Codexレビュー）
+  let pinBack = false;
+  items.forEach(([k, t]) => {
+    memos[k] = t;
+    if (pendingPins.has(k)){ pins.add(k); pinBack = true; }
+    if (ed && edKey() === k){ const ta = document.getElementById('memoText'); ta.value = t; originalMemoText = t; edStartText = t; edRedoText = null; }
+    document.querySelectorAll('.nbta[data-nbkey="' + CSS.escape(k) + '"]').forEach(ta => { ta.value = t; });
+  });
+  pendingPins.clear();
+  if (pinBack) save('sm_pins', [...pins]);
+  setTimeout(() => { const sv = document.getElementById('edSaved'); if (sv && ed) sv.textContent = '消さずに残しました'; if (window.syncRevert && ed) syncRevert();
+    toast('空き容量が足りず、消したメモの控えを取れないので、メモは消さずに残しました', 5000); }, 0);
+  return true;
+}
 let memosUnsaved = false, atUnsaved = false; // atUnsaved: メモの更新日（sm_memo_at）を保存できていない
 function save(k, v){
+  const kept = k === 'sm_memos' && v === memos && pendingTrash.size ? trashBeforeSave() : false;
   try{ localStorage.setItem(k, JSON.stringify(v));
     if (k === 'sm_memos' && memosUnsaved){ memosUnsaved = false; drawUnsaved(); }
-    if (k === 'sm_memos' && pendingTrash.size) settlePendingTrash();
+    if (kept && typeof render === 'function') setTimeout(() => { if (!(window.noteBusy && noteBusy())) render(); }, 0); // 残した本文を画面に戻す
     if (k === 'sm_memo_at' && atUnsaved){ atUnsaved = false; drawUnsaved(); }
     return true; }
   catch(e){ if (k === 'sm_memos'){ memosUnsaved = true; drawUnsaved(); } if (k === 'sm_memo_at'){ atUnsaved = true; drawUnsaved(); } return false; }
@@ -605,9 +638,10 @@ function memoBlock(stageId, rule){
 }
 function stageButton(s, rule){
   const img = (s.thumbnailImage && s.thumbnailImage.url) || (s.image && s.image.url) || stageImg[s.id] || '';
-  return '<button class="stage" data-edit="' + (rule ? 'vs' : 'coop') + '" data-id="' + esc(s.id) + '" data-rule="' + (rule ? esc(rule.id) : '') + '">' +
+  const openRule = rule ? (!memoOf(kVs(s.id, rule.id)) && memoOf(kVs(s.id)) ? 'all' : rule.id) : ''; // 評価3回目 K5
+  return '<button class="stage" data-edit="' + (rule ? 'vs' : 'coop') + '" data-read="1" data-id="' + esc(s.id) + '" data-rule="' + esc(openRule) + '">' +
     '<div class="shead">' + (img ? '<img src="' + esc(img) + '" alt="" loading="lazy">' : '') +
-    '<div class="sname">' + esc(stageName(s)) + '</div><span class="editbtn">' + (stageHasMemo(s.id, rule) ? '✎ 編集' : '＋ 書く') + '</span></div>' +
+    '<div class="sname">' + esc(stageName(s)) + '</div><span class="editbtn">' + (stageHasMemo(s.id, rule) ? '開く ›' : '＋ 書く') + '</span></div>' +
     memoBlock(s.id, rule) + '</button>' +
     // メモに付けた画像（見るだけ。描画の後に note.js の fillMemoPics が入れる。無ければ空で隠れる）
     (rule ? [kVs(s.id, rule.id), kVs(s.id)] : [kCoop(s.id)]).map(k => '<div class="nbpics nowpics" data-nbpro="1" data-nbpk="' + esc(k) + '"></div>').join('') +
@@ -639,11 +673,12 @@ function coopCard(label, node, now){
       (st.weapons || []).map(w => coopWeaponIdByName(weaponName(w))).filter(Boolean).flatMap(id => ['cw:' + st.coopStage.id + ':' + id, 'wc:' + id]))) + '<div class="weapons">' + ws + tideBtns(st.coopStage.id) + '</div>' + stageButton(st.coopStage, null) +
     (label === 'バイトチームコンテスト' ? contestOpenBtn(node) : '') + '</div>';
 }
-// 支給ブキの右の空きに、潮位ごとのメモ（干潮・通常・満潮）を開くボタン。メモが無い潮位は暗く（押せば書ける）（2026-11-26 ユーザー要望）
+// 支給ブキの右の空きに、潮位ごとのメモ（干潮・通常・満潮）を開くボタン（2026-11-26 ユーザー要望）。
+// 押すとその潮位のメモと作戦図を読む表示。メモか作戦図があれば右上にオレンジの点（評価3回目 C4）
 function tideBtns(sid){
   return '<span class="ctides">' + [['Low','干潮'], ['Mid','通常'], ['High','満潮']].map(([k, n]) => {
     const has = memoHas('td:' + sid + ':' + k);
-    return '<button class="ctide' + (has ? '' : ' none') + '" data-memokey="' + esc('td:' + sid + ':' + k) + '" aria-label="' + n + 'のメモ' + (has ? '' : '（まだ無し）') + '">' + n + '</button>';
+    return '<button class="ctide' + (has ? ' has' : '') + '" data-memokey="' + esc('td:' + sid + ':' + k) + '" data-tideplace="' + esc('c:' + sid + ':' + k) + '" aria-label="' + n + 'のメモと作戦図' + (has ? '（メモあり）' : '') + '">' + n + '</button>';
   }).join('') + '</span>';
 }
 function contestOpenBtn(node){
@@ -681,7 +716,7 @@ function salmonCards(pick, now){
   return h;
 }
 function renderNow(){
-  const now = new Date();
+  const now = viewNow();
   let h = '<div class="seg"><button data-sub="salmon" class="salmon ' + (ui.nowSub==='salmon'?'on':'') + '">サーモンラン</button>' +
     '<button data-sub="battle" class="' + (ui.nowSub==='battle'?'on':'') + '">バトル</button></div>';
   const coaching = coachingLink(ui.nowSub === 'salmon' ? 'coop' : 'vs');
@@ -731,7 +766,7 @@ function renderWeaponList(kind){
   if (!items.length) return h + '<div class="empty">ブキのデータを読み込めませんでした</div></div>';
   items.forEach(w => {
     const m = memoOf(wKey(kind, w.id));
-    h += '<button class="row wrow" data-edit="' + (kind === 'coop' ? 'wc' : 'wv') + '" data-id="' + esc(w.id) + '" data-rule="" data-name="' + esc(nfkc(w.name).toLowerCase()) + '" data-has="' + (m ? 1 : 0) + '">' +
+    h += '<button class="row wrow" data-edit="' + (kind === 'coop' ? 'wc' : 'wv') + '" data-read="1" data-id="' + esc(w.id) + '" data-rule="" data-name="' + esc(nfkc(w.name).toLowerCase()) + '" data-has="' + (m ? 1 : 0) + '">' +
       '<img src="' + esc(w.img) + '" alt="" loading="lazy" class="wimg"><div class="rinfo"><div class="rname">' + esc(w.name) + '</div><div class="rprev' + (m ? '' : ' none') + '">' +
       esc(m ? m.split('\n')[0] : 'メモなし') + '</div></div></button>';
   });
@@ -814,7 +849,7 @@ function moveTargets(key){
 const canMove = key => !!key && !/^(cm|ct|th|coach|ar):/.test(key.replace(/^ar:/, '')); // ar: の中身の種類で判断（Codexレビュー）
 function syncMove(){
   const box = document.getElementById('edMove'), k = ed ? edKey() : '';
-  box.hidden = !(ed && document.getElementById('editor').classList.contains('reading') && canMove(k) && memoOf(k));
+  box.hidden = !(ed && document.getElementById('editor').classList.contains('reading') && canMove(k) && (memoOf(k) || (window.hasPics && hasPics(k))));
   document.getElementById('edStow').hidden = k.startsWith('ar:');
   document.getElementById('edMoveBtn').textContent = k.startsWith('ar:') ? '元に戻す・保存先を変える' : '保存先を変える';
 }
@@ -834,26 +869,48 @@ function openMoveSheet(){
   document.body.appendChild(mvSheet);
 }
 // src の文を dst へ移す（dst に文があれば後ろにつなげる）。画像は元の欄に残す
-function moveMemo(src, dst, stow){
-  if (!ed) return;
+// src の文と画像を dst へ移す（dst に文があれば後ろにつなげる）。評価3回目 K6: 画像も一緒に移す（前は本文だけで、画像は元の欄に残った）
+let moving = false;
+async function moveMemo(src, dst, stow){
+  if (!ed || moving) return;
   clearTimeout(saveTimer); saveMemo();
   if (window.noteFlush) noteFlush();
   if (window.noteDirty && (noteDirty(src) || noteDirty(dst))){ toast('保存できていない書きかけがあるので移せませんでした'); return; }
-  const text = memoOf(src); if (!text) return;
-  const cur = memoOf(dst), before = { s: memos[src], d: memos[dst] };
-  if (window.noteForget){ noteForget(src); noteForget(dst); }
-  memos[dst] = cur ? (cur === text ? cur : cur + '\n' + text) : text; delete memos[src];
-  if (!save('sm_memos', memos)){
-    if (before.d === undefined) delete memos[dst]; else memos[dst] = before.d; memos[src] = before.s;
-    toast('移せませんでした（空き容量を確かめてください）'); return;
-  }
-  if (pins.has(src)){ pins.delete(src); if (PIN_KEY_RE.test(dst)) pins.add(dst); if (!save('sm_pins', [...pins])){ pins.delete(dst); pins.add(src); toast('「試合前」の印を移せませんでした'); } }
-  touchMemo(dst); if (window.settleMemoAt) settleMemoAt(src);
-  const pics = window.hasPics && hasPics(src);
-  ed = { read: true, kind: 'found', id: dst, rule: null };
-  document.getElementById('edTitle').textContent = memoLocation(dst);
-  drawEditor();
-  toast((stow ? 'しまいました。「メモ一覧」で探すと出てきます' : dst === src.slice(3) ? '元の場所に戻しました' : '「' + memoLocation(dst) + '」に移しました') + (pics ? '（画像は元の欄に残っています）' : ''), 4000);
+  const edAt = ed, text = memoOf(src);
+  moving = true; document.getElementById('editor').classList.add('moving'); // 移している間は書けない（Codexレビュー）
+  try {
+    // 先に画像（キャッシュで判断せず、DBで確かめる。上限を超える時は何も移さない）
+    let pm = { n: 0, full: false, ids: [] };
+    if (window.movePics){
+      try { pm = await movePics(src, dst); } catch (e){ toast('画像を移せなかったので、移すのをやめました'); return; }
+      if (pm.full){ toast('移す先の画像が12枚を超えるので移せません。どちらかの画像を減らしてください', 5000); return; }
+    }
+    const undoPics = async msg => {
+      if (pm.n && window.repointPics){ try { await repointPics(pm.ids, src); } catch (e){ toast('移すのをやめましたが、画像' + pm.n + '枚は「' + memoLocation(dst) + '」に残っています', 6000); return; } }
+      toast(msg);
+    };
+    // 待っている間に、どちらかの文が変わっていたらやめる
+    if (memoOf(src) !== text || (window.noteDirty && (noteDirty(src) || noteDirty(dst)))){ await undoPics('移している間にメモが変わったので、移すのをやめました'); return; }
+    if (!text && !pm.n) return;
+    if (text){
+      const cur = memoOf(dst), before = { s: memos[src], d: memos[dst] };
+      if (window.noteForget){ noteForget(src); noteForget(dst); }
+      memos[dst] = cur ? (cur === text ? cur : cur + '\n' + text) : text; delete memos[src];
+      if (!save('sm_memos', memos)){
+        if (before.d === undefined) delete memos[dst]; else memos[dst] = before.d; memos[src] = before.s;
+        await undoPics('移せませんでした（空き容量を確かめてください）'); return;
+      }
+    }
+    if (pins.has(src)){ pins.delete(src); if (PIN_KEY_RE.test(dst)) pins.add(dst); if (!save('sm_pins', [...pins])){ pins.delete(dst); pins.add(src); toast('「試合前」の印を移せませんでした'); } }
+    touchMemo(dst); if (window.settleMemoAt) settleMemoAt(src);
+    if (window.syncPicKeys) await syncPicKeys(); // 画像のある欄の一覧を先に新しくしてから描く（画像だけのメモが空に見えないように）
+    if (ed === edAt){
+      ed = { read: true, kind: 'found', id: dst, rule: null };
+      document.getElementById('edTitle').textContent = edFoundTitle(dst);
+      drawEditor();
+    }
+    toast((stow ? 'しまいました。「メモ一覧」で探すと出てきます' : dst === src.slice(3) ? '元の場所に戻しました' : '「' + memoLocation(dst) + '」に移しました') + (pm.n ? '（画像' + pm.n + '枚も一緒に）' : ''), 4000);
+  } finally { moving = false; document.getElementById('editor').classList.remove('moving'); }
 }
 document.getElementById('edMoveBtn').onclick = () => { if (ed) openMoveSheet(); };
 document.getElementById('edStow').onclick = () => {
@@ -865,6 +922,15 @@ document.getElementById('edStow').onclick = () => {
 let trash = load('sm_trash', []); if (!Array.isArray(trash)) trash = [];
 const TRASH_DAYS = 30, TRASH_MAX = 30;
 function pruneTrash(){ const lim = Date.now() - TRASH_DAYS * 864e5, n = trash.length; trash = trash.filter(x => x && typeof x.k === 'string' && typeof x.t === 'string' && x.t.trim() && validAt(x.at) && x.at >= lim).slice(0, TRASH_MAX); if (trash.length !== n) save('sm_trash', trash); } // 期限切れは保存からも消す
+// まとめて控えに足す。保存できた時だけ trash を入れ替える（失敗したら今の控えのまま false）
+function trashAddAll(items){
+  pruneTrash(); let next = trash.slice();
+  items.forEach(([k, t]) => { next = next.filter(x => !(x.k === k && x.t === t)); next.unshift({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), k, t, at: Date.now() }); });
+  next = next.slice(0, Math.max(TRASH_MAX, items.length));
+  try { localStorage.setItem('sm_trash', JSON.stringify(next)); } catch (e){ return false; }
+  trash = next; const box = document.getElementById('memoTrash'); if (box) box.innerHTML = trashHTML();
+  return true;
+}
 window.trashMemo = (k, t) => {
   if (typeof t !== 'string' || !t.trim()) return;
   pruneTrash(); trash = trash.filter(x => !(x.k === k && x.t === t)); // 同じ欄の同じ文は1つにまとめる（新しい方を残す）
@@ -970,8 +1036,8 @@ function renderList(){
     '<button data-lkind="weapon" class="' + (lk === 'weapon' ? 'on' : '') + '">ブキ</button>' +
     '<button data-lkind="board" class="' + (lk === 'board' ? 'on' : '') + '">作戦図</button></div>';
   if (lk === 'search') return h + renderMemoSearch();
-  if (lk === 'weapon') return h + renderWeaponList(kind) + backupHTML();
-  if (lk === 'board') return h + (typeof renderBoardList === 'function' ? renderBoardList(kind) : '<div class="empty">読み込み中…</div>') + backupHTML();
+  if (lk === 'weapon') return h + renderWeaponList(kind); // 評価3回目 C2: 古いバックアップの欄は外した（バックアップ・機種変更の画面に一本化）
+  if (lk === 'board') return h + (typeof renderBoardList === 'function' ? renderBoardList(kind) : '<div class="empty">読み込み中…</div>');
   h += '<div class="sec">ステージ共通・ルール別の欄</div><div class="list">';
   for (const s of allStages(kind)){
     let prev = '', cnt = 0;
@@ -982,13 +1048,13 @@ function renderList(){
       cnt = filled.length; prev = filled.length ? memoOf(filled[0]) : '';
     }
     const img = stageImg[s.id];
-    h += '<button class="row" data-edit="' + kind + '" data-id="' + esc(s.id) + '" data-rule="">' +
+    h += '<button class="row" data-edit="' + kind + '" data-read="1" data-id="' + esc(s.id) + '" data-rule="">' +
       (img ? '<img src="' + esc(img) + '" alt="" loading="lazy">' : '<img alt="">') +
       '<div class="rinfo"><div class="rname">' + esc(s.name) + '</div><div class="rprev' + (prev ? '' : ' none') + '">' +
       esc(prev ? prev.split('\n')[0] : (kind === 'coop' ? '共通メモを書く' : 'ステージのメモを書く')) + '</div></div>' +
       (kind === 'vs' && cnt ? '<span class="count">' + cnt + '件</span>' : '') + '</button>';
   }
-  return h + '</div>' + backupHTML();
+  return h + '</div>';
 }
 // ---------- バックアップの結果の内訳（2026-11-26、評価 F2・優先順位10）----------
 // 前はお知らせ（2秒）だけで、何が入って何が入らなかったか後から分からなかった。前回の書き出し・読み込みの内訳をバックアップの欄に残す
@@ -1068,7 +1134,7 @@ function render(){
   // バトルのメモ帳で書いている途中は描き直さない（時間帯の更新などで打ちかけが消えないように）
   const noteV = ui.view === 'note' || ui.view === 'cnote'; // バトルメモ・サモランメモ（note.js）
   const keepNote = noteV && window.noteBusy && noteBusy();
-  if (window.slotBarEl && !keepNote) slotBarEl.hidden = true; // 描き直したら新しい時間帯になっている（書いている途中で描き直さない時は帯を残す。Codexレビュー）
+  if (window.slotBarEl && !keepNote && !slotHold) slotBarEl.hidden = true; // 描き直したら新しい時間帯になっている（書いている途中で描き直さない時は帯を残す。Codexレビュー。止めている間は残す）
   if (keepNote){ if (window.noteDeferRender) noteDeferRender(); } else if (window.noteFlush) noteFlush(); // 描き直す前に打った分を保存
   const keepSearch = ui.view === 'list' && ui.listKind === 'search' && document.getElementById('memoSearch');
   if (keepSearch) document.querySelectorAll('.memo-options .coach-link').forEach(link => {
@@ -1494,7 +1560,11 @@ function migrateOldContests(force, noSave){ // noSave: 書き換えるだけで�
   return true;
 }
 migrateOldContests(false);
-function setUI(p){ Object.assign(ui, p); save('sm_ui', { view:ui.view, nowSub:ui.nowSub, listSub:ui.listSub, listKind:ui.listKind, wOnlyMemo:ui.wOnlyMemo }); render(); }
+// slotHold: 帯が出ている間の表示の時刻（境目の直前）。0なら今の時刻
+let slotHold = 0;
+window.viewNow = () => new Date(slotHold || Date.now());
+function releaseSlotHold(){ if (!slotHold) return; slotHold = 0; if (window.slotBarEl) slotBarEl.hidden = true; }
+function setUI(p){ if (p.view && p.view !== ui.view) releaseSlotHold(); Object.assign(ui, p); save('sm_ui', { view:ui.view, nowSub:ui.nowSub, listSub:ui.listSub, listKind:ui.listKind, wOnlyMemo:ui.wOnlyMemo }); render(); }
 
 // ---------- エディタ ----------
 let ed = null;
@@ -1503,7 +1573,7 @@ function openEditor(kind, id, rule, opts){
   if (window.noteFlush) noteFlush();
   ed = { read: !!(opts && opts.read), kind, id, rule: kind === 'vs' ? (rule || 'all') : (kind === 'cm' || kind === 'ct' || kind === 'th') ? rule : null };
   document.getElementById('edTitle').textContent =
-    kind === 'found' ? memoLocation(id) :
+    kind === 'found' ? edFoundTitle(id) :
     kind === 'cm' ? 'WAVE ' + rule + ' の作戦（' + nameById(scenById(+id).stage) + '）' :
     kind === 'ct' ? 'WAVE ' + rule.split(':')[0] + '・残り' + rule.split(':')[1] + '秒' :
     kind === 'th' ? 'WAVE ' + rule + ' のタマヒロイの方向' :
@@ -1512,6 +1582,7 @@ function openEditor(kind, id, rule, opts){
   history.pushState({ editor:true }, '');
   drawEditor();
 }
+function edFoundTitle(key){ const a = key.split(':'); return a[0] === 'td' ? (memoTides[a[2]] || '') + '・' + nameById(a[1]) : memoLocation(key); }
 function tierItemName(kind, id){
   const set = { wc: 'coopWeapon', wv: 'vsWeapon', bs: 'boss' }[kind];
   const x = window.TIER_DATA && TIER_DATA.sets[set] && TIER_DATA.sets[set].items.find(i => i.id === id);
@@ -1537,6 +1608,10 @@ function drawEditor(){
     chips.innerHTML = ['左', '正面', '右', '奥', '手前'].concat(QUICK_BOSSES).map(b => '<button class="chip" data-addtext="' + b + '">' + b + '</button>').join('');
     chips.style.display = '';
     hint.textContent = 'この時刻に湧くもの・方角・動き方をメモ。上のボタンで追記できます（例: 右 テッパン、カタパは自分）';
+  } else if (ed.kind === 'found' && edKey().startsWith('td:')){
+    const [, sid, cur] = edKey().split(':');
+    chips.innerHTML = Object.entries(memoTides).map(([k, n]) => '<button class="chip' + (k === cur ? ' on' : '') + (memoHas('td:' + sid + ':' + k) ? ' has' : '') + '" data-tdchip="' + k + '">' + n + '</button>').join('');
+    chips.style.display = ''; hint.textContent = '';
   } else { chips.innerHTML = ''; chips.style.display = 'none';
     hint.textContent = ed.kind === 'found' ? '' : ed.kind === 'wc' ? 'サーモンランでこのブキが支給されたときの立ち回りなど（いまのステージで支給ブキをタップしても開けます）' :
       ed.kind === 'wv' ? 'バトルでこのブキを使うときのメモ' : ed.kind === 'bs' ? 'このオオモノの倒し方・注意点など' :
@@ -1550,11 +1625,15 @@ function drawEditor(){
   originalMemoText = ta.value;
   edStartText = ta.value; edRedoText = null; syncRevert(); // 書き始める前の文（評価2回目の優先順位3）
   // 読む表示: 中身がある時だけ（空なら書く欄から）。「✎ 編集」で書く欄にする
-  const reading = !!ed.read && (!!ta.value.trim() || !!(window.hasPics && hasPics(edKey())));
+  const tdKey = edKey().startsWith('td:') ? edKey().split(':') : null; // 潮位のメモ: その潮位の作戦図も並べる（評価3回目 C4）
+  const reading = !!ed.read && (!!ta.value.trim() || !!(window.hasPics && hasPics(edKey())) || !!tdKey);
+  document.getElementById('editor').classList.toggle('tdread', reading && !!tdKey);
+  document.getElementById('edBoards').innerHTML = reading && tdKey ? '<div class="sec">作戦図（' + esc(memoTides[tdKey[2]] || '') + '）</div><div class="nowbd" data-nbd="c:' + esc(tdKey[1]) + ':' + esc(tdKey[2]) + '"></div>' : '';
+  if (reading && tdKey && window.fillNowBoards) fillNowBoards();
   document.getElementById('editor').classList.toggle('reading', reading);
   document.getElementById('memoRead').textContent = reading ? ta.value : '';
   document.getElementById('edEdit').hidden = !reading;
-  if (reading) hint.textContent = '';
+  if (reading) hint.textContent = tdKey && !ta.value.trim() ? 'この潮位のメモはまだありません（右上の「✎ 編集」で書けます）' : '';
   document.getElementById('edSaved').textContent = '';
   drawEdPics(); syncMove();
 }
@@ -1608,7 +1687,7 @@ function saveMemo(){
 function closeEditor(fromPop){
   if (!ed) return;
   clearTimeout(saveTimer); saveMemo();
-  ed = null; closeMoveSheet(); drawEdPics(); syncMove(); document.getElementById('editor').classList.remove('reading'); document.getElementById('edEdit').hidden = true; // 画像の欄を空にする（閉じた後の描き直しで読みにいかないように）
+  ed = null; closeMoveSheet(); document.getElementById('edBoards').innerHTML = ''; document.getElementById('editor').classList.remove('tdread'); drawEdPics(); syncMove(); document.getElementById('editor').classList.remove('reading'); document.getElementById('edEdit').hidden = true; // 画像の欄を空にする（閉じた後の描き直しで読みにいかないように）
   document.getElementById('editor').classList.remove('open');
   document.getElementById('memoText').blur();
   if (!fromPop && history.state && history.state.editor) history.back();
@@ -1642,6 +1721,8 @@ async function exportMemos(){
     mediaCount = Math.max(mediaCount, x.pics + x.boards);
     saveBackupLog('exp', x); };
   // 読み込みの上限（250MB）を超えるファイルは、作っても戻せないので先に知らせる
+  // 評価3回目 K3: 読み込めない大きさの書き出しは「欠けた書き出し」と同じ扱い（注意を消さない）
+  if (blob.size > 250e6) missing.push('読み込める大きさ（250MB）を超えたファイル');
   if (blob.size > 250e6 && !confirm('書き出すファイルが大きすぎて（' + Math.round(blob.size / 1e6) + 'MB）、このアプリで読み込めない大きさです。使っていない作戦図や画像を消してから書き出すのがおすすめです。このまま書き出しますか？')) return;
   try{
     const file = new File([blob], name, { type:'application/json' });
@@ -1694,7 +1775,7 @@ function showImportSheet(p, onGo){
       (nC ? line('ばちこんの記録', '足す' + p.cAdd.length + '・同じ' + p.cSame + '・違う' + p.cDiff.length) : '') +
       (p.boards ? line('作戦図', p.boards + '件', '今ある作戦図は消さず、写しとして足します') : '') +
       (p.pics ? line('メモの画像', p.pics + '枚', '今ある画像は消さず、足します') : '') +
-      (p.tiers ? line('ティアリスト', 'あり', '今あるティアと合わせます') : '') +
+      (p.tiers ? line('ティアリスト', 'あり', '今あるティアは変えずに足します（中身が違う物は「（読み込み）」の写しとして）') : '') +
       (p.bad + p.cBad ? line('このアプリで使えない項目', (p.bad + p.cBad) + '件', '読み込みません') : '') +
       (nDiff ? '<div class="iq">内容が違う物は、どちらを使いますか？</div>' +
         (p.diff.length ? '<div class="idiff">' + p.diff.slice(0, 3).map(([k, a, b]) => '<div><b>' + esc(memoLocation(k)) + '</b></div><div>このスマホ: ' + short(a) + '</div><div>控え: ' + short(b) + '</div>').join('<hr>') + (p.diff.length > 3 ? '<div>ほか' + (p.diff.length - 3) + '件</div>' : '') + '</div>' : '') +
@@ -1881,7 +1962,7 @@ document.addEventListener('click', e => {
   if (t.dataset.impundo){ undoImport(); return; }
   if (t.dataset.trashback != null){ restoreTrash(t.dataset.trashback); return; }
   if (t.dataset.bplace && window.openBoardPlace){ openBoardPlace(t.dataset.bplace, null); return; }
-  if (t.dataset.nbopen && window.openBoardById){ openBoardById(t.dataset.nbopen, { edit: false }); return; }
+  if (t.dataset.nbopen && window.openBoardById){ const edAt = t.closest('#editor') ? ed : null; openBoardById(t.dataset.nbopen, { edit: false, alive: edAt ? () => ed === edAt : null }); return; }
   if (t.dataset.nowmemo){ toast('このブキはメモの対象外です（ランダム枠など）'); return; }
   if (t.dataset.lkind){ setUI({ listKind:t.dataset.lkind }); document.getElementById('main').scrollTop = 0; return; }
   if (t.id === 'wOnly'){ ui.wOnlyMemo = !ui.wOnlyMemo; t.classList.toggle('on', ui.wOnlyMemo); save('sm_ui', Object.assign(load('sm_ui', {}), { wOnlyMemo: ui.wOnlyMemo })); filterWeapons(); return; }
@@ -1911,6 +1992,7 @@ document.addEventListener('click', e => {
     ta.dispatchEvent(new Event('input'));
     return;
   }
+  if (t.dataset.tdchip && ed){ clearTimeout(saveTimer); saveMemo(); const a = edKey().split(':'); ed.id = 'td:' + a[1] + ':' + t.dataset.tdchip; document.getElementById('edTitle').textContent = edFoundTitle(ed.id); drawEditor(); return; }
   if (t.dataset.chip){ clearTimeout(saveTimer); saveMemo(); ed.rule = t.dataset.chip; drawEditor(); return; }
   if (t.dataset.sub){ setUI({ nowSub:t.dataset.sub }); return; }
   if (t.dataset.lsub){ setUI({ listSub:t.dataset.lsub }); return; }
@@ -2002,13 +2084,14 @@ document.addEventListener('click', e => {
   setMoreMenu(false);
   if (!e.target.closest('nav')){ e.preventDefault(); e.stopPropagation(); }
 }, true);
-document.getElementById('reload').onclick = () => refresh(true);
+document.getElementById('reload').onclick = () => { releaseSlotHold(); refresh(true); }; // 自分で更新したら今の時間帯に
 // 画面の「戻る」ボタンは履歴を1つ戻すだけにして、閉じる処理は popstate にまとめる（二重に閉じないため）
 document.getElementById('edBack').onclick = () => { if (history.state && history.state.editor) history.back(); else closeEditor(false); };
 document.getElementById('playBack').onclick = () => { if (history.state && history.state.play) history.back(); else closePlay(false); };
 // 戻る操作は一番上に開いている画面だけを閉じる（作戦メモ編集 → WAVE閲覧 の順）
 // 画像を見る画面（notePop）はメモの編集画面の上にも開くので、先に閉じる
-window.addEventListener('popstate', () => { if (introSkipPop){ introSkipPop = false; return; } if (introOpen()){ closeIntro(true); return; } if (window.notePop && notePop()) {} else if (ed) closeEditor(true); else if (window.boardPop && boardPop()) {} else if (window.tierPop && tierPop()) {} else if (play) closePlay(true); });
+// 作戦図は潮位の読む表示（エディタ）の上にも開くので、エディタより先に閉じる（評価3回目 C4）
+window.addEventListener('popstate', () => { if (introSkipPop){ introSkipPop = false; return; } if (introOpen()){ closeIntro(true); return; } if (window.notePop && notePop()) {} else if (window.boardPop && boardPop()) {} else if (ed) closeEditor(true); else if (window.tierPop && tierPop()) {} else if (play) closePlay(true); });
 // 日本語の変換を確定した時は、入力の処理をもう一度走らせる（変換の確定で input が来ない端末でも、確定した文で保存する。評価 D10・優先順位12 2026-11-26）。
 // 入力の処理はどれも「今の中身を写して保存を予約する」だけなので、2回走っても困らない
 document.addEventListener('compositionend', e => { const t = e.target; if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT')) t.dispatchEvent(new Event('input', { bubbles: true })); }, true);
@@ -2019,13 +2102,14 @@ document.getElementById('memoText').addEventListener('input', () => {
 });
 // アプリに戻ってきたとき：時間帯が変わっていれば取り直し、そうでなくても表示時刻を更新
 document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') releaseSlotHold(); // 戻って来た時は今の時間帯に（すぐ下で描き直す）
   if (document.visibilityState === 'visible'){ if (stale()) refresh(); else render(); }
   else if (ed){ clearTimeout(saveTimer); saveMemo(); }
   if (document.visibilityState !== 'visible' && memosUnsaved) save('sm_memos', memos);
   if (document.visibilityState !== 'visible' && atUnsaved && !memosUnsaved) save('sm_memo_at', memoAt); // 隠れる前にもう一度だけ試す
 });
 // 開きっぱなしでも時間帯の切り替わりに追従
-setInterval(() => { if (document.visibilityState === 'visible' && !ed && stale()) refresh(); }, 60e3);
+setInterval(() => { if (document.visibilityState === 'visible' && !ed && !slotHold && stale()) refresh(); }, 60e3); // 帯で止めている間は取り直さない（古い時間帯がデータから消えないように。Codexレビュー）
 // 時間帯の切り替わりちょうどに描き直す（前は最大1分古いままだった。評価 D8 2026-11-25）。
 // 手元のスケジュールには次の時間帯も入っているので、取り直しを待たずにその場で次に切り替わる。
 // メモ帳で書いている途中は描き直さず（打ちかけを守る）、切り替わったことだけ知らせる。書き終えると切り替わる
@@ -2047,15 +2131,16 @@ document.getElementById('main').addEventListener('scroll', () => { lastTouch = D
 const slotBar = document.createElement('div'); slotBar.id = 'slotBar'; slotBar.hidden = true; slotBar.setAttribute('role', 'status');
 slotBar.innerHTML = '<span>新しい時間帯になりました</span><button type="button">今の時間帯に切り替える</button>';
 document.body.appendChild(slotBar); window.slotBarEl = slotBar;
-slotBar.querySelector('button').onclick = () => { if (window.noteBusy && noteBusy()){ toast('書き終えると今の時間帯に切り替わります'); return; } render(); if (stale()) refresh(); };
+slotBar.querySelector('button').onclick = () => { if (window.noteBusy && noteBusy()){ toast('書き終えてから、もう一度押してください'); return; } releaseSlotHold(); render(); if (stale()) refresh(); };
 function armSlotTimer(){
   clearTimeout(slotTimer);
   const t = nextBoundary(); if (!t) return;
   slotTimer = setTimeout(() => {
+    if (slotHold){ armSlotTimer(); return; } // 止めている間は、次の境目でも描き直さない
     if (document.visibilityState === 'visible'){
       const noteV = ui.view === 'note' || ui.view === 'cnote';
       if (noteV && window.noteBusy && noteBusy()) toast('時間帯が変わりました。書き終えると今のステージに切り替わります');
-      else if ((ui.view === 'now' || noteV) && Date.now() - lastTouch < 90e3 && !document.querySelector('#editor.open, #board.open, #play.open')){ slotBar.hidden = false; armSlotTimer(); return; } // 新しいスケジュールの取り直しも、切り替えるまで待つ（取り直すと描き直すため）
+      else if ((ui.view === 'now' || noteV) && Date.now() - lastTouch < 90e3 && !document.querySelector('#editor.open, #board.open, #play.open')){ slotHold = t - 1; slotBar.hidden = false; armSlotTimer(); return; } // 新しいスケジュールの取り直しも、切り替えるまで待つ（取り直すと描き直すため）
       render();
       if (stale()) refresh();
     }

@@ -503,7 +503,11 @@ const css2 = `
 .bnav button{flex:1;height:44px;border-radius:10px;background:var(--card);border:1px solid var(--line);font-size:14px;font-weight:700;color:var(--text)}
 .bnav button:disabled{opacity:.35}
 .bnav button.play{flex:none;padding:0 12px;color:var(--salmon)}
-.bnav .bpos{flex:none;min-width:84px;text-align:center;font-size:12px;color:var(--sub)}
+.bnav .bpos{flex:none;min-width:92px;height:44px;padding:0 8px;text-align:center;font-size:12px;font-weight:400;color:var(--sub);background:none;border:1px dashed var(--line2)}
+.bstlist button{display:flex;align-items:flex-start;gap:10px;width:100%;padding:10px 12px;margin-bottom:6px;border-radius:10px;background:var(--card);border:1px solid var(--line);text-align:left;color:var(--text);font-size:14px}
+.bstlist button.on{border-color:var(--salmon)}
+.bstlist b{flex:none;min-width:22px;font-size:16px;color:var(--salmon)}
+.bstlist i{font-style:normal;color:var(--faint)}
 .bnav .bpos b{font-size:17px;color:var(--text)}
 .bmemo .vt{font-size:16px;font-weight:600;line-height:1.45;color:var(--text);background:var(--card);border-left:3px solid var(--salmon);border-radius:8px;padding:8px 12px;white-space:pre-wrap;word-break:break-word}
 .bmemo .vt.none{font-size:13px;font-weight:400;color:var(--faint);background:none;border:0;padding:2px 4px}
@@ -547,10 +551,11 @@ async function openBoard(id, opts){
   // 保存できずに残っている写しがあれば、そちらを開く（DBの古い内容で上書きして、失敗した変更を失わないように）
   if (failedBoards.has(id)){ try { b = JSON.parse(failedBoards.get(id)); } catch (e){} }
   if (!b){ try { b = await boardGet(id); } catch (e){} }
-  if (my !== openSeq || B || pl !== plAt || (play && play.wave) !== playAt) return;
+  const gone = () => !!(opts.alive && !opts.alive()); // 開いた元（潮位の読む表示）を閉じたら開かない（Codexレビュー）
+  if (my !== openSeq || B || pl !== plAt || (play && play.wave) !== playAt || gone()) return;
   if (!b){ toast('作戦図が見つかりません（削除されたかもしれません）'); return; }
   const bgImg = await boardBgUrl(b).catch(() => null);
-  if (my !== openSeq || B || pl !== plAt || (play && play.wave) !== playAt){ if (bgImg && bgImg.own) URL.revokeObjectURL(bgImg.url); return; }
+  if (my !== openSeq || B || pl !== plAt || (play && play.wave) !== playAt || gone()){ if (bgImg && bgImg.own) URL.revokeObjectURL(bgImg.url); return; }
   B = b; if (![0, 90, 180, 270].includes(B.rot)) B.rot = 0;
   const last = load('sm_lasticons', []);
   bs = { edit: !!opts.edit, step: 0, tool: 'select', color: COLORS[1], wd: 1, sel: null, pending: null, view: null, wave: opts.wave, imgUrl: null,
@@ -850,7 +855,7 @@ function drawBoard(){
   }
   // 見る時は「前へ／手順3・全8／次へ」を同じ場所に固定（手順が多いと番号の列が横に流れ、次を探す必要があった。評価 F16 2026-11-26）
   if (!bs.edit && n > 1) h += '<div class="bnav"><button data-bgo="' + (bs.step - 1) + '"' + (bs.step ? '' : ' disabled') + '>‹ 前へ</button>' +
-    '<span class="bpos">手順 <b>' + (bs.step + 1) + '</b> / ' + n + '</span>' +
+    '<button class="bpos" data-bsteps="1" aria-label="手順を選ぶ">手順 <b>' + (bs.step + 1) + '</b> / ' + n + ' ▾</button>' +
     '<button data-bgo="' + (bs.step + 1) + '"' + (bs.step < n - 1 ? '' : ' disabled') + '>次へ ›</button>' +
     '<button class="play" data-bplay="1">' + (bs.playing ? '■ 止める' : '▶ 再生') + '</button></div>';
   else h += '<div class="bsteprow"><span class="lab">手順</span>' + B.steps.map((s, i) => '<button class="sn' + (i === bs.step ? ' on' : '') + '" data-bgo="' + i + '">' + (i + 1) + '</button>').join('') +
@@ -1002,6 +1007,7 @@ $('bBottom').addEventListener('click', e => {
     bs.pending = bs.pending === d.pk ? null : d.pk; bs.sel = null; drawBoard();
   }
   else if (d.bgo != null){ bs.step = +d.bgo; bs.sel = null; drawBoard(); }
+  else if (d.bsteps) openStepSheet();
   else if (d.badd){
     if (B.steps.length >= LIM.steps){ toast('手順は' + LIM.steps + 'まで'); return; }
     if (penPts(B.steps) + penPts([B.steps[bs.step]]) > LIM.points){ toast('ペンの線が多すぎて写せません（線を消してください）'); return; }
@@ -1141,6 +1147,12 @@ function palItems(tab){
   if (tab === 'player') return PLAYERS.map(p => 'player:' + p[0]).concat(MARKS.map(m => 'mark:' + m[0]));
   if (tab === 'weapon'){ const cw = contestWeapons(); return cw.map(id => 'weapon:' + id).concat((TIER_DATA.sets.coopWeapon.items || []).filter(x => !cw.includes(x.id)).map(x => 'weapon:' + x.id)); }
   return [];
+}
+function openStepSheet(){
+  const el = showBSheet('<h3>手順を選ぶ</h3><div class="bstlist">' + B.steps.map((s, i) =>
+    '<button data-bstep="' + i + '" class="' + (i === bs.step ? 'on' : '') + '"><b>' + (i + 1) + '</b><span>' + (s.note ? esc(s.note) : '<i>（手順' + (i + 1) + 'のメモはありません）</i>') + '</span></button>').join('') + '</div>');
+  el.addEventListener('click', e => { const t = e.target.closest('[data-bstep]'); if (!t || !B) return; bs.step = +t.dataset.bstep; bs.sel = null; closeBSheet(); drawBoard(); });
+  const on = el.querySelector('.on'); if (on) on.scrollIntoView({ block: 'center' });
 }
 // 作戦図の特殊WAVEを選び直す（名前と同じく取り消しの対象外）
 function openSwSheet(){
@@ -1477,6 +1489,8 @@ window.fillNowBoards = async function(){
   need.forEach(k => c.html.set(k, nowSlotHTML(k, groups.get(k), c.urls)));
   if (fresh){ dropNowCache(); nowCache = c; } // 前の画像はここで手放す（欄はこのすぐ後に全部入れ替える）
   slots.forEach(el => { if (el.isConnected) el.innerHTML = c.html.get(el.dataset.nbd); });
+  // 潮位ボタンに「作戦図あり」の点（評価3回目 C4）
+  document.querySelectorAll('[data-tideplace]').forEach(el => el.classList.toggle('hasbd', c.boards.some(x => x.place === el.dataset.tideplace)));
 };
 // ---------- バックアップ（index.html の書き出し・読み込みから呼ぶ） ----------
 const blobToDataURL = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); });

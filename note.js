@@ -159,7 +159,7 @@ const weaponById = id => weapons().find(w => w.id === id) || null;
 // 今の時間帯のバトル（モードごとに、ルールと2つのステージ）
 function nowModes(){
   if (!sched || !sched.data) return [];
-  const d = sched.data, now = new Date(), out = [];
+  const d = sched.data, now = window.viewNow ? viewNow() : new Date(), out = []; // 時間帯の帯の間は止めた時刻（評価3回目 K4）
   const cur = key => curAndNext((d[key] || {}).nodes, now).cur;
   const bk = cur('bankaraSchedules');
   if (bk) (bk.bankaraMatchSettings || []).forEach(s => out.push({ key: s.bankaraMode === 'OPEN' ? 'bo' : 'bc', label: s.bankaraMode === 'OPEN' ? 'オープン' : 'チャレンジ', c: '--bankara', node: bk, s }));
@@ -191,7 +191,7 @@ const imgOf = id => stageImg[id] || '';
 // メモの欄（その場で書ける。下に画像）
 // 2026-11-23c（評価の優先順位4。Codex・Claude の評価 F13/F14）: 普段は「読む表示」。欄の「編集」を押した時だけ書く欄にする
 // （読もうと触ってキーボードが出る・誤入力がそのまま保存される、を防ぐ。Bear・Evernote などの「読み取り専用が既定」と同じ考え）。
-// 何も書いていない欄（文字も画像も無い）は隠し、画面の下の「メモを追加」にまとめる（main の欄だけは「まだありません ＋ 書く」の1行で残す）。
+// 何も書いていない欄（文字も画像も無い）は隠し、上の「＋ メモを書く」から選ぶ（2026-11-27 評価3回目で一番下の「メモを追加」はやめた）（main の欄だけは「まだありません ＋ 書く」の1行で残す）。
 // 長いメモは6行まで見せて「続きを読む」
 // startText: 書き始めた時の文（「書き始める前の文に戻す」用）、redoText: 戻す直前の文（「戻す前の文にする」用）。評価2回目の優先順位3
 const startText = new Map(), redoText = new Map();
@@ -207,16 +207,16 @@ const sec = (key, title, sub, ph, main, inline, pinTitle) => { // pinTitle: 「�
     '<button type="button" class="nb-rev" data-nbrev="' + esc(key) + '" hidden>↶ 書き始める前の文に戻す</button>' +
     '<div class="nbpics" data-nbpk="' + esc(key) + '">' + addPicBtn(key) + '</div><div class="st" data-nbst="' + esc(key) + '"></div></div>';
   // 空の欄は隠す（画像だけある欄は、画像を読めた時に fillPics が見せる）
-  const hide = !has && !main;
+  const hp = !has && !!(window.hasPics && hasPics(key)); // 画像だけの欄
+  const hide = !has && !hp && !main;
   if (hide && !inline) addList.push([key, title, sub]);
-  const hp = !has && window.hasPics && hasPics(key); // 画像だけの欄
   const pinned = (has || hp) && window.isPinned && isPinned(key);
   if (pinned) pinList.push([key, pinTitle || title, has ? txt : '（画像のみ）']);
   // 「試合前に見る」印（文字がある欄だけ付けられる）
   const pinBtn = has || hp ? '<button class="nb-pin' + (pinned ? ' on' : '') + '" data-nbpin="' + esc(key) + '" aria-pressed="' + !!pinned + '" aria-label="' + esc(title) + 'を試合前に見る">' + (pinned ? '★ 試合前' : '☆ 試合前') + '</button>' : '';
   return '<div class="nb-sec' + (main ? ' main' : '') + (hide ? ' hid' : '') + '" data-nbsec="' + esc(key) + '">' + head(pinBtn + (has || hp || !main ? '<button class="nb-ebtn" data-nbedit="' + esc(key) + '" aria-label="' + esc(title) + 'を編集">編集</button>' : '')) +
     (has ? '<div class="nb-txt' + (expanded.has(key) ? ' open' : '') + '" data-nbtxt="' + esc(key) + '">' + esc(txt) + '</div><button class="nb-more" data-nbmore="' + esc(key) + '" hidden>' + (expanded.has(key) ? '▲ たたむ' : '▼ 続きを読む') + '</button>'
-      : main ? '<button class="nb-blank" data-nbedit="' + esc(key) + '">まだありません　＋ 書く</button>' : '') +
+      : main && !hp ? '<button class="nb-blank" data-nbedit="' + esc(key) + '">まだありません　＋ 書く</button>' : '') +
     '<div class="nbpics" data-nbpro="1" data-nbpk="' + esc(key) + '"></div></div>' +
     (hide && inline ? '<button class="nb-inl" data-nbadd="' + esc(key) + '">＋ ' + esc(title) + '</button>' : '');
 };
@@ -287,7 +287,7 @@ function renderBattle(){
   h += sec(kVs(c.stageId), sName + 'のメモ', '全ルール共通', '例: 地形の特徴、よく通る道 など');
   // 全ステージ共通（2026-11-23 ユーザー要望）。キーは al:vs
   h += sec('al:vs', 'バトル全体のメモ', '全ステージ・全ルール共通', '例: いつも気をつけること、意識すること など');
-  return h + addBar();
+  return h;
 }
 
 // ---- サモランメモ（2026-11-23 ユーザー要望「バトルで作ったものをサモランのほうも作りたい」、新しいタブ） ----
@@ -302,7 +302,7 @@ const coopWeaponById = id => coopWeapons().find(w => w.id === id) || null;
 const cwKey = (sid, wid) => 'cw:' + sid + ':' + wid;
 function coopModes(){
   if (!sched || !sched.data) return [];
-  const c = sched.data.coopGroupingSchedule || {}, now = new Date();
+  const c = sched.data.coopGroupingSchedule || {}, now = window.viewNow ? viewNow() : new Date();
   return [['rg', 'regularSchedules', 'サーモンラン'], ['br', 'bigRunSchedules', 'ビッグラン'], ['tc', 'teamContestSchedules', 'バイトチームコンテスト']].map(([key, k, label]) => {
     const n = curAndNext((c[k] || {}).nodes, now).cur;
     return n && n.setting && n.setting.coopStage ? { key, label, node: n, s: n.setting } : null;
@@ -353,7 +353,7 @@ function renderCoop(){
     else h += '<div class="nb-sec"><h3>' + esc(sName) + ' × ブキ</h3><div class="nb-empty" style="padding:10px">ブキを選ぶと書けます<br><button data-cnpick="weapon">ブキを選ぶ</button></div></div>';
     h += stageSec;
     if (w && w.type) h += catSec(w.type);
-    return h + allSec + addBar() + tideBar;
+    return h + allSec + tideBar;
   }
   // 支給ブキ一覧: ブキごとに1枚のカード（このステージ・全ステージ共通）→ ステージ共通 → カテゴリ（重ならないように1回ずつ）→ 全体
   const seen = new Set(), ws = [];
@@ -368,7 +368,7 @@ function renderCoop(){
   if (!c.mode) h += '<div class="nb-note">支給ブキが分からないので、ブキのメモは出せません。「選んだブキ」から選んでください</div>';
   h += stageSec;
   [...new Set(ws.map(x => x.type).filter(Boolean))].forEach(t => { h += catSec(t); });
-  return h + allSec + addBar() + tideBar;
+  return h + allSec + tideBar;
 }
 
 // ---- メモをその場で書く（打つたびに少し待って保存） ----
@@ -435,7 +435,7 @@ window.noteAfterRender = () => {
 // ---- 画像（2026-11-22 ユーザー要望「それぞれ画像を載せれるようにしたい」）----
 // メモの欄ごとに画像を付けられる。画像は IndexedDB 'splat-memo-pics'（作戦図の DB とは別）に、1枚ずつ {id, key: メモのキー, blob, w, h, at} で保存。
 // 取り込む時に長い辺1600pxのJPEGに縮める。書き出し・読み込み（バックアップ）にも入る（notePics）
-const PIC_DB = 'splat-memo-pics', PIC_MAX = 12, PIC_ALL = 300, PIC_KEY_RE = /^(sb|vs|wv|rl|coop|wc|bs|cw|al|wk|td|coach):[A-Za-z0-9+/=:_-]{1,120}$/; // coop・wc・bs はメモの編集画面から（2026-11-22b）
+const PIC_DB = 'splat-memo-pics', PIC_MAX = 12, PIC_ALL = 300, PIC_KEY_RE = /^(ar:)?(sb|vs|wv|rl|coop|wc|bs|cw|al|wk|td|coach):[A-Za-z0-9+/=:_-]{1,120}$/; // coop・wc・bs はメモの編集画面から（2026-11-22b）
 const picUid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 let picP = null;
 function picDb(){
@@ -458,6 +458,7 @@ async function picDo(mode, fn){
 }
 let picKeySet = new Set(), picKeysTimer = 0;
 window.hasPics = k => picKeySet.has(k);
+window.syncPicKeys = async () => { try { if (window.memoPicKeys) picKeySet = new Set(await memoPicKeys()); } catch (e){} }; // 待って新しくする（メモを移した直後など）
 function refreshPicKeys(){
   clearTimeout(picKeysTimer);
   picKeysTimer = setTimeout(() => {
@@ -629,6 +630,22 @@ async function openViewer(k, id, origin){
 // ---- バックアップ（index.html の書き出し・読み込みから呼ぶ） ----
 const blobToDataURL = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); });
 // 取り込み中の画像も入るように、追加・削除と同じ列に並んでから読む（Codexの評価 2026-11-23）
+// src の画像を全部 dst へ付け替える（1回の書き込み）。dst の枚数と合わせて上限を超えるなら何もしない。{ n: 移した枚数, full }
+window.movePics = (src, dst) => picQueue(() => picDo('readwrite', s => {
+  const out = { result: { n: 0, full: false, ids: [] } };
+  const g = s.index('key').getAll(src);
+  g.onsuccess = () => {
+    const arr = g.result || []; if (!arr.length) return;
+    const c = s.index('key').count(dst);
+    c.onsuccess = () => {
+      if (c.result + arr.length > PIC_MAX){ out.result.full = true; return; }
+      arr.forEach(p => { p.key = dst; s.put(p); }); out.result.n = arr.length; out.result.ids = arr.map(p => p.id);
+    };
+  };
+  return out;
+}));
+// 移した画像（ID）だけを key に戻す（移すのに失敗した時の巻き戻し）
+window.repointPics = (ids, key) => picQueue(() => picDo('readwrite', s => { ids.forEach(id => { const g = s.get(id); g.onsuccess = () => { if (g.result){ g.result.key = key; s.put(g.result); } }; }); return null; }));
 window.exportNotePics = () => picQueue(async () => {
   try {
     const all = await picDo('readonly', s => s.getAll()), out = [];

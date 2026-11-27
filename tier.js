@@ -95,7 +95,7 @@ function normList(l, key){
   });
   if (!tiers.length) return null;
   const now = Date.now();
-  return { id: key, set: l.set, title: String(l.title || TD.sets[l.set].label).slice(0, 60), auto: !!l.auto, tiers,
+  return { id: key, set: l.set, title: String(l.title || TD.sets[l.set].label).slice(0, 60), auto: !!l.auto, tiers, ...(typeof l.copyOf === 'string' && l.copyOf.length < 40 ? { copyOf: l.copyOf } : {}), ...(typeof l.srcSig === 'string' && l.srcSig.length < 40 ? { srcSig: l.srcSig } : {}),
     created: Number.isFinite(l.created) ? l.created : now, updated: Number.isFinite(l.updated) ? l.updated : now };
 }
 function normStore(s){
@@ -108,13 +108,23 @@ function normStore(s){
 let store = normStore(load('sm_tiers', null));
 const saveStore = () => save('sm_tiers', store);
 window.getTierStore = () => store;
+const sigOf = str => { let h = 5381; for (let i = 0; i < str.length; i++) h = (h * 33 + str.charCodeAt(i)) >>> 0; return h.toString(36) + ':' + str.length; };
 window.mergeTierStore = (incoming) => {
-  // バックアップ読み込み: 先に全体を検証してから、同じIDは置き換え・それ以外は追加（今あるティアは消さない）
+  // バックアップ読み込み: 先に全体を検証してから、今あるティアは変えずに足すだけ（評価3回目 K1、2026-11-27）。
+  // 同じIDで中身も同じなら入れない。中身が違えば、別のIDの写し（題名に「（読み込み）」）として足す
   const inc = normStore(incoming);
   const before = JSON.stringify(store);
-  Object.assign(store.lists, inc.lists);
+  const body = l => JSON.stringify([l.set, l.title, l.tiers.map(x => [x.label, x.color, x.items])]);
+  let n = 0;
+  for (const [k, l] of Object.entries(inc.lists)){
+    const cur = store.lists[k];
+    if (!cur){ store.lists[k] = l; n++; continue; }
+    const sig = sigOf(body(l));
+    if (body(cur) === body(l) || Object.values(store.lists).some(x => x.copyOf === k && x.srcSig === sig)) continue; // 前に写しとして足した物も同じなら入れない（題名を変えているので、元の中身の印で比べる。Codexレビュー）
+    const id = uid();
+    store.lists[id] = Object.assign({}, l, { id, title: (l.title + '（読み込み）').slice(0, 60), auto: false, copyOf: k, srcSig: sig }); n++;
+  }
   for (const [k, v] of Object.entries(inc.counters)) store.counters[k] = Math.max(store.counters[k] || 0, v);
-  const n = Object.keys(inc.lists).length;
   if (n && !saveStore()){ store = JSON.parse(before); return -1; }
   return n;
 };
