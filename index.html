@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-27a';</script>
+<script>window.APP_VERSION = '2026-11-27c';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -265,6 +265,16 @@ nav button.on{color:var(--salmon)}
 .coach-link{display:grid;gap:3px;text-align:left;width:100%;margin:0 0 8px;padding:9px 12px;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--text);font:inherit}
 .coach-link strong{font-size:13px}.coach-link span{color:var(--sub);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .coach-tools:not([hidden]){display:flex;flex-wrap:wrap;gap:8px;padding:0 12px 8px}
+.ed-rev{padding:0 12px 8px}
+.ed-rev button,.nb-rev{min-height:36px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:600;color:var(--text);background:var(--card);border:1px solid var(--line2)}
+.ed-rev button[hidden],.nb-rev[hidden]{display:none}
+.trash-note{font-size:12px;color:var(--sub);margin:6px 2px 8px;line-height:1.5}
+.trash-row{display:flex;align-items:center;gap:10px;padding:10px 4px;border-top:1px solid var(--line)}
+.trash-row .rinfo{flex:1;min-width:0}
+.trash-row .rname{font-size:14px;font-weight:600;color:var(--text)}
+.trash-row .rprev{font-size:12px;color:var(--sub);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trash-row .mf-at{font-size:11px;color:var(--faint);margin-top:2px}
+.trash-row button{flex:none;min-height:40px;padding:0 14px;border-radius:10px;font-size:13px;font-weight:700;color:var(--text);background:var(--card2);border:1px solid var(--line2)}
 .coach-tools button{padding:6px 9px;border:1px solid var(--line2);border-radius:7px;background:var(--card);color:var(--text)}
 .quick-memos{display:grid;gap:4px;margin:5px 8px 8px;padding:8px;border:1px solid var(--line);border-radius:8px}
 .quick-memo{display:flex;align-items:baseline;gap:8px;text-align:left;min-width:0;padding:5px 3px;background:transparent;border:0;color:var(--text);font:inherit}
@@ -320,6 +330,7 @@ nav button.on{color:var(--salmon)}
   <div class="chips" id="edChips"></div>
   <div class="ehint" id="edHint"></div>
   <div id="coachTools" class="coach-tools" hidden><button type="button" id="coachTemplate">練習メモのひな形</button><button type="button" id="coachCopy">このメモをコピー</button></div>
+  <div class="ed-rev"><button type="button" id="edRevert" hidden>↶ 書き始める前の文に戻す</button></div>
   <textarea id="memoText" placeholder="ここにメモを書く（自動で保存されます）"></textarea>
   <!-- このメモに付けた画像（note.js が中身を入れる。ステージ・ブキ・オオモノのメモだけ） -->
   <div id="edPicWrap"><div class="nbpics" id="edPics" data-nbpk=""></div><div id="edPicSt" data-nbst=""></div></div>
@@ -348,10 +359,18 @@ const FALLBACK_STAGES = {"VnNTdGFnZS0x":"ユノハナ大渓谷","VnNTdGFnZS0y":"
 // ---------- 保存 ----------
 function load(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } }
 // メモ（sm_memos）の保存に失敗したら覚えておき、画面上の帯で知らせる（画面を閉じても消えない。成功したら消える）
+// pendingTrash: 消して、まだ端末に保存できていないメモ（キー→消す前の文）。sm_memos の保存が成功した時に「最近消したメモ」へ移す
+const pendingTrash = new Map();
+window.markDeleted = (k, t) => { if (typeof t === 'string' && t.trim() && !pendingTrash.has(k)) pendingTrash.set(k, t); };
+window.unmarkDeleted = k => { pendingTrash.delete(k); };
+// 控えにする文: 消す直前の文が、書き始めた時の文の一部（1文字ずつ消している途中）なら書き始めた時の文、それ以外は消す直前の文
+window.pickDeleted = (start, prev) => typeof start === 'string' && start.trim() && (!prev || start.includes(prev.trim())) ? start : prev;
+function settlePendingTrash(){ [...pendingTrash].forEach(([k, t]) => { pendingTrash.delete(k); if (!(typeof memos[k] === 'string' && memos[k].trim()) && window.trashMemo) trashMemo(k, t); }); }
 let memosUnsaved = false, atUnsaved = false; // atUnsaved: メモの更新日（sm_memo_at）を保存できていない
 function save(k, v){
   try{ localStorage.setItem(k, JSON.stringify(v));
     if (k === 'sm_memos' && memosUnsaved){ memosUnsaved = false; drawUnsaved(); }
+    if (k === 'sm_memos' && pendingTrash.size) settlePendingTrash();
     if (k === 'sm_memo_at' && atUnsaved){ atUnsaved = false; drawUnsaved(); }
     return true; }
   catch(e){ if (k === 'sm_memos'){ memosUnsaved = true; drawUnsaved(); } if (k === 'sm_memo_at'){ atUnsaved = true; drawUnsaved(); } return false; }
@@ -716,6 +735,37 @@ function memoScopeOf(key){
   if (['al', 'wk', 'coach'].includes(kind)) return id;
   return ['coop', 'td', 'cw', 'wc', 'bs'].includes(kind) ? 'coop' : 'vs';
 }
+// ---------- 最近消したメモ（2026-11-27 評価2回目の優先順位3）----------
+// メモを空にして保存した時、消す前の文を30日・30件まで取っておき、「メモ」タブの「最近消したメモ」から戻せる
+let trash = load('sm_trash', []); if (!Array.isArray(trash)) trash = [];
+const TRASH_DAYS = 30, TRASH_MAX = 30;
+function pruneTrash(){ const lim = Date.now() - TRASH_DAYS * 864e5, n = trash.length; trash = trash.filter(x => x && typeof x.k === 'string' && typeof x.t === 'string' && x.t.trim() && validAt(x.at) && x.at >= lim).slice(0, TRASH_MAX); if (trash.length !== n) save('sm_trash', trash); } // 期限切れは保存からも消す
+window.trashMemo = (k, t) => {
+  if (typeof t !== 'string' || !t.trim()) return;
+  pruneTrash(); trash = trash.filter(x => !(x.k === k && x.t === t)); // 同じ欄の同じ文は1つにまとめる（新しい方を残す）
+  trash.unshift({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), k, t, at: Date.now() }); trash = trash.slice(0, TRASH_MAX);
+  if (!save('sm_trash', trash)) toast('消したメモの控えを保存できませんでした');
+  const box = document.getElementById('memoTrash'); if (box) box.innerHTML = trashHTML();
+};
+function trashHTML(){
+  pruneTrash(); if (!trash.length) return '';
+  return '<details class="memo-options trash-box"><summary>最近消したメモ（' + trash.length + '）</summary><p class="trash-note">メモを空にすると、消す前の文を' + TRASH_DAYS + '日間ここに取っておきます（' + TRASH_MAX + '件まで）。</p>' +
+    trash.map(x => '<div class="trash-row"><div class="rinfo"><div class="rname">' + esc(memoLocation(x.k)) + '</div><div class="rprev">' + esc(x.t.replace(/\s+/g, ' ').slice(0, 120)) + '</div><div class="mf-at">' + esc(memoDate(x.at)) + ' に消した</div></div>' +
+      '<button data-trashback="' + esc(x.id || String(x.at)) + '" aria-label="' + esc(memoLocation(x.k)) + 'のメモを戻す">戻す</button></div>').join('') + '</details>';
+}
+function restoreTrash(id){
+  if (window.noteFlush) noteFlush(); // 先に打ちかけを保存（ここで消した物が増えても、下で id から探し直す）
+  pruneTrash(); const i = trash.findIndex(x => (x.id || String(x.at)) === id), x = trash[i]; if (!x){ toast('この控えは見つかりませんでした'); const box = document.getElementById('memoTrash'); if (box) box.innerHTML = trashHTML(); return; }
+  const cur = typeof memos[x.k] === 'string' && memos[x.k].trim() ? memos[x.k] : '';
+  if (cur && !cur.includes(x.t) && !confirm('この欄には今、別のメモがあります。消したメモを、今のメモの後ろにつなげて戻しますか？')) return;
+  if (window.noteForget) noteForget(x.k);
+  memos[x.k] = !cur ? x.t : cur.includes(x.t) ? cur : cur + '\n' + x.t;
+  if (!save('sm_memos', memos)){ toast('戻せませんでした（空き容量を確かめてください）'); return; }
+  touchMemo(x.k); trash.splice(i, 1); save('sm_trash', trash);
+  const box = document.getElementById('memoTrash'); if (box) box.innerHTML = trashHTML();
+  if (ui.view === 'list' && ui.listKind === 'search') fillMemoSearch(); else render();
+  toast('戻しました');
+}
 function renderMemoSearch(){
   return '<div class="memo-search"><label for="memoSearch">保存したメモ</label><input id="memoSearch" type="search" placeholder="本文・ステージ名・ブキ名" value="' + esc(ui.memoSearch || '') + '"></div>' +
     '<div class="memo-scope" aria-label="表示するメモ">' +
@@ -726,7 +776,7 @@ function renderMemoSearch(){
       '<button data-memosort="' + key + '" aria-pressed="' + ((ui.memoSort || 'new') === key) + '">' + name + '</button>').join('') +
     '</div><details class="memo-options"' + (ui.showBackup ? ' open' : '') + '><summary>コーチング・バックアップ</summary>' +
     coachingLink('coop') + coachingLink('vs') + backupHTML() + '</details>' +
-    '<div id="memoSearchResults" class="list" aria-live="polite"></div>';
+    '<div id="memoSearchResults" class="list" aria-live="polite"></div><div id="memoTrash">' + trashHTML() + '</div>';
 }
 // 一覧の日付: 今日は時刻、今年は月/日、それより前は年/月/日
 function memoDate(t){
@@ -1342,6 +1392,7 @@ function drawEditor(){
   if (coaching) hint.textContent = '教わったこと・次の練習・振り返りを自由に書けます。「いまのステージ」からも開けます。';
   ta.value = memos[edKey()] || '';
   originalMemoText = ta.value;
+  edStartText = ta.value; edRedoText = null; syncRevert(); // 書き始める前の文（評価2回目の優先順位3）
   document.getElementById('edSaved').textContent = '';
   drawEdPics();
 }
@@ -1355,6 +1406,21 @@ function drawEdPics(){
   pe.innerHTML = ok ? addPicBtnHtml(k) : '';
   if (window.fillMemoPics) fillMemoPics(ok ? [k] : []); // 空でも呼ぶ: どの欄にも無くなった画像のURLを捨てる
 }
+// 書き換え・削除を戻す（2026-11-27 評価2回目の優先順位3。打った内容は0.5秒で保存され、「戻る」は取り消しにならないため）。
+// 開いた時の文（edStartText）と違えば「書き始める前の文に戻す」。戻した後は「戻す前の文にする」で、戻す直前の文へ（1回分だけ）
+let edStartText = '', edRedoText = null;
+function syncRevert(){
+  const b = document.getElementById('edRevert'), v = document.getElementById('memoText').value;
+  if (edRedoText != null){ b.hidden = false; b.textContent = '↷ 戻す前の文にする'; }
+  else { b.hidden = v === edStartText; b.textContent = '↶ 書き始める前の文に戻す'; }
+}
+document.getElementById('edRevert').onclick = () => {
+  if (!ed) return;
+  const ta = document.getElementById('memoText');
+  if (edRedoText != null){ ta.value = edRedoText; edRedoText = null; }
+  else { edRedoText = ta.value; ta.value = edStartText; }
+  clearTimeout(saveTimer); saveMemo(); syncRevert();
+};
 let saveTimer = null;
 function saveMemo(){
   if (!ed) return;
@@ -1362,7 +1428,9 @@ function saveMemo(){
   // 変わっていなければ書かない。比べるのは開いた時の文ではなく今の中身（保存に失敗した後で元の文に戻した時に、失敗した途中の文が残って後から保存されないように。Codexレビュー 2026-11-25）
   if (v === (memos[edKey()] || '')) return;
   if (window.noteForget) noteForget(edKey());
-  if (v.trim()) memos[edKey()] = v; else { delete memos[edKey()]; dropPin(edKey()); }
+  const prevT = memos[edKey()];
+  // 消す時は、消す前の文（書き始めた時の文。空なら直前の文）を控えにする。中身があった物を消した時だけ（空のまま保存し直しても増やさない）
+  if (v.trim()){ memos[edKey()] = v; unmarkDeleted(edKey()); } else { if (typeof prevT === 'string' && prevT.trim()) markDeleted(edKey(), pickDeleted(edStartText, prevT)); delete memos[edKey()]; dropPin(edKey()); }
   const ok = save('sm_memos', memos);
   if (ok){ originalMemoText = v; if (v.trim()) touchMemo(edKey()); else if (window.settleMemoAt) settleMemoAt(edKey()); }
   if (edKey().startsWith('coach:')) document.getElementById('coachTemplate').hidden = !!v.trim();
@@ -1636,12 +1704,13 @@ function importMemos(file){
 
 // ---------- イベント ----------
 // 「コーチング・バックアップ」を自分で閉じたら、描き直しても閉じたままにする（結果を出す時だけ開く）
-document.addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('memo-options')) ui.showBackup = e.target.open; }, true);
+document.addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('memo-options') && !e.target.classList.contains('trash-box')) ui.showBackup = e.target.open; }, true);
 document.addEventListener('click', e => {
   const t = e.target.closest('button, [data-chip]');
   if (!t) return;
   if (t.closest('#play') || t.closest('#tier') || t.closest('.tsheet-bg') || t.closest('#bplace') || t.closest('#board') || t.closest('.bsheet-bg') || t.closest('.nbs-bg')) return;
   if (t.dataset.impundo){ undoImport(); return; }
+  if (t.dataset.trashback != null){ restoreTrash(t.dataset.trashback); return; }
   if (t.dataset.bplace && window.openBoardPlace){ openBoardPlace(t.dataset.bplace, null); return; }
   if (t.dataset.nbopen && window.openBoardById){ openBoardById(t.dataset.nbopen, { edit: false }); return; }
   if (t.dataset.nowmemo){ toast('このブキはメモの対象外です（ランダム枠など）'); return; }
@@ -1774,6 +1843,7 @@ window.addEventListener('popstate', () => { if (introSkipPop){ introSkipPop = fa
 // 入力の処理はどれも「今の中身を写して保存を予約する」だけなので、2回走っても困らない
 document.addEventListener('compositionend', e => { const t = e.target; if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT')) t.dispatchEvent(new Event('input', { bubbles: true })); }, true);
 document.getElementById('memoText').addEventListener('input', () => {
+  edRedoText = null; syncRevert();
   document.getElementById('edSaved').textContent = '入力中…';
   clearTimeout(saveTimer); saveTimer = setTimeout(saveMemo, 500);
 });

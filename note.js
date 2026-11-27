@@ -177,14 +177,18 @@ const imgOf = id => stageImg[id] || '';
 // （読もうと触ってキーボードが出る・誤入力がそのまま保存される、を防ぐ。Bear・Evernote などの「読み取り専用が既定」と同じ考え）。
 // 何も書いていない欄（文字も画像も無い）は隠し、画面の下の「メモを追加」にまとめる（main の欄だけは「まだありません ＋ 書く」の1行で残す）。
 // 長いメモは6行まで見せて「続きを読む」
+// startText: 書き始めた時の文（「書き始める前の文に戻す」用）、redoText: 戻す直前の文（「戻す前の文にする」用）。評価2回目の優先順位3
+const startText = new Map(), redoText = new Map();
 const editing = new Set(), expanded = new Set(); // 書いている欄・全部広げた欄（キー）
 let addList = [], focusKey = null, focusBack = null, pinList = [], scrollKey = null; // pinList: 描画ごとに集める印の付いた欄、scrollKey: 描画後に見える所へ動かす欄 // focusBack: 完了の後に戻す「編集」ボタンの欄               // 描画ごとに集める「隠した空の欄」、描画後にカーソルを置く欄
 // inline: 空の時に「メモを追加」へ回さず、その場に小さな「＋ 書く」を置く（支給ブキ一覧のブキのカードの中など、どのブキの欄か分かるように）
 const sec = (key, title, sub, ph, main, inline, pinTitle) => { // pinTitle: 「試合前に見る」での名前（省略すると title）
   const txt = memos[key] || '', ed = editing.has(key) || dirty.has(key), has = !!txt.trim();
   const head = btn => '<h3>' + esc(title) + '<small>' + esc(sub) + '</small>' + btn + '</h3>';
+  if (ed && !startText.has(key)) startText.set(key, txt);
   if (ed) return '<div class="nb-sec editing' + (main ? ' main' : '') + '" data-nbsec="' + esc(key) + '">' + head('<button class="nb-ebtn done" data-nbdone="' + esc(key) + '" aria-label="' + esc(title) + 'の編集を終える">完了</button>') +
     '<textarea class="nbta" data-nbkey="' + esc(key) + '" aria-label="' + esc(title) + '" placeholder="' + esc(ph) + '" rows="2">' + esc(txt) + '</textarea>' +
+    '<button type="button" class="nb-rev" data-nbrev="' + esc(key) + '" hidden>↶ 書き始める前の文に戻す</button>' +
     '<div class="nbpics" data-nbpk="' + esc(key) + '">' + addPicBtn(key) + '</div><div class="st" data-nbst="' + esc(key) + '"></div></div>';
   // 空の欄は隠す（画像だけある欄は、画像を読めた時に fillPics が見せる）
   const hide = !has && !main;
@@ -345,9 +349,18 @@ let pendingRender = false; // 書いている間に見送った描き直し（�
 function autosize(ta){ ta.style.height = 'auto'; ta.style.height = Math.max(64, ta.scrollHeight + 2) + 'px'; }
 const stOf = k => main.querySelector('[data-nbst="' + CSS.escape(k) + '"]');
 const stAll = k => document.querySelectorAll('[data-nbst="' + CSS.escape(k) + '"]'); // 画像のお知らせ用（メモの編集画面の欄も含む）
+// 戻すボタンの見え方: 戻した直後は「戻す前の文にする」、書き始めた時の文と違えば「書き始める前の文に戻す」
+function revSync(k){
+  const b = main.querySelector('[data-nbrev="' + CSS.escape(k) + '"]'), ta = main.querySelector('.nbta[data-nbkey="' + CSS.escape(k) + '"]'); if (!b || !ta) return;
+  if (redoText.has(k)){ b.hidden = false; b.textContent = '↷ 戻す前の文にする'; }
+  else { b.hidden = ta.value === (startText.get(k) || ''); b.textContent = '↶ 書き始める前の文に戻す'; }
+}
 function saveDirty(keys){
   const ks = (keys || [...dirty.keys()]).filter(k => dirty.has(k)); if (!ks.length) return true;
-  ks.forEach(k => { const v = dirty.get(k); if (v.trim()) memos[k] = v; else { delete memos[k]; if (window.dropPin) dropPin(k); } }); // 消したメモの「試合前」の印も外す
+  const prevT = {}; ks.forEach(k => { prevT[k] = memos[k]; });
+  ks.forEach(k => { const v = dirty.get(k);
+    if (v.trim()){ memos[k] = v; if (window.unmarkDeleted) unmarkDeleted(k); }
+    else { const st = startText.get(k); if (typeof prevT[k] === 'string' && prevT[k].trim() && window.markDeleted) markDeleted(k, window.pickDeleted ? pickDeleted(st, prevT[k]) : prevT[k]); delete memos[k]; if (window.dropPin) dropPin(k); } }); // 消したメモの「試合前」の印も外す
   const ok = save('sm_memos', memos);
   if (ok && window.touchMemo){ const w = ks.filter(k => memos[k]); if (w.length) touchMemo(w); ks.filter(k => !memos[k]).forEach(settleMemoAt); }
   ks.forEach(k => { if (ok) dirty.delete(k); const el = stOf(k); if (el) el.textContent = ok ? '保存しました ✓' : '保存できませんでした（もう一度保存します）'; });
@@ -359,7 +372,7 @@ function flushAll(){
 }
 window.noteFlush = flushAll;
 // 同じメモをほかの画面（いまのステージの編集画面）で書き直した時に呼ぶ。ここに残っている古い打ちかけ（保存に失敗した物）で、新しい内容を上書きしないように（Codexの評価 2026-11-23）
-window.noteForget = k => { clearTimeout(timers[k]); delete timers[k]; dirty.delete(k); };
+window.noteForget = k => { clearTimeout(timers[k]); delete timers[k]; dirty.delete(k); editing.delete(k); startText.delete(k); redoText.delete(k); };
 // 書いている途中は画面を描き直さない（時間帯の更新などで打ちかけが消えないように）。見送った分は書き終えた後に描き直す
 // 描いてある画面（バトル／サモラン）と開こうとしている画面が違う時は「書いている途中」扱いにしない（タブを移ったのに前の画面が残らないように。Codexレビュー 2026-11-23）
 window.noteBusy = () => { const a = document.activeElement; return !!(a && a.classList && a.classList.contains('nbta')) && main.dataset.nv === ui.view; };
@@ -368,7 +381,7 @@ const main = document.getElementById('main');
 main.addEventListener('input', e => {
   const ta = e.target; if (!ta.classList || !ta.classList.contains('nbta')) return;
   autosize(ta);
-  const k = ta.dataset.nbkey; dirty.set(k, ta.value);
+  const k = ta.dataset.nbkey; dirty.set(k, ta.value); redoText.delete(k); revSync(k);
   const el = stOf(k); if (el) el.textContent = '入力中…';
   clearTimeout(timers[k]); timers[k] = setTimeout(() => { delete timers[k]; saveDirty([k]); }, 500);
 });
@@ -380,7 +393,7 @@ main.addEventListener('focusout', e => {
 });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'visible') flushAll(); });
 window.noteAfterRender = () => {
-  pendingRender = false; main.dataset.nv = ui.view; main.querySelectorAll('.nbta').forEach(autosize); fillPics();
+  pendingRender = false; main.dataset.nv = ui.view; main.querySelectorAll('.nbta').forEach(ta => { autosize(ta); revSync(ta.dataset.nbkey); }); fillPics();
   // 6行に収まらないメモにだけ「続きを読む」を出す
   main.querySelectorAll('.nb-txt').forEach(el => { const b = el.nextElementSibling; if (b && b.dataset.nbmore) b.hidden = !(el.classList.contains('open') || el.scrollHeight > el.clientHeight + 2); });
   if (scrollKey){ const s = main.querySelector('[data-nbsec="' + CSS.escape(scrollKey) + '"]'); scrollKey = null; if (s) s.scrollIntoView({ block: 'start' }); }
@@ -618,7 +631,7 @@ window.importNotePics = arr => picQueue(async () => {
 });
 // ---- 上の操作 ----
 // 選び直した時は、書きかけ（保存待ち）の無い欄を読む表示に戻す（別のステージ・ブキにまで書く欄が持ち越されないように。Codexレビュー 2026-11-25）
-function closeEditingSecs(){ [...editing].forEach(k => { if (!dirty.has(k)) editing.delete(k); }); }
+function closeEditingSecs(){ [...editing].forEach(k => { if (!dirty.has(k)){ editing.delete(k); startText.delete(k); redoText.delete(k); } }); }
 function redraw(){ flushAll(); closeEditingSecs(); saveNb(); saveCnb(); render(); }
 // 読む表示と書く欄の切り替え（バトルメモ・サモランメモ共通）
 main.addEventListener('click', e => {
@@ -628,7 +641,12 @@ main.addEventListener('click', e => {
   // 書いている欄にカーソルが残ったままだと描き直しが見送られるので、先に外す（iPhoneではボタンを押してもカーソルが外れないことがある）
   if ((d.nbedit || d.nbadd || d.nbdone) && document.activeElement && document.activeElement.classList.contains('nbta')) document.activeElement.blur();
   if (d.nbedit || d.nbadd){ const k = d.nbedit || d.nbadd; flushAll(); editing.add(k); focusKey = k; render(); }
-  else if (d.nbdone){ flushAll(); if (!dirty.has(d.nbdone)){ editing.delete(d.nbdone); focusBack = d.nbdone; render(); } }
+  else if (d.nbdone){ flushAll(); if (!dirty.has(d.nbdone)){ editing.delete(d.nbdone); startText.delete(d.nbdone); redoText.delete(d.nbdone); focusBack = d.nbdone; render(); } }
+  else if (d.nbrev){
+    const k = d.nbrev, ta = main.querySelector('.nbta[data-nbkey="' + CSS.escape(k) + '"]'); if (!ta) return;
+    if (redoText.has(k)){ ta.value = redoText.get(k); redoText.delete(k); } else { redoText.set(k, ta.value); ta.value = startText.get(k) || ''; }
+    autosize(ta); clearTimeout(timers[k]); delete timers[k]; dirty.set(k, ta.value); saveDirty([k]); revSync(k);
+  }
   else if (d.nbpin){ if (window.togglePin && togglePin(d.nbpin)) render(); }
   else if (d.nbjump){ const s = main.querySelector('[data-nbsec="' + CSS.escape(d.nbjump) + '"]'); if (s){ const tx = s.querySelector('.nb-txt'); if (tx && !tx.classList.contains('open')){ expanded.add(d.nbjump); tx.classList.add('open'); const mb = s.querySelector('[data-nbmore]'); if (mb){ mb.hidden = false; mb.textContent = '▲ たたむ'; } } s.scrollIntoView({ block: 'start', behavior: 'smooth' }); const fb = s.querySelector('[data-nbedit]'); if (fb) fb.focus({ preventScroll: true }); } } // 読み上げ・キー操作でも移った先から続けられるように
   else if (d.nbmore){
