@@ -196,10 +196,11 @@ const sec = (key, title, sub, ph, main, inline, pinTitle) => { // pinTitle: 「�
   // 空の欄は隠す（画像だけある欄は、画像を読めた時に fillPics が見せる）
   const hide = !has && !main;
   if (hide && !inline) addList.push([key, title]);
-  const pinned = has && window.isPinned && isPinned(key);
-  if (pinned) pinList.push([key, pinTitle || title, txt]);
+  const hp = !has && window.hasPics && hasPics(key); // 画像だけの欄
+  const pinned = (has || hp) && window.isPinned && isPinned(key);
+  if (pinned) pinList.push([key, pinTitle || title, has ? txt : '（画像のみ）']);
   // 「試合前に見る」印（文字がある欄だけ付けられる）
-  const pinBtn = has ? '<button class="nb-pin' + (pinned ? ' on' : '') + '" data-nbpin="' + esc(key) + '" aria-pressed="' + !!pinned + '" aria-label="' + esc(title) + 'を試合前に見る">' + (pinned ? '★ 試合前' : '☆ 試合前') + '</button>' : '';
+  const pinBtn = has || hp ? '<button class="nb-pin' + (pinned ? ' on' : '') + '" data-nbpin="' + esc(key) + '" aria-pressed="' + !!pinned + '" aria-label="' + esc(title) + 'を試合前に見る">' + (pinned ? '★ 試合前' : '☆ 試合前') + '</button>' : '';
   return '<div class="nb-sec' + (main ? ' main' : '') + (hide ? ' hid' : '') + '" data-nbsec="' + esc(key) + '">' + head(pinBtn + '<button class="nb-ebtn" data-nbedit="' + esc(key) + '" aria-label="' + esc(title) + 'を編集">編集</button>') +
     (has ? '<div class="nb-txt' + (expanded.has(key) ? ' open' : '') + '" data-nbtxt="' + esc(key) + '">' + esc(txt) + '</div><button class="nb-more" data-nbmore="' + esc(key) + '" hidden>' + (expanded.has(key) ? '▲ たたむ' : '▼ 続きを読む') + '</button>'
       : main ? '<button class="nb-blank" data-nbedit="' + esc(key) + '">まだありません　＋ 書く</button>' : '') +
@@ -425,10 +426,24 @@ async function picDo(mode, fn){
   const db = await picDb();
   return new Promise((res, rej) => {
     const tx = db.transaction('pics', mode), q = fn(tx.objectStore('pics'));
-    tx.oncomplete = () => res(q && q.result);
+    tx.oncomplete = () => { res(q && q.result); if (mode === 'readwrite') refreshPicKeys(); };
     tx.onerror = tx.onabort = () => rej(tx.error || new Error('idb'));
   });
 }
+let picKeySet = new Set(), picKeysTimer = 0;
+window.hasPics = k => picKeySet.has(k);
+function refreshPicKeys(){
+  clearTimeout(picKeysTimer);
+  picKeysTimer = setTimeout(() => {
+    if (!window.memoPicKeys) return;
+    memoPicKeys().then(keys => {
+      const next = new Set(keys), same = next.size === picKeySet.size && keys.every(k => picKeySet.has(k));
+      picKeySet = next;
+      if (!same && typeof render === 'function') render(); // 「メモあり」の印・潮位ボタン・試合前の印を出し直す
+    }).catch(() => {});
+  }, 150);
+}
+refreshPicKeys(); // 起動時に一度数える
 const picsOf = k => picDo('readonly', s => s.index('key').getAll(k)).then(a => (a || []).sort((x, y) => x.at - y.at));
 window.memoAcceptsPics = key => PIC_KEY_RE.test(key);
 // 文字を消した・画像を消した後の更新日: まだ文字か画像が残っていれば今の日時、何も無ければ日時を消す（Codexレビュー 2026-11-26）

@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-27h';</script>
+<script>window.APP_VERSION = '2026-11-27i';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -152,6 +152,7 @@ nav button.on{color:var(--salmon)}
 .edmode[hidden]{display:none}
 .memo-read{display:none;flex:1;overflow-y:auto;margin:8px 12px calc(12px + env(safe-area-inset-bottom));padding:12px 14px;border-radius:12px;background:var(--card);border:1px solid var(--line);font-size:16px;line-height:1.7;color:var(--text);white-space:pre-wrap;word-break:break-word}
 #editor.reading .memo-read{display:block}
+#editor.reading .memo-read:empty{display:none}
 #editor.reading #memoText,#editor.reading .ed-rev,#editor.reading .coach-tools,#editor.reading .nbpic-add{display:none}
 #editor.reading .saved{display:none}
 /* ばちこん */
@@ -420,10 +421,11 @@ window.isPinned = isPinned; window.togglePin = togglePin;
 // メモを消した時に印も外す（後で同じ欄に書いた時に古い印が勝手に付かないように。Codexレビュー）
 window.dropPin = k => { if (pins.delete(k)) save('sm_pins', [...pins]); };
 // 印の付いたメモの最初の数行（いまのステージ・バトルメモ・サモランメモの「試合前に見る」で使う）
+const memoHas = k => !!(memoOf(k) || (window.hasPics && hasPics(k))); // 本文か画像があれば「メモあり」（評価2回目の優先順位9）
 const pinLines = (v, n) => String(v || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean).slice(0, n).join('\n');
 const PIN_SHOW = 4;
 function pinnedQuick(keys, title){
-  const items = keys.filter(k => isPinned(k) && memoOf(k)).map((k, i) => '<button class="quick-memo pin' + (i >= PIN_SHOW ? ' qmore' : '') + '" data-memokey="' + esc(k) + '"><span>★ ' + esc(pinLabel(k)) + '</span><b>' + esc(pinLines(memoOf(k), 3)) + '</b></button>');
+  const items = keys.filter(k => isPinned(k) && memoHas(k)).map((k, i) => '<button class="quick-memo pin' + (i >= PIN_SHOW ? ' qmore' : '') + '" data-memokey="' + esc(k) + '"><span>★ ' + esc(pinLabel(k)) + '</span><b>' + esc(memoOf(k) ? pinLines(memoOf(k), 3) : '（画像のみ）') + '</b></button>');
   const more = items.length - PIN_SHOW;
   return items.length ? '<div class="quick-memos"><div class="quick-title">' + esc(title || '試合前に見る') + '</div>' + items.join('') +
     (more > 0 ? '<button class="qmore-btn" data-qmore="' + more + '" aria-expanded="false">▼ ほか' + more + '件</button>' : '') + '</div>' : '';
@@ -606,7 +608,7 @@ function coopCard(label, node, now){
   const boss = bossName(st.boss);
   // 支給ブキはタップでそのブキのサモラン用メモ。メモがあるブキには印を付ける
   const ws = (st.weapons || []).map(w => {
-    const nm = weaponName(w), id = coopWeaponIdByName(nm), has = id && memoOf(wKey('coop', id));
+    const nm = weaponName(w), id = coopWeaponIdByName(nm), has = id && memoHas(wKey('coop', id));
     return '<button class="wbtn' + (has ? ' has' : '') + '"' + (id ? ' data-edit="wc" data-read="1" data-id="' + esc(id) + '" data-rule=""' : ' data-nowmemo="1"') + ' aria-label="' + esc(nm) + 'のメモ">' +
       '<img src="' + esc(w.image && w.image.url || '') + '" alt="' + esc(nm) + '" title="' + esc(nm) + '"></button>';
   }).join('');
@@ -620,7 +622,7 @@ function coopCard(label, node, now){
 // 支給ブキの右の空きに、潮位ごとのメモ（干潮・通常・満潮）を開くボタン。メモが無い潮位は暗く（押せば書ける）（2026-11-26 ユーザー要望）
 function tideBtns(sid){
   return '<span class="ctides">' + [['Low','干潮'], ['Mid','通常'], ['High','満潮']].map(([k, n]) => {
-    const v = memoOf('td:' + sid + ':' + k), has = typeof v === 'string' && !!v.trim();
+    const has = memoHas('td:' + sid + ':' + k);
     return '<button class="ctide' + (has ? '' : ' none') + '" data-memokey="' + esc('td:' + sid + ':' + k) + '" aria-label="' + n + 'のメモ' + (has ? '' : '（まだ無し）') + '">' + n + '</button>';
   }).join('') + '</span>';
 }
@@ -1423,7 +1425,7 @@ function drawEditor(){
   originalMemoText = ta.value;
   edStartText = ta.value; edRedoText = null; syncRevert(); // 書き始める前の文（評価2回目の優先順位3）
   // 読む表示: 中身がある時だけ（空なら書く欄から）。「✎ 編集」で書く欄にする
-  const reading = !!ed.read && !!ta.value.trim();
+  const reading = !!ed.read && (!!ta.value.trim() || !!(window.hasPics && hasPics(edKey())));
   document.getElementById('editor').classList.toggle('reading', reading);
   document.getElementById('memoRead').textContent = reading ? ta.value : '';
   document.getElementById('edEdit').hidden = !reading;
