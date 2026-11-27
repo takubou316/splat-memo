@@ -9,7 +9,7 @@
 <!-- black-translucent は使わない。iOS 26 では「black-translucent + viewport-fit=cover」でアプリの表示領域がステータスバー1本分だけ
      下で足りなくなり（WebKit bug 301108、メニューの下に謎の空き）、ステータスバー下のぼかしで上部の文字も薄く見える。
      この設定はホーム画面に追加した時にしか読まれないので、変えたらアイコンを削除して追加し直す必要がある -->
-<script>window.APP_VERSION = '2026-11-27f';</script>
+<script>window.APP_VERSION = '2026-11-27g';</script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="ステージメモ">
 <link rel="manifest" href="manifest.webmanifest">
@@ -425,7 +425,12 @@ function pinnedQuick(keys, title){
     (more > 0 ? '<button class="qmore-btn" data-qmore="' + more + '" aria-expanded="false">▼ ほか' + more + '件</button>' : '') + '</div>' : '';
 }
 // 印の付いたメモの短い名前
-function pinLabel(k){ const a = k.split(':'); return a[0] === 'coop' ? 'ステージ共通' : a[0] === 'al' ? (a[1] === 'coop' ? 'サモラン全体' : 'バトル全体') : a[0] === 'rl' ? ((typeof RULE_NAME !== 'undefined' && RULE_NAME[a[1]]) || 'ルール') + '共通' : a[0] === 'vs' ? (a[2] === 'all' ? 'ステージ共通' : ((typeof RULE_NAME !== 'undefined' && RULE_NAME[a[2]]) || '') + 'の時') : a[0] === 'td' ? (memoTides[a[2]] || '') + 'の時' : 'メモ'; }
+function pinLabel(k){ const a = k.split(':');
+  if (a[0] === 'cw') return tierItemName('wc', a[2]) + '（このステージ）';
+  if (a[0] === 'wc' || a[0] === 'wv') return tierItemName(a[0], a[1]) + '（全般）';
+  if (a[0] === 'sb') return tierItemName('wv', a[2]) + '（このステージ）';
+  if (a[0] === 'wk') return (window.catName ? catName(a[2]) : a[2]) + '共通';
+  return a[0] === 'coop' ? 'ステージ共通' : a[0] === 'al' ? (a[1] === 'coop' ? 'サモラン全体' : 'バトル全体') : a[0] === 'rl' ? ((typeof RULE_NAME !== 'undefined' && RULE_NAME[a[1]]) || 'ルール') + '共通' : a[0] === 'vs' ? (a[2] === 'all' ? 'ステージ共通' : ((typeof RULE_NAME !== 'undefined' && RULE_NAME[a[2]]) || '') + 'の時') : a[0] === 'td' ? (memoTides[a[2]] || '') + 'の時' : 'メモ'; }
 let sched = load('sm_sched', null);         // { data, fetchedAt }
 let loc = load('sm_locale', null);          // ja-JP locale
 // サモラン会場は全ステージ一覧がAPIに無いので、画像URLを持っておく。
@@ -604,7 +609,8 @@ function coopCard(label, node, now){
   return '<div class="card" style="--c:var(--salmon)"><div class="chead"><span class="mode">' + esc(label) + '</span>' +
     '<span class="time">' + fmtRange(node.startTime, node.endTime, now) + '</span></div>' +
     (boss ? '<div class="extra">オカシラ: ' + esc(boss) + '</div>' : '') +
-    salmonQuickRead(st.coopStage.id) + pinnedQuick([kCoop(st.coopStage.id), 'al:coop']) + '<div class="weapons">' + ws + tideBtns(st.coopStage.id) + '</div>' + stageButton(st.coopStage, null) +
+    salmonQuickRead(st.coopStage.id) + pinnedQuick([kCoop(st.coopStage.id), 'al:coop'].concat(Object.keys(memoTides).map(t => 'td:' + st.coopStage.id + ':' + t),
+      (st.weapons || []).map(w => coopWeaponIdByName(weaponName(w))).filter(Boolean).flatMap(id => ['cw:' + st.coopStage.id + ':' + id, 'wc:' + id]))) + '<div class="weapons">' + ws + tideBtns(st.coopStage.id) + '</div>' + stageButton(st.coopStage, null) +
     (label === 'バイトチームコンテスト' ? contestOpenBtn(node) : '') + '</div>';
 }
 // 支給ブキの右の空きに、潮位ごとのメモ（干潮・通常・満潮）を開くボタン。メモが無い潮位は暗く（押せば書ける）（2026-11-26 ユーザー要望）
@@ -1818,7 +1824,7 @@ document.getElementById('navContest').onclick =() => { setMoreMenu(false); if (w
 // どのタブに何を書くかを3枚で。メモがまだ無い人に最初の1回だけ出す（「その他 → 使い方」でいつでも見られる）
 const INTRO = [
   ['いまのステージ', '今の時間帯の<b>ステージ</b>と、そこに書いた<b>メモ</b>が出ます。試合の前にここを開けば、ぱっと確認できます。'],
-  ['バトルメモ・サモランメモ', 'ステージ・ブキ・ルール（サモランは<b>潮位</b>）ごとにメモを書く場所です。大事なメモは「<b>☆ 試合前</b>」を押すと、画面の上と「いまのステージ」にまとまって出ます。'],
+  ['バトルメモ・サモランメモ', 'ステージ・ブキ・ルール（サモランは<b>潮位</b>）ごとにメモを書く場所です。大事なメモは「<b>☆ 試合前</b>」を押すと、その画面の上にまとまって出ます。ステージ・潮位・全体のメモと、サモランの今の支給ブキのメモは「<b>いまのステージ</b>」にも出ます。'],
   ['メモ', '書いたメモを<b>全部まとめて探せます</b>。メモはこのスマホの中だけに保存されるので、機種変更の前は「メモ」の下の「バックアップ」で<b>書き出す</b>を押して、控えを取ってください。']
 ];
 let introAt = 0;
